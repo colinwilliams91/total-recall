@@ -1,0 +1,129 @@
+# Roadmap
+- ### Phase 1 - MVP
+	- ARCHITECTURE [INDEX](00-SRC/🔓_OSS/🦾TOTAL_RECALL/📐ARCHITECTURE/INDEX.md)
+#### KEY FEATURES:
+Example:
+
+```
+🧠 Recall Check
+
+This commit introduced exponential backoff.
+
+Why is jitter commonly added to retry intervals?
+
+[1] Prevent retry synchronization
+[2] Reduce memory usage
+[3] Improve cache locality
+```
+
+- ### 1.0
+	- 1.0.1 `key detail: press enter to skip...`
+	- 1.0.2 `can track skips?`
+	- 1.0.3 `[stretch goal] gamify streaks?`
+```sh
+Analyzing staged diff...
+Generating recall prompt...
+
+🧠 Recall Check
+What problem does debouncing primarily solve?
+
+[1] Race conditions
+[2] Excessive repeated invocation
+[3] Deadlocks
+
+Press Enter to skip ->
+```
+- OR
+```sh
+Commit accepted.
+
+🧠 1 recall check available.
+```
+- #### 1.1
+	- 1.1.1 `[stretch goal] optional strict mode block commits`
+- ### 2.0
+	- 2.0.1 `pick difficulty level on init`
+	- 2.0.2 `can be updated w/ CLI arg. later`
+- #### 2.1
+	- 2.1.1 `[stretch goal] scoped difficulties/progression`
+```sh
+Example:
+
+- junior dev gets fundamentals
+- senior dev gets architecture tradeoffs
+- repeated mistakes become recurring prompts
+- concepts decay over time and reappear later
+
+That becomes:
+
+- personalized retention
+- engineering cognition telemetry
+- real learning reinforcement
+```
+- ### 3.0
+	- 3.0.1 `Install, Init, Code`
+- #### 3.1
+	- 3.1.1 `[stretch goal] local fallbacks`
+```sh
+git diff
+  ->
+lightweight local summarizer
+  ->
+cache embeddings/concepts
+  ->
+generate question
+```
+- #### 3.1 cont.
+	- 3.1.2 `local "heuristic" fallback generation`
+	- 3.1.3 `"offline mode/fast mode"
+	- 3.1.4 `example fallback: regex concept extraction -> "AST parsing" -> "known framework mappings"
+- ### 4.0
+	- 4.0.1 `multiplayer leaderboard`
+	- 4.0.2 `in CLI? makes curl to endpoint?`
+- #### 4.1
+	- 4.1.1 `see -> 1.0.3 correct answers == streaks`
+- #### 4.2
+	- 4.2.1 `[stretch goal] recall debt`
+	- 4.2.2 `skipped questions accumulate "debt"`
+	- 4.2.3 `resurfaced later
+	- 4.2.4 `daily reinforcement queue/spaced repetition model`
+- ### 5.0
+	- 5.0.1. `commit relevant quizzing, e.g.`
+```sh
+This commit involved:
+- memoization
+- DFS traversal
+- optimistic concurrency
+- retry semantics
+```
+- #### 5.1
+	- 5.1.1 `[stretch goal] personalized reinforcement`
+```sh
+- spaced repetition resurfaces concepts
+- weak concepts recur
+```
+- #### 5.1 cont.
+	- 5.1.2 `[stretch goal] long-term memory reinforcement`
+```sh
+- forgotten concepts reappear
+```
+
+---
+## Future Scope
+- Phase 2:
+	- Terminal UI/UX (TUI)
+		- can this use the same API the MCP server exposes?
+- Phase 3:
+	- VS Code extension 
+		- manages:
+			- UX
+			- rendering
+			- lifecycle management
+			- state synchronization
+			- editor events
+			- authentication flows
+			- extension API quirks
+			- webviews
+			- notifications
+			- local IPC
+			- platform compatibility
