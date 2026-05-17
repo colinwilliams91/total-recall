@@ -1,3 +1,8 @@
+---
+name: generate-quiz-question
+description: Generate short quiz question when Recall Engine prompts Question Synthesis. Quiz Questions purpose are to strengthen software developer's skill formation and retention when using AI-assisted development. Content will be contextualized by the Incremental Analysis Pipeline which uses the Event Monitor to track Filesystem changes and the Git Index. Use this context to keep the Quiz Questions relevant.
+---
+
 ## Goals
 
 - restore cognitive engagement
@@ -76,7 +81,7 @@ or:
 Why would this retry loop potentially create a thundering herd problem?
 ```
 
-You are recreating the learning value of encountering errors  
+You are recreating the learning value of encountering errors
 without necessarily requiring the user to manually suffer through them.
 
 ## Pure AI-Delegation Produced The Worst Outcomes
@@ -91,7 +96,7 @@ Consider if any of these signals are present when generating questions:
 - AI-generated commit signatures
 - large unexplained abstractions
 
-And then:  
+And then:
 increase conceptual questioning depth.
 
 ## AI-Assisted Reflective Reinforcement
