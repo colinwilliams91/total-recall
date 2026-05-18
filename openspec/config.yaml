@@ -1,0 +1,70 @@
+schema: spec-driven
+
+Example:
+  context: |
+    Project: Total Recall
+
+    Total Recall is a cognition-preservation developer tool designed to combat skill erosion caused by heavy AI-assisted software engineering workflows.
+    The system integrates primarily through Git lifecycle events, the Git index, Filesystem changes, and MCP requests. The system then generates contextual recall questions related to the code being committed or pushed.
+
+    Primary goals:
+    - preserve systems reasoning
+    - preserve debugging intuition
+    - reinforce conceptual understanding
+
+    Core architecture:
+    - Go monorepo
+    - Event monitoring layer (Git hooks, Git index, Filesystem, MCP)
+    - Background runtime daemon
+    - Incremental analysis pipeline
+    - Background concept cache
+    - Recall engine
+    - MCP server hosted inside the runtime
+    - Terminal-first UX
+    - BYOK AI provider architecture
+
+    Tech stack:
+      - Go
+      - Git hooks
+      - MCP
+      - SQLite (or Redis, for concept cache)
+      - Markdown-based prompt assets
+      - YAML configuration
+
+    Repository conventions:
+      - We use conventional commits
+      - We use markdown for documentation and prompt assets
+      - Keep architecture modular and composable
+      - Prefer small focused packages
+      - Optimize for low developer friction
+      - Always favor incremental processing over full-repository analysis
+      - Prompt assets are runtime cognition assets loaded dynamically by the Recall Engine and they live under `/assets/prompts/`
+      - Favor asynchronous preprocessing whenever possible
+      - Prefer provider abstraction over provider coupling
+      - Keep adapters thin and the Core Go Engine authoritative
+
+    Product philosophy:
+      - The product should reinforce cognition, not obstruct workflows
+      - Commit-time latency is extremely sensitive
+      - Prioritize debugging reasoning and conceptual understanding over syntax trivia
+      - Avoid intrusive UX patterns
+      - Minimize unnecessary token usage through caching and incremental analysis
+
+    Domain: computers and society, AI-assisted software engineering, developer tools, cognition preservation
+
+  rules:
+    proposal:
+      - Keep proposals implementation-oriented
+      - Explicitly identify developer workflow impact
+      - Clearly separate background processing from commit-time execution
+      - Always include a "Non-goals" section
+      - Focus on low-friction developer workflows
+    specs:
+    - Use Given/When/Then format for scenarios
+    - Preserve provider-agnostic AI integration whenever possible
+    design:
+    - Include sequence diagrams for complex flows
+    - Prefer simple and composable subsystem boundaries
+    tasks:
+      - Prioritize end-to-end workflow validation early
+      - Prefer end-to-end vertical slices over isolated infrastructure work
