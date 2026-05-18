@@ -164,6 +164,8 @@ Default is N (off). The user must affirmatively opt in.
 
 **Rationale**: Privacy is a personal stance. A repo should never be able to opt a developer into conversation analysis, even accidentally. AI credentials are personal and belong in the user config — a project-committed `.tr.yaml` should not carry them.
 
-## Open Questions
+### 8. Advisory message on auto-creation is suppressible via `--quiet`
 
-- Should the advisory message on auto-creation be suppressible via a flag (e.g., `--quiet`)?
+**Decision**: The advisory message emitted when `~/.tr/config.yaml` is auto-created SHALL be suppressible by passing `--quiet` to any `total-recall` command. `--quiet` is a global persistent flag that suppresses all non-error advisory output.
+
+**Rationale**: Power users integrating Total Recall into automated workflows (CI scripts, dotfile bootstrappers) may call `tr serve` or `tr hook` headlessly. A non-suppressible advisory would produce noise in those contexts. `--quiet` is a well-understood CLI convention for this purpose.

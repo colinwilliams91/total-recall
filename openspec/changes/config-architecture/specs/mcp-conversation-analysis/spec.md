@@ -52,12 +52,3 @@ The system SHALL discard raw conversation text after concept extraction. Only st
 - **THEN** the pipeline SHALL NOT write the raw conversation text to any persistent store
 - **THEN** only the structured extraction result SHALL be written to the Background Concept Cache
 
----
-
-### Requirement: Opt-in emits a one-time acknowledgment
-The system SHALL display a one-time acknowledgment when `conversation_analysis` is first enabled, confirming the privacy contract to the user.
-
-#### Scenario: First run with conversation analysis enabled
-- **WHEN** `privacy.conversation_analysis: true` is detected for the first time (no prior acknowledgment recorded)
-- **THEN** the system SHALL display: "Conversation analysis is enabled. Your agent conversation content will be analyzed for concept extraction. Raw conversation text is never stored."
-- **THEN** the system SHALL record that the acknowledgment has been shown and SHALL NOT repeat it on subsequent runs

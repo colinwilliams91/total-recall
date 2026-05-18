@@ -13,6 +13,7 @@
 - [ ] 2.3 Ensure `tr init` does not overwrite an existing user config; notify user if already exists
 - [ ] 2.4 Implement auto-creation fallback: if Core Engine starts (daemon or hook) and `~/.tr/config.yaml` is absent, create it with safe defaults and emit a single advisory message
 - [ ] 2.5 Ensure auto-created config is never overwritten on subsequent runs
+- [ ] 2.6 Add `--quiet` global persistent flag to Cobra root; suppress advisory messages (non-errors) when set
 
 ## 3. Config Inspection CLI
 
@@ -24,7 +25,7 @@
 - [ ] 4.1 Add `conversation_analysis` check to the MCP Event Monitor before forwarding conversation signals to the Incremental Analysis Pipeline
 - [ ] 4.2 Ensure Signal 3 (code context correlation) bypasses the flag and always runs
 - [ ] 4.3 Implement extract-and-discard: pipeline writes only concept fingerprints to the cache, never raw conversation text
-- [ ] 4.4 Remove one-time acknowledgment on opt-in (handled at init instead)
+- [ ] 4.4 Confirm no one-time acknowledgment logic is introduced; opt-in is communicated entirely at `tr init`
 
 ## 5. Documentation & Terminal Copy
 
