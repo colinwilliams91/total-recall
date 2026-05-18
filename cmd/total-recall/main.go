@@ -56,7 +56,7 @@ func serveCmd() *cobra.Command {
 const conversationAnalysisPrompt = `Would you like Total Recall to analyze your AI assistant
 conversations to generate smarter, more relevant quiz questions?
 
-When enabled, we look at what you and your AI discuss and extract
+When enabled, the model looks at what you and your AI discuss and extracts
 only the concepts — nothing else is kept. Raw conversation text
 is never stored.
 
