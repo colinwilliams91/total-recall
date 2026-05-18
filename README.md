@@ -42,89 +42,91 @@ We should feel like "a 4-second mental rep".
 	- [ ] 5.1. Long-term Adaptive Curricula
 ---
 ## Setup
-- Global Install
-```sh
-# Homebrew (recommended)
-brew install total-recall
 
+```sh
 # Go
-go install github.com/total-recall/tr@latest
+go install github.com/colinwilliams91/total-recall@latest
+```
 
-# npm wrapper (optional)
-npm install -g total-recall
-```
-- Start Local Daemon/MCP Server
-```sh
-tr serve
-.
-..
-...
-🧠 Total Recall Engine Running
-MCP Server: localhost:7331
-Git Event Listener: Active
-```
-- Per-Repo Config
-	- OR
-- [stretch goal] User-Based Config
-	- `~/.tr/config.yaml` (see below config example. maybe add `ai-provider-api-key` K/V)
-```sh
-# ...added to PATH && inside a repo
-tr init
-# installs Git hooks into
-.git/hooks/
-# TODO: `STAGE HOOK?` THIS SHOULD TRIGGER AI IN BACKGROUND?
-# `pre-commit`
-# `commit-msg`
-# `pre-push`
-# TODO: investigate more options...
+**1. Initialize user config and preferences:**
 
-# default to x, y, z, hooks but be configurable:
-tr hooks enable pre-commit
-tr hooks disable pre-push
-```
-- Scaling Difficulty Default
 ```sh
-# last step in CLI: prompts user if they want to config. difficulty?
-y/n?
-# YoE?
-- 0-2
-- 3-5
-- 5+
-# How many Rounds of Questions do you want per commit?
-- 1
-- 2
-# if 1: R1 || R2
-# if 2: R1 => R2
-# R1 == Concrete Example
-# R2 == Abstract/Theory Example
+total-recall init
 ```
-- **Alternative Per-Repo Config *File***
+
+This creates `~/.tr/config.yaml` (your personal config, never committed) and prompts
+you about enabling conversation analysis.
+
+**2. Start the daemon:**
+
 ```sh
-.tr.yaml
+total-recall serve
 ```
-- Example config:
-```YAML
+
+The daemon runs on `localhost:7331` and must be running for hooks and MCP to function.
+
+**3. Initialize a repo (adds `.tr.yaml`):**
+
+```sh
+total-recall init  # inside the repo
+```
+
+---
+
+## Configuration
+
+Total Recall uses two config files with clear separation of concerns:
+
+### User Config — `~/.tr/config.yaml`
+Personal defaults, privacy choices, and AI credentials. **Never committed.**
+
+```yaml
+privacy:
+  conversation_analysis: false  # opt-in: enabled during `total-recall init`
+
+ai:
+  provider: anthropic
+  model: claude-sonnet
+  api-key: env:ANTHROPIC_API_KEY  # always use env:<VAR> — never paste raw keys
+
+recall:
+  difficulty: adaptive
+  max_questions: 1
+```
+
+### Per-Repo Config — `.tr.yaml`
+Project-specific settings. **Safe to commit.**
+
+```yaml
 hooks:
   pre-commit: true
-  commit-msg: true
-  pre-push: true
+  commit-msg: false
+  pre-push: false
 
 mode:
   blocking: false
 
 presentation:
   terminal: true
-  mcp: true
+  mcp: false
 
-ai:
-  provider: anthropic
-  model: claude-sonnet
-  api-key: env:ANTHROPIC_API_KEY
-
+# Optional: override user recall defaults for this repo only
 recall:
-  difficulty: adaptive
-  max_questions: 1
+  max_questions: 3
 ```
+
+> **Note:** `privacy.*` and `ai.*` in `.tr.yaml` are discarded with a warning.
+> Credentials and privacy choices are always user-level.
+
+### Inspect the resolved config
+
+```sh
+total-recall config --show
+```
+
+Prints every key annotated with its source (`user` / `repo` / `default`).
+
+See [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 ## Data
 
 - ## 84% of respondents are using AI tools this year

@@ -7,13 +7,13 @@ The system SHALL support a user-level configuration file at `~/.tr/config.yaml` 
 - **WHEN** `tr serve` is invoked
 - **THEN** the Core Engine SHALL load `~/.tr/config.yaml` before loading any per-repo config
 
-#### Scenario: User-level config loaded during transient hook invocation
-- **WHEN** a Git hook invokes the Core Engine transiently (e.g., `tr hook pre-commit`)
-- **THEN** the Core Engine SHALL load `~/.tr/config.yaml` as the base config before merging per-repo overrides
+#### Scenario: User-level config loaded when hook contacts daemon
+- **WHEN** a Git hook fires and POSTs to `localhost:7331`
+- **THEN** the running daemon (which already holds the merged config) SHALL handle the request — hooks do NOT load config themselves
 
 #### Scenario: User-level config absent on first run
 - **WHEN** the Core Engine starts and `~/.tr/config.yaml` does not exist
-- **THEN** the engine SHALL emit a clear error message directing the user to run `tr init` and SHALL NOT proceed silently with empty defaults
+- **THEN** the engine SHALL auto-create `~/.tr/config.yaml` with safe defaults, emit an advisory message to stderr (unless `--quiet` is set), and continue normally
 
 ---
 

@@ -1,4 +1,17 @@
 # Roadmap
+
+## Phase 00 — Foundation (Shipped)
+
+- Go binary scaffolding (`total-recall` CLI)
+- Two-tier configuration: `~/.tr/config.yaml` (user) + `.tr.yaml` (per-repo)
+- `total-recall init` with conversation analysis opt-in (Huh TUI)
+- `total-recall serve` with auto-config creation and `--quiet` flag
+- `total-recall config --show` with source annotations
+- MCP conversation analysis gate (`privacy.conversation_analysis`)
+- Daemon-required architecture; transient mode deferred
+
+---
+
 - ### Phase 1 - MVP
 	- ARCHITECTURE [INDEX](00-SRC/🔓_OSS/🦾TOTAL_RECALL/📐ARCHITECTURE/INDEX.md)
 #### KEY FEATURES:
