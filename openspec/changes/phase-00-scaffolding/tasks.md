@@ -1,142 +1,30 @@
 # Phase 00: Tasks
 
-## Group 1 — Go Module Initialization
+## 1. Go Module Initialization
 
-### 1.1 Initialize Go module
-```
-go mod init github.com/colinwilliams91/total-recall
-```
-Run from the repo root. Produces `go.mod` with `go 1.22` (or latest stable).
+- [x] 1.1 Run `go mod init github.com/colinwilliams91/total-recall` from repo root
+- [x] 1.2 Add initial dependencies: `github.com/spf13/cobra`, `github.com/charmbracelet/huh`, `github.com/mark3labs/mcp-go`, `modernc.org/sqlite`
+- [x] 1.3 Run `go mod tidy` and verify no CGO dependencies are introduced
 
-### 1.2 Add initial dependencies
-```
-go get github.com/spf13/cobra
-go get github.com/charmbracelet/huh
-go get github.com/mark3labs/mcp-go
-go get modernc.org/sqlite
-```
+## 2. Directory Structure & Package Stubs
 
-### 1.3 Tidy module
-```
-go mod tidy
-```
-Produces clean `go.sum`. Verify no CGO dependencies are introduced.
+- [x] 2.1 Create `doc.go` stubs for all internal packages: `config`, `engine`, `eventmonitor`, `pipeline`, `cache`, `recall`, `ai`, `ai/anthropic`, `ai/openai`, `mcp`, `presentation`, `presentation/terminal`, `presentation/mcp` — each with package declaration and one-line doc comment, no logic
+- [x] 2.2 Create `cmd/total-recall/main.go` with cobra root command, `--version` flag, and four stubbed subcommands (`serve`, `init`, `config`, `status`) each printing "not implemented"
+- [x] 2.3 Create POSIX hook stubs in `hooks/`: `pre-commit.sh`, `commit-msg.sh`, `pre-push.sh` — each exits 0
+- [x] 2.4 Create Windows hook stubs in `hooks/`: `pre-commit.bat`, `commit-msg.bat`, `pre-push.bat` — each `exit /b 0`
 
----
+## 3. Build Infrastructure
 
-## Group 2 — Directory Structure
+- [x] 3.1 Create `Makefile` with targets: `build`, `install`, `test`, `lint`, `clean`, `tidy` — `clean` target is OS-aware (`rm -rf bin/` on Unix, `if exist bin\ rmdir /s /q bin\` on Windows via `$(OS)` variable)
+- [x] 3.2 Verify `go build ./...` compiles with zero errors and produces binary
+- [x] 3.3 Verify `go test ./...` exits 0 (no tests yet — just confirms package graph compiles)
 
-### 2.1 Create internal package stubs
+## 4. Cross-Platform Verification
 
-Create a `doc.go` in each internal package with a package declaration and a one-line description comment. No logic.
+- [x] 4.1 Confirm no CGO: verify `modernc.org/sqlite` is used (not `mattn/go-sqlite3`)
+- [x] 4.2 Verify build on Windows produces `total-recall.exe`
+- [x] 4.3 Cross-compile smoke check: `GOOS=linux GOARCH=amd64 go build ./...` must succeed
 
-Packages to stub:
+## 5. Commit
 
-| Path | Description |
-|---|---|
-| `internal/config/` | Config schema, loader, and deep-merge logic |
-| `internal/engine/` | Core Engine orchestration and daemon lifecycle |
-| `internal/eventmonitor/` | Event Monitor: filesystem, Git index, hook events, MCP events |
-| `internal/pipeline/` | Incremental Analysis Pipeline |
-| `internal/cache/` | Background Concept Cache (SQLite) |
-| `internal/recall/` | Recall Engine: question synthesis and dispatch |
-| `internal/ai/` | AI provider abstraction layer |
-| `internal/ai/anthropic/` | Anthropic provider implementation |
-| `internal/ai/openai/` | OpenAI-compatible provider implementation |
-| `internal/mcp/` | MCP API handler |
-| `internal/presentation/` | Presentation layer dispatch |
-| `internal/presentation/terminal/` | Terminal adapter |
-| `internal/presentation/mcp/` | MCP output adapter |
-
-### 2.2 Create CLI entry point
-
-`cmd/total-recall/main.go` with:
-- Cobra root command (`total-recall`)
-- Four stubbed subcommands: `serve`, `init`, `config`, `status`
-- Each subcommand prints a placeholder: `"not implemented"` and returns nil
-- `--version` flag on root
-
-### 2.3 Create hook template stubs
-
-In `hooks/`:
-
-| File | Notes |
-|---|---|
-| `pre-commit.sh` | POSIX shell, exits 0 (fail-safe stub) |
-| `commit-msg.sh` | POSIX shell, exits 0 |
-| `pre-push.sh` | POSIX shell, exits 0 |
-| `pre-commit.bat` | Windows batch, exit /b 0 |
-| `commit-msg.bat` | Windows batch, exit /b 0 |
-| `pre-push.bat` | Windows batch, exit /b 0 |
-
-Templates will eventually call `localhost:7331` — stubs just exit cleanly. See `GIT_HOOKS.md` for what each hook is responsible for when implemented.
-
----
-
-## Group 3 — Build Infrastructure
-
-### 3.1 Create Makefile
-
-Targets:
-
-| Target | Command |
-|---|---|
-| `build` | `go build -o bin/total-recall ./cmd/total-recall` |
-| `install` | `go install ./cmd/total-recall` |
-| `test` | `go test ./...` |
-| `lint` | `golangci-lint run` (if installed; no-op if not) |
-| `clean` | `rm -rf bin/` (Unix) / `if exist bin\ rmdir /s /q bin\` (Windows) |
-| `tidy` | `go mod tidy` |
-
-Makefile detects OS via the `$(OS)` variable to handle the `clean` target difference.
-
-### 3.2 Verify clean build
-```
-go build ./...
-```
-Must produce zero errors. Binary produced at `bin/total-recall` (or `bin/total-recall.exe` on Windows).
-
-### 3.3 Verify test runner
-```
-go test ./...
-```
-Must exit 0. No test files exist yet — this just confirms the package graph compiles under test.
-
----
-
-## Group 4 — Cross-Platform Verification
-
-### 4.1 Confirm no CGO
-```
-go env CGO_ENABLED
-```
-Must return `0`. Verify `modernc.org/sqlite` is the only SQLite dependency (not `mattn/go-sqlite3` which requires CGO).
-
-### 4.2 Verify build on Windows
-
-Run `go build ./...` on the primary dev machine (Windows). Confirm binary is `total-recall.exe`.
-
-### 4.3 Cross-compile to Linux (smoke check)
-```
-$env:GOOS="linux"; $env:GOARCH="amd64"; go build ./...
-```
-Must succeed. Validates no OS-specific imports have leaked into the stub packages.
-
----
-
-## Group 5 — Commit
-
-### 5.1 Commit scaffolding
-
-Commit message:
-```
-feat: scaffold Go project structure (phase 00)
-
-- go mod init github.com/colinwilliams91/total-recall
-- internal package stubs for all documented subsystems
-- cmd/total-recall with cobra root and subcommand stubs
-- hook templates (sh + bat) in hooks/
-- Makefile with build, test, lint, clean, tidy targets
-- verified: go build ./... and go test ./... pass
-- no CGO dependencies
-```
+- [x] 5.1 Commit all scaffolding with message: `feat: scaffold Go project structure (phase 00)`
