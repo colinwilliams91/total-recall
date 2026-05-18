@@ -133,8 +133,8 @@ conversation_analysis: true (opt-in)
   Would you like Total Recall to analyze your AI assistant
   conversations to generate smarter quiz questions?
 
-  When enabled, we look at what you and your AI discuss
-  and extract the concepts — nothing else is kept.
+  When enabled, the model will look at what you and your
+  AI discuss and extract the skill topics — nothing else is kept.
   You can change this anytime in ~/.tr/config.yaml.
 
   Enable conversation analysis? [y/N]:
@@ -169,3 +169,23 @@ Default is N (off). The user must affirmatively opt in.
 **Decision**: The advisory message emitted when `~/.tr/config.yaml` is auto-created SHALL be suppressible by passing `--quiet` to any `total-recall` command. `--quiet` is a global persistent flag that suppresses all non-error advisory output.
 
 **Rationale**: Power users integrating Total Recall into automated workflows (CI scripts, dotfile bootstrappers) may call `tr serve` or `tr hook` headlessly. A non-suppressible advisory would produce noise in those contexts. `--quiet` is a well-understood CLI convention for this purpose.
+
+### 9. Daemon is required; transient invocation mode is deferred indefinitely
+
+**Decision**: Total Recall requires `tr serve` to be running for Git hook recall to function. If the daemon is not running when a hook fires, the hook SHALL print a single advisory message and exit 0 (Git operation proceeds unblocked). The hook SHALL NOT attempt to invoke the Core Engine transiently.
+
+**Hook behavior when daemon is down**:
+```
+Hook fires → POST localhost:7331/hooks/<event> → connection refused
+  → "⚠  Total Recall daemon not running.
+        Start with `tr serve` for recall checks."
+  → exit 0 (Git proceeds normally)
+```
+
+**Rationale**: Transient invocation (spinning up the engine cold per hook invocation) produces materially worse UX: no warm cache, extra AI provider round-trips, and commit-blocking latency. This causes developers to perceive Total Recall as slow rather than understanding that the daemon is the solution. The daemon is lightweight — persistent operation is the correct and intended default.
+
+**Transient mode status**: Deferred indefinitely. May be revisited only if community demand warrants it (e.g., CI/CD pipelines). If ever implemented, transient mode MUST warn prominently about performance implications and strongly recommend `tr serve`. It must never be the documented default.
+
+**Alternative considered**: Auto-detect daemon state and fall back to transient invocation. Rejected: hides the performance cost of running without a daemon, obscures the value of `tr serve`, and adds significant implementation complexity for a degraded experience.
+
+**Follow-on**: `tr init` and install documentation should guide users toward setting up daemon autostart (launchd / systemd user unit / Windows Task Scheduler) so `tr serve` starts automatically after reboot. This is a future task for the init flow, out of scope for this change.

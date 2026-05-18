@@ -127,3 +127,24 @@ This commit involved:
 			- notifications
 			- local IPC
 			- platform compatibility
+
+---
+
+## Deferred — Community Request Only
+
+### Transient mode (hooks without a running daemon)
+- **Status**: Deferred indefinitely
+- **Current behavior**: Hooks require `tr serve` to be running. If the daemon is not running, the hook prints an advisory and exits 0 — the Git operation proceeds unblocked.
+- **Revisit trigger**: Community demand, e.g. CI/CD pipeline use cases where a persistent daemon is impractical
+- **If ever implemented, MUST**:
+  - Warn clearly: "Running without daemon — expect slower analysis and extra AI provider round-trips."
+  - Strongly recommend `tr serve` for optimal performance and a warm cache
+  - Never be the documented default or primary installation path
+
+### Daemon autostart (`tr init` enhancement)
+- **Status**: Future Phase 1 task — implement after `config-architecture` is complete
+- `tr init` should offer to configure daemon autostart so `tr serve` starts automatically after reboot:
+  - macOS: launchd plist (`~/Library/LaunchAgents/`)
+  - Linux: systemd user unit (`~/.config/systemd/user/`)
+  - Windows: Task Scheduler entry or startup folder shortcut
+- Ensures developers don't have to remember to run `tr serve` each session
