@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_03.png" alt="total recall logo" width="400"/>
+	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
 </p>
 
 Preserve engineering intuition in the age of AI agents.
