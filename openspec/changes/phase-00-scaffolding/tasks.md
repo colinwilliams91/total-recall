@@ -11,6 +11,7 @@ Run from the repo root. Produces `go.mod` with `go 1.22` (or latest stable).
 ### 1.2 Add initial dependencies
 ```
 go get github.com/spf13/cobra
+go get github.com/charmbracelet/huh
 go get github.com/mark3labs/mcp-go
 go get modernc.org/sqlite
 ```

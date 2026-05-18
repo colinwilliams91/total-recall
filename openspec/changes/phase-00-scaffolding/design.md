@@ -26,13 +26,14 @@ No exported packages. The `internal/` directory owns all subsystem logic.
 
 ---
 
-## Decision 4 — CLI Framework: Cobra
+## Decision 4 — CLI Framework: Cobra + Huh
 
 ```
 github.com/spf13/cobra
+github.com/charmbracelet/huh
 ```
 
-**Rationale:** Standard choice for Go CLIs with multiple subcommands. Supports persistent flags (needed for `--quiet`, `--json`, etc. across subcommands), auto-generated `--help`, and shell completion out of the box. Avoids reinventing subcommand dispatch.
+**Cobra** handles subcommand routing. Standard choice for Go CLIs with multiple subcommands. Supports persistent flags (needed for `--quiet`, `--json`, etc. across subcommands), auto-generated `--help`, and shell completion out of the box. Avoids reinventing subcommand dispatch.
 
 Initial subcommands stubbed in Phase 00:
 
@@ -42,6 +43,10 @@ Initial subcommands stubbed in Phase 00:
 | `total-recall init` | Initialize project config + install hooks |
 | `total-recall config` | Read/write config values |
 | `total-recall status` | Show daemon status and active config |
+
+**Huh** handles interactive terminal forms. Used specifically in the `total-recall init` flow for the conversation analysis opt-in prompt (and any future interactive config prompts). Huh is purpose-built for this — earnest, clean terminal forms without rolling a custom input loop.
+
+Cobra and Huh are complementary, not competing. Cobra routes; Huh renders interactive UI within a command's `RunE` function.
 
 ---
 
