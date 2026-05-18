@@ -214,3 +214,13 @@ go test ./...
 ```
 
 > Note: No test files exist yet — `go test open-source.` will complete with no tests run. The internal packages under `internal` only contain `doc.go` stubs at this stage.
+
+---
+
+### Other Useful Commands
+
+```sh
+make tidy    # go mod tidy — sync dependencies
+make lint    # run golangci-lint (must be installed separately)
+make clean   # remove the bin/ directory
+```
