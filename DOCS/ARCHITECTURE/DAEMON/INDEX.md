@@ -32,6 +32,8 @@ APIs are logically distinct and separate despite running on the same server.
 
 #### Internal Hook API
 
+URL prefix: `/hooks`
+
 Used by:
 
 Git hooks
@@ -46,6 +48,8 @@ recall requests
 daemon control
 
 #### MCP API
+
+URL prefix: `/mcp`
 
 Used by:
 
