@@ -24,3 +24,9 @@ The privacy one is worth sitting with. The extract-and-discard pattern resolves 
 conversations but never stores the conversation itself, only the concept fingerprints that come out of it.
 
 Does that feel like an acceptable contract? Or is there a version of this where you'd want to make conversation analysis opt-in separately from code-change analysis?
+
+---
+
+- [ ] `DefaultUserConfig` defaults the `api-key` to `env:ANTHROPIC_API_KEY` (for Windows, didn't test other OS flows...) but should probably assign a variable dynamically...
+
+see line 108 `internal\config\config.go`
