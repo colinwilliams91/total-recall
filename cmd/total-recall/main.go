@@ -12,7 +12,7 @@ var version = "dev"
 func main() {
 	root := &cobra.Command{
 		Use:     "total-recall",
-		Short:   "Total Recall — AI-powered developer recall for the age of AI-assisted coding",
+		Short:   "Total Recall — Preserve engineering cogitation in the age of AI-assisted coding",
 		Version: version,
 	}
 

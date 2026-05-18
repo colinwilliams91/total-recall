@@ -153,4 +153,64 @@ The group with in optimal intersection of *lowest* Completion Time and *highest*
 ![figure 6 task completion time over quiz score](DOCS/MEDIA/DATA/FIG_6.png)
 
 ## Contributing
-...
+
+### Build
+
+Using Make:
+
+```sh
+make build
+```
+
+Produces `total-recall.exe` (Windows) or `bin/total-recall` (Linux/macOS).
+
+Or directly with Go:
+
+```sh
+go build -o bin/total-recall.exe ./cmd/total-recall
+```
+
+Install to your $GOPATH/bin:
+
+```sh
+make install
+# or
+go install ./cmd/total-recall
+```
+
+---
+
+### Run
+
+After building:
+
+```sh
+./bin/total-recall --help
+```
+
+Available subcommands:
+
+| Command   |	Description |
+| --------- | ------------- |
+| serve     | Start the daemon on localhost:7331    |
+| init      | Initialize Total Recall for a project |
+| config    | Read/write config values              |
+| status    | Show daemon status and active config  |
+
+Example:
+
+```sh
+./bin/total-recall serve
+```
+
+---
+
+### Test
+
+```sh
+make test
+# or
+go test ./...
+```
+
+> Note: No test files exist yet — `go test open-source.` will complete with no tests run. The internal packages under `internal` only contain `doc.go` stubs at this stage.
