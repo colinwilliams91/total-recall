@@ -47,13 +47,13 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 	// Privacy and AI keys in .tr.yaml are user-level only — discard with warning.
 	if repo.Privacy != nil {
 		fmt.Fprintln(os.Stderr,
-			"⚠  privacy settings in .tr.yaml are ignored — privacy is user-level only.\n"+
-				"   Remove the privacy block from .tr.yaml.")
+			"⚠  privacy settings in repo .tr.yaml are ignored — privacy is user-level only.\n"+
+				"⚠  Remove the privacy block from repo .tr.yaml.\n")
 	}
 	if repo.AI != nil {
 		fmt.Fprintln(os.Stderr,
-			"⚠  ai settings in .tr.yaml are ignored — AI credentials are user-level only.\n"+
-				"   Remove the ai block from .tr.yaml.")
+			"⚠  ai settings in repo .tr.yaml are ignored — AI credentials are user-level only.\n"+
+				"⚠  Remove the ai block from repo .tr.yaml.\n")
 	}
 
 	// Per-repo overrides for project-specific blocks.
