@@ -1,4 +1,17 @@
 # Roadmap
+
+## Phase 00 — Foundation (Shipped)
+
+- Go binary scaffolding (`total-recall` CLI)
+- Two-tier configuration: `~/.tr/config.yaml` (user) + `.tr.yaml` (per-repo)
+- `total-recall init` with conversation analysis opt-in (Huh TUI)
+- `total-recall serve` with auto-config creation and `--quiet` flag
+- `total-recall config --show` with source annotations
+- MCP conversation analysis gate (`privacy.conversation_analysis`)
+- Daemon-required architecture; transient mode deferred
+
+---
+
 - ### Phase 1 - MVP
 	- ARCHITECTURE [INDEX](00-SRC/🔓_OSS/🦾TOTAL_RECALL/📐ARCHITECTURE/INDEX.md)
 #### KEY FEATURES:
@@ -127,3 +140,38 @@ This commit involved:
 			- notifications
 			- local IPC
 			- platform compatibility
+
+---
+
+## Hooks Phase — P0 Security Requirement
+
+### `.tr.yaml` credential scan in pre-commit hook
+- **Priority**: P0 — must ship with the managed hook system
+- **Problem**: `.tr.yaml` is committed to the repository. A user who accidentally puts an `api-key` value in `.tr.yaml` (instead of `~/.tr/config.yaml`) will commit it without any pre-commit safeguard until hooks are installed.
+- **Current mitigation**: `LoadRepoConfig` emits a 🚨 security warning with rotation instructions at runtime (after the commit has already happened).
+- **Required fix**: The managed `pre-commit` hook MUST scan `.tr.yaml` for:
+  - Any `ai:` block
+  - Any `privacy:` block
+  - Specifically, any `api-key:` value that is not in `env:<VAR_NAME>` format
+- **Exit behavior**: If a raw key is detected, the hook MUST block the commit (`exit 1`) with a clear message directing the user to move credentials to `~/.tr/config.yaml`.
+
+---
+
+## Deferred — Community Request Only
+
+### Transient mode (hooks without a running daemon)
+- **Status**: Deferred indefinitely
+- **Current behavior**: Hooks require `tr serve` to be running. If the daemon is not running, the hook prints an advisory and exits 0 — the Git operation proceeds unblocked.
+- **Revisit trigger**: Community demand, e.g. CI/CD pipeline use cases where a persistent daemon is impractical
+- **If ever implemented, MUST**:
+  - Warn clearly: "Running without daemon — expect slower analysis and extra AI provider round-trips."
+  - Strongly recommend `tr serve` for optimal performance and a warm cache
+  - Never be the documented default or primary installation path
+
+### Daemon autostart (`tr init` enhancement)
+- **Status**: Future Phase 1 task — implement after `config-architecture` is complete
+- `tr init` should offer to configure daemon autostart so `tr serve` starts automatically after reboot:
+  - macOS: launchd plist (`~/Library/LaunchAgents/`)
+  - Linux: systemd user unit (`~/.config/systemd/user/`)
+  - Windows: Task Scheduler entry or startup folder shortcut
+- Ensures developers don't have to remember to run `tr serve` each session

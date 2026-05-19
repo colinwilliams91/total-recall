@@ -244,6 +244,20 @@ Recall Engine
 Presentation Layer
 ```
 
+## Config Loading Lifecycle
+
+Config is resolved once at daemon startup and held in memory. The resolution order is:
+
+1. **`EnsureUserConfig`** — load `~/.tr/config.yaml`, or auto-create from `DefaultUserConfig()` if absent. Emits an advisory to stderr (suppressible with `--quiet`).
+2. **`LoadRepoConfig`** — read `.tr.yaml` from the process working directory. Returns nil if absent (not an error).
+3. **`Merge(user, repo)`** — deep-merge into a single resolved `Config`. Per-repo values win. `privacy.*` and `ai.*` in `.tr.yaml` are discarded with a warning.
+
+Hooks do not load config themselves — they POST to the running daemon which already holds the merged config.
+
+See [CONFIG.md](CONFIG.md) for full schema, merge rules, and `total-recall config --show` output format.
+
+---
+
 ## Important Clarification About "Daemon"
 The daemon is NOT:
 
@@ -263,17 +277,13 @@ tr serve
 
 runs the Core Engine persistently.
 
-Whereas:
+Git hooks are thin HTTP clients — they POST to the running daemon:
 
 ```
-tr hook pre-commit
+Hook fires → POST localhost:7331/hooks/<event> → daemon responds
 ```
 
-runs it transiently.
-
-Same engine.
-
-Different lifecycle mode.
+If the daemon is not running, hooks emit a single advisory and exit 0 (the Git operation proceeds normally). Transient engine invocation — running the Core Engine per-hook without a daemon — is **deferred indefinitely**.
 
 ---
 
