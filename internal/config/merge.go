@@ -1,10 +1,5 @@
 package config
 
-import (
-	"fmt"
-	"os"
-)
-
 const (
 	sourceUser    = "user"
 	sourceRepo    = "repo"
@@ -17,7 +12,8 @@ const (
 //   - Per-repo values win over user defaults on any conflicting key.
 //   - recall is deep-merged at the field level: a repo override of recall.max_questions
 //     does not discard the user's recall.difficulty.
-//   - privacy.* and ai.* in .tr.yaml are silently discarded with a warning.
+//   - privacy.* and ai.* in .tr.yaml are silently discarded (warnings are emitted
+//     earlier by LoadRepoConfig via warnRepoConfigSecrets).
 //   - A nil repo means no .tr.yaml was found; hook/mode/presentation sources are "default".
 func Merge(user *UserConfig, repo *RepoConfig) *Config {
 	cfg := &Config{
@@ -44,17 +40,9 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 		return cfg
 	}
 
-	// Privacy and AI keys in .tr.yaml are user-level only — discard with warning.
-	if repo.Privacy != nil {
-		fmt.Fprintln(os.Stderr,
-			"⚠  privacy settings in repo .tr.yaml are ignored — privacy is user-level only.\n"+
-				"⚠  Remove the privacy block from repo .tr.yaml.\n")
-	}
-	if repo.AI != nil {
-		fmt.Fprintln(os.Stderr,
-			"⚠  ai settings in repo .tr.yaml are ignored — AI credentials are user-level only.\n"+
-				"⚠  Remove the ai block from repo .tr.yaml.\n")
-	}
+	// Privacy and AI keys in .tr.yaml are warned about (and security-graded if a
+	// raw api-key is present) in LoadRepoConfig via warnRepoConfigSecrets.
+	// Silently discard them here — they are never merged into the resolved config.
 
 	// Per-repo overrides for project-specific blocks.
 	cfg.Hooks = repo.Hooks

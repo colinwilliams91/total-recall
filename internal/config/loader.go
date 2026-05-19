@@ -99,6 +99,7 @@ func LoadRepoConfig() (*RepoConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", RepoConfigFile, err)
 	}
+	warnRepoConfigSecrets(&cfg)
 	return &cfg, nil
 }
 
@@ -130,4 +131,49 @@ func warnRawAPIKey(ai *AIConfig) {
 		"⚠  ai.api-key in ~/.tr/config.yaml appears to be a raw value.\n"+
 			"   Use the env:<VAR_NAME> pattern instead (e.g., env:ANTHROPIC_API_KEY).\n",
 	)
+}
+
+// warnRepoConfigSecrets checks .tr.yaml for user-level keys (privacy.*, ai.*)
+// that must never be committed to a repository. If a raw api-key value is
+// detected, the warning is escalated to a security alert with rotation guidance,
+// because .tr.yaml is intended to be committed.
+//
+// NOTE: This is a runtime warning — it fires when Total Recall reads .tr.yaml,
+// not at commit time. A dedicated pre-commit hook (tracked as P0 for the hooks
+// phase) will be the proper pre-commit safeguard.
+func warnRepoConfigSecrets(cfg *RepoConfig) {
+	if cfg.Privacy != nil {
+		fmt.Fprintln(os.Stderr,
+			"⚠  .tr.yaml contains a 'privacy' block — privacy settings are user-level only.\n"+
+				"   These values are being ignored. Remove the privacy block from .tr.yaml.")
+	}
+
+	if cfg.AI == nil {
+		return
+	}
+
+	// Any ai.* block in .tr.yaml is wrong, but a raw api-key is a credential leak.
+	rawKey := cfg.AI.APIKey
+	isRaw := rawKey != "" && !strings.HasPrefix(rawKey, "env:")
+
+	if isRaw {
+		fmt.Fprintln(os.Stderr,
+			"\n🚨 SECURITY WARNING: .tr.yaml contains a raw api-key value.\n"+
+				"\n"+
+				"   .tr.yaml is meant to be committed to your repository.\n"+
+				"   If you have already committed this file with a key in it:\n"+
+				"\n"+
+				"     1. Rotate the exposed key with your provider immediately.\n"+
+				"     2. Remove it from .tr.yaml and use the env: pattern instead:\n"+
+				"          ai:\n"+
+				"            api-key: env:ANTHROPIC_API_KEY\n"+
+				"     3. Purge it from Git history (git filter-repo or BFG Repo Cleaner).\n"+
+				"\n"+
+				"   The 'ai' block in .tr.yaml is being ignored — move credentials\n"+
+				"   to ~/.tr/config.yaml (which is never committed).")
+	} else {
+		fmt.Fprintln(os.Stderr,
+			"⚠  .tr.yaml contains an 'ai' block — AI credentials are user-level only.\n"+
+				"   These values are being ignored. Move them to ~/.tr/config.yaml.")
+	}
 }

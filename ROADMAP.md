@@ -143,6 +143,20 @@ This commit involved:
 
 ---
 
+## Hooks Phase — P0 Security Requirement
+
+### `.tr.yaml` credential scan in pre-commit hook
+- **Priority**: P0 — must ship with the managed hook system
+- **Problem**: `.tr.yaml` is committed to the repository. A user who accidentally puts an `api-key` value in `.tr.yaml` (instead of `~/.tr/config.yaml`) will commit it without any pre-commit safeguard until hooks are installed.
+- **Current mitigation**: `LoadRepoConfig` emits a 🚨 security warning with rotation instructions at runtime (after the commit has already happened).
+- **Required fix**: The managed `pre-commit` hook MUST scan `.tr.yaml` for:
+  - Any `ai:` block
+  - Any `privacy:` block
+  - Specifically, any `api-key:` value that is not in `env:<VAR_NAME>` format
+- **Exit behavior**: If a raw key is detected, the hook MUST block the commit (`exit 1`) with a clear message directing the user to move credentials to `~/.tr/config.yaml`.
+
+---
+
 ## Deferred — Community Request Only
 
 ### Transient mode (hooks without a running daemon)
