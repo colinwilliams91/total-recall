@@ -20,6 +20,7 @@ Aggressive adoption of AI assisted development tooling has proven to have negati
 > We found that using AI assistance led to a statistically significant decrease in mastery... AI may accelerate productivity while inhibiting skills formation.
 - [How AI assistance impacts the formation of coding skills](https://www.anthropic.com/research/AI-assistance-coding-skills)
 	- Anthropic Research Team
+
 ## Philosophy
 Git is the stable substrate.
 
@@ -28,6 +29,7 @@ That is where we anchor.
 We should never feel like "work after the work".
 
 We should feel like "a 4-second mental rep".
+
 ## Key Features
 - [ ] 1.0 Fast and Interruptible
 	- [ ] 1.1 Optional Strict Mode
@@ -40,7 +42,7 @@ We should feel like "a 4-second mental rep".
 	- [ ] 4.2 "Recall Debt"
 - [ ] 5.0 Concept Fingerprinting
 	- [ ] 5.1. Long-term Adaptive Curricula
----
+
 ## Setup
 
 ```sh
@@ -77,47 +79,6 @@ total-recall init  # inside the repo
 
 Total Recall uses two config files with clear separation of concerns:
 
-### User Config — `~/.tr/config.yaml`
-Personal defaults, privacy choices, and AI credentials. **Never committed.**
-
-```yaml
-privacy:
-  conversation_analysis: false  # opt-in: enabled during `total-recall init`
-
-ai:
-  provider: anthropic
-  model: claude-sonnet
-  api-key: env:ANTHROPIC_API_KEY  # always use env:<VAR> — never paste raw keys
-
-recall:
-  difficulty: adaptive
-  max_questions: 1
-```
-
-### Per-Repo Config — `.tr.yaml`
-Project-specific settings. **Safe to commit.**
-
-```yaml
-hooks:
-  pre-commit: true
-  commit-msg: false
-  pre-push: false
-
-mode:
-  blocking: false
-
-presentation:
-  terminal: true
-  mcp: false
-
-# Optional: override user recall defaults for this repo only
-recall:
-  max_questions: 3
-```
-
-> **Note:** `privacy.*` and `ai.*` in `.tr.yaml` are discarded with a warning.
-> Credentials and privacy choices are always user-level.
-
 ### Inspect the resolved config
 
 ```sh
@@ -127,6 +88,7 @@ total-recall config --show
 Prints every key annotated with its source (`user` / `repo` / `default`).
 
 See [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+
 ## Data
 
 - ## 84% of respondents are using AI tools this year
@@ -139,6 +101,7 @@ See [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 
 > Together, our results suggest that the aggressive incorporation of AI into the workplace can have negative impacts on the professional development workers if they do not remain cognitatively [sic] engaged. Given time constraints and organizational pressures, junior developers or other professionals may rely on AI to complete tasks as fast as possible at the cost of real skill development. Furthermore, we found that the biggest difference in test scores is between the debugging questions. This suggests that as companies transition to more AI code writing with human supervision, humans may not possess the necessary skills to validate and debug AI-written code if their skill formation was inhibited by using AI in the first place.
 > - Shen & Tamkin, [How AI Impacts Skill Formation](https://arxiv.org/pdf/2601.20245)
+
 #### Results
 
 > In the initial coding phase of our qualitative analysis... we developed a typology of six AI interaction patterns... yielding different outcomes for both completion time and skill formation (i.e. quiz score). (figure 11)
@@ -226,3 +189,4 @@ make tidy    # go mod tidy — sync dependencies
 make lint    # run golangci-lint (must be installed separately)
 make clean   # remove the bin/ directory
 ```
+Build and use the `--help` flag to explore more commands and options.
