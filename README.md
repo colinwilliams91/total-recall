@@ -67,11 +67,21 @@ total-recall serve
 
 The daemon runs on `localhost:7331` and must be running for hooks and MCP to function.
 
-**3. Initialize a repo (adds `.tr.yaml`):**
+**Check daemon status:**
+
+```sh
+total-recall status
+```
+
+Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (exits 1, for scripting).
+
+**3. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
 
 ```sh
 total-recall init  # inside the repo
 ```
+
+Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
 ---
 
