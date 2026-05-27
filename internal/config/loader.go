@@ -84,6 +84,35 @@ func writeUserConfig(path string, cfg *UserConfig) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
+// WriteRepoConfig serializes cfg to .tr.yaml in repoRoot.
+// Used by `total-recall init` to persist hook selections and repo-level settings.
+func WriteRepoConfig(repoRoot string, cfg *RepoConfig) error {
+	path := filepath.Join(repoRoot, RepoConfigFile)
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("serializing repo config: %w", err)
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// LoadRepoConfigFromDir reads .tr.yaml from the given directory.
+// Returns (nil, nil) if the file does not exist.
+func LoadRepoConfigFromDir(dir string) (*RepoConfig, error) {
+	path := filepath.Join(dir, RepoConfigFile)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var cfg RepoConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return &cfg, nil
+}
+
 // LoadRepoConfig reads and parses .tr.yaml from the current directory.
 // Returns (nil, nil) if the file does not exist — the caller should treat
 // a nil RepoConfig as "no per-repo overrides".

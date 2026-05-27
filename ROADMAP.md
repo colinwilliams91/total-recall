@@ -2,13 +2,44 @@
 
 ## Phase 00 — Foundation (Shipped)
 
-- Go binary scaffolding (`total-recall` CLI)
+- Go binary scaffolding (`total-recall` CLI, `cmd/`, `internal/` package layout)
+- Hook script stubs (`hooks/*.sh`, `hooks/*.bat`)
+- Go module, Cobra command skeleton, `go.mod`
+
+---
+
+## Phase 01 — Config Architecture (Shipped)
+
 - Two-tier configuration: `~/.tr/config.yaml` (user) + `.tr.yaml` (per-repo)
 - `total-recall init` with conversation analysis opt-in (Huh TUI)
-- `total-recall serve` with auto-config creation and `--quiet` flag
-- `total-recall config --show` with source annotations
+- `total-recall config --show` with source annotations and deep-merge
+- `EnsureUserConfig` with auto-create and `--quiet` flag
 - MCP conversation analysis gate (`privacy.conversation_analysis`)
 - Daemon-required architecture; transient mode deferred
+
+---
+
+## Phase 02 — Daemon Foundation (Shipped)
+
+- HTTP daemon at `localhost:7331` (`total-recall serve`)
+- Hook routes: `POST /hooks/pre-commit`, `/hooks/commit-msg`, `/hooks/pre-push`
+- `GET /health` endpoint; `total-recall status` with exit-code-1 on failure
+- Hook installation in `tr init` — Huh prompts, sentinel chaining, idempotent re-runs
+- Full hook scripts: P0 credential scan, diff capture, curl dispatch, graceful degradation
+- `.bat` variants for Windows environments outside Git Bash
+- `HookResponse` typed struct (Phase 3 forward-compatible: `Recall *RecallPrompt omitempty`)
+- P0 security: pre-commit blocks commits containing raw `api-key:` values in `.tr.yaml`
+
+---
+
+## Phase 03 — Intelligence Layer (Next)
+
+Critical path to a working demo:
+- AI provider interface (`internal/ai/Provider`) with raw HTTP + BYOK
+- Concept extraction from staged diffs (Background Concept Cache)
+- Recall question synthesis from cached concepts (Recall Engine)
+- Terminal presentation adapter (displays question at commit time)
+- SQLite concept cache (`~/.tr/cache.db`)
 
 ---
 

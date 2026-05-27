@@ -1,4 +1,14 @@
 @echo off
-REM pre-push — Total Recall
-REM Stub: exits cleanly. total-recall init will install the full hook.
+:: total-recall managed
+:: Managed by Total Recall — do not edit this block manually.
+:: Re-run 'total-recall init' to update.
+
+set "DAEMON_URL=http://localhost:7331"
+
+for /f "delims=" %%i in ('git rev-parse --show-toplevel 2^>nul') do set "REPO=%%i"
+for /f "delims=" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "BRANCH=%%i"
+
+powershell -NoProfile -Command ^
+    "try { Invoke-WebRequest -Uri '%DAEMON_URL%/hooks/pre-push' -Method POST -ContentType 'application/json' -Body ('{\"hook\":\"pre-push\",\"repo\":\"%REPO%\",\"branch\":\"%BRANCH%\",\"timestamp\":\"' + (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') + '\",\"payload\":{\"refs\":[]}}') -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null } catch { Write-Host '[total-recall] Daemon not running. Start with total-recall serve.' -ForegroundColor Yellow }"
+
 exit /b 0

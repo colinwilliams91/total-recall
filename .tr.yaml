@@ -1,0 +1,9 @@
+hooks:
+    pre-commit: true
+    commit-msg: true
+    pre-push: true
+mode:
+    blocking: false
+presentation:
+    terminal: false
+    mcp: false

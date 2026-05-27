@@ -1,9 +1,9 @@
 package config
 
 const (
-	sourceUser    = "user"
-	sourceRepo    = "repo"
-	sourceDefault = "default"
+	sourceUser    = "[user]"
+	sourceRepo    = "[repo]"
+	sourceDefault = "[default]"
 )
 
 // Merge deep-merges user defaults with per-repo overrides.
