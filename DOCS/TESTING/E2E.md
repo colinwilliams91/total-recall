@@ -190,7 +190,14 @@ git add .
 git commit -m "test: trigger TR hook"
 # Expected:
 #   - Commit succeeds (hook is non-blocking)
-#   - Daemon terminal logs the received payload
+#   - Daemon terminal prints a log line per enabled hook, e.g.:
+#       2026/01/01 12:00:00 [hook] pre-commit  repo=/tmp/tr-test  branch=main
+#       2026/01/01 12:00:00 [hook] commit-msg  repo=/tmp/tr-test  branch=main
+#   Note: the daemon logs envelope metadata only (hook name, repo path, branch).
+#   The full payload (diff, staged files, commit message) is received but not
+#   logged in Phase 2 — it will be processed in Phase 3 by the AI pipeline.
+#   Note: branch=HEAD is expected for a repo's very first commit (no named
+#   branch exists yet). Subsequent commits will show the branch name.
 ```
 
 #### P0 credential scan
@@ -223,8 +230,11 @@ git commit -m "fix: use env reference"
 echo "test" >> foo.txt
 git add . && git commit -m "test: no daemon"
 # Expected:
-#   - Advisory message: "Total Recall daemon not reachable — skipping"
-#   - Commit SUCCEEDS (hook exits 0, never blocks Git)
+#   - Each enabled hook prints once:
+#       "[total-recall] Daemon not running at http://localhost:7331 — skipping recall check. Start with 'total-recall serve'."
+#   - If multiple hooks are enabled (e.g. pre-commit + commit-msg), you will see
+#     the message TWICE — once per hook. This is expected behaviour, not a bug.
+#   - Commit SUCCEEDS (all hooks exit 0 — TR never blocks Git)
 ```
 
 **Not yet testable in this phase:** AI provider calls, concept extraction, recall question generation, terminal quiz presentation (all Phase 03).
