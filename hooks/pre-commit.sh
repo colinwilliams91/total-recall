@@ -46,6 +46,6 @@ curl --silent --max-time "${HOOK_TIMEOUT}" \
     --header "Content-Type: application/json" \
     --data "{\"hook\":\"pre-commit\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"diff\":${DIFF_JSON},\"staged_files\":${STAGED_JSON},\"loc_delta\":${LOC_DELTA}}}" \
     "${DAEMON_URL}/hooks/pre-commit" >/dev/null 2>&1 \
-    || printf "[total-recall] Daemon not running at %s. Start with 'total-recall serve'.\n" "${DAEMON_URL}" >&2
+    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'total-recall serve'.\n" "${DAEMON_URL}" >&2
 
 exit 0
