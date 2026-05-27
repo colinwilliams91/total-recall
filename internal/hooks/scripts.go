@@ -104,16 +104,7 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf "")"
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "")"
 
 if command -v python3 >/dev/null 2>&1; then
-    REFS_JSON="$(printf '%s\n' "${STDIN_DATA}" | python3 -c '
-import json, sys
-lines = [l for l in sys.stdin.read().splitlines() if l.strip()]
-refs = []
-for line in lines:
-    parts = line.split()
-    if len(parts) >= 4:
-        refs.append({"local_ref": parts[0], "local_sha": parts[1], "remote_ref": parts[2], "remote_sha": parts[3]})
-print(json.dumps(refs))
-')"
+    REFS_JSON="$(printf '%s\n' "${STDIN_DATA}" | python3 -c "import json,sys; lines=[l.split() for l in sys.stdin.read().splitlines() if l.strip()]; print(json.dumps([{'local_ref':p[0],'local_sha':p[1],'remote_ref':p[2],'remote_sha':p[3]} for p in lines if len(p)>=4]))")"
 else
     REFS_JSON='[]'
 fi
