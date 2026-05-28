@@ -241,17 +241,241 @@ git add . && git commit -m "test: no daemon"
 
 ---
 
-## Phase 03 — Intelligence Layer _(template — fill in when shipped)_
+## Phase 03 — Intelligence Layer
 
-**Goal:** Daemon processes hook payloads through AI, extracts concepts into cache, synthesises a recall question, and presents it in the terminal.
+**Goal:** Daemon processes hook payloads through AI asynchronously — extracting concepts into the SQLite cache, synthesising a recall question, and printing it to the daemon terminal after each commit.
 
-_Prerequisites, checks, and expected results to be defined during Phase 03 implementation._
+### Prerequisites
 
-| # | Check | Command | Expected |
-|---|-------|---------|----------|
-| 3.1 | ... | ... | ... |
+- Binary built from current source (`go build -o tr ./cmd/total-recall`).
+- Scratch Git repo from Phase 02 still available (or create a new one).
+- **At least one of the following for live AI checks:**
+  - Anthropic API key (set `ANTHROPIC_API_KEY` in your shell)
+  - OpenAI API key (set `OPENAI_API_KEY`)
+  - Ollama running locally (`ollama serve` + at least one model pulled, e.g. `ollama pull llama3.2`)
+- Checks 3.1–3.5 (config + TUI) are runnable without an API key. Checks 3.6–3.12 (AI pipeline) require a configured provider.
 
-**Not yet testable:** _(list deferred items here)_
+---
+
+### Section A — `tr init` AI Provider TUI
+
+```sh
+# 3.1  Run init — new AI provider section appears before hooks
+cd /tmp/tr-test   # your scratch repo
+/path/to/tr init
+```
+
+**Expected TUI flow (in order):**
+1. Conversation analysis confirm (existing — from Phase 01)
+2. **NEW:** `🤖  AI Provider` — select menu with 6 options
+3. Cloud provider (Anthropic/OpenAI/Groq): API key input pre-filled with `env:PROVIDER_API_KEY`, model name input
+4. Local provider (Ollama/LM Studio): model name input only (no API key prompt)
+5. Custom: base URL, model, optional API key
+6. Hook selection (existing — from Phase 02)
+
+```sh
+# 3.2  Verify config written correctly (Anthropic example)
+cat ~/.tr/config.yaml
+```
+
+**Expected (cloud provider):** `provider: anthropic`, `model: claude-sonnet-4-5`, `api-key: env:ANTHROPIC_API_KEY`, `base-url:` present and blank with an explanatory comment
+
+```sh
+# 3.3  base-url shown blank in config (not hidden by omitempty)
+grep "base-url" ~/.tr/config.yaml
+# Expected: line like "  base-url:  # ..." — visible even when empty
+```
+
+```sh
+# 3.4  Re-run init — existing AI values pre-populated
+/path/to/tr init
+# Expected: API key, model, and provider fields pre-filled with
+#           the values written in check 3.1 — user can confirm or change
+```
+
+```sh
+# 3.5  config --show reflects new AI fields
+/path/to/tr config --show
+# Expected: rows for provider, model, api-key, base-url all present
+#           with [user] or [default] source tags
+```
+
+---
+
+### Section B — Daemon Startup with AI Configured
+
+```sh
+# 3.6  Start daemon with AI configured (separate terminal)
+ANTHROPIC_API_KEY=sk-... /path/to/tr serve
+# Expected:
+#   ✓ Total Recall daemon running on localhost:7331
+#   (no error about provider — key resolved from env: reference)
+```
+
+```sh
+# 3.7  Start daemon WITHOUT AI configured (missing provider)
+# Edit ~/.tr/config.yaml — set provider to "" or delete the ai: block, then:
+/path/to/tr serve
+# Expected:
+#   ✓ Total Recall daemon running on localhost:7331
+#   Advisory logged: "[daemon] AI provider not configured — recall questions
+#     will not be generated. Run 'total-recall init' to configure."
+#   Daemon continues running (AI is optional — non-blocking)
+```
+
+---
+
+### Section C — Async Pipeline (requires configured provider + running daemon)
+
+```sh
+# 3.8  Manual hook POST — async 202 response
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://localhost:7331/hooks/pre-commit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hook": "pre-commit",
+    "repo": "/tmp/tr-test",
+    "branch": "main",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "payload": {"diff": "+ func retryWithBackoff(maxRetries int) error {\n+   time.Sleep(time.Duration(math.Pow(2, float64(attempt))) * time.Second)\n+ }"}
+  }'
+# Expected: 202  (immediate — hook does not wait for AI)
+```
+
+**Watch daemon terminal after the POST:**
+```
+Expected (within ~5-10 seconds):
+  [hook] pre-commit  repo=/tmp/tr-test  branch=main
+  [pipeline] ... (optional extraction log)
+
+  🧠 Recall Check
+  ─────────────────────────────────────────
+    Why is jitter commonly added to exponential backoff retry intervals?
+
+    1. To prevent retry storms from synchronizing across clients
+    2. To increase the maximum retry delay
+    3. To improve cache locality
+    4. To reduce memory allocations
+  ─────────────────────────────────────────
+```
+
+> **Note (v1 limitation):** The recall question prints to the daemon's own stdout, not to the committing developer's terminal. Phase 04 will add out-of-band delivery. See `DOCS/ARCHITECTURE/DELIVERY.md`.
+
+```sh
+# 3.9  Real commit triggers async pipeline
+cd /tmp/tr-test
+cat > retry.go << 'EOF'
+package main
+
+import (
+    "math"
+    "time"
+)
+
+func retryWithBackoff(attempt int) {
+    delay := time.Duration(math.Pow(2, float64(attempt))) * time.Second
+    time.Sleep(delay)
+}
+EOF
+
+git add retry.go
+git commit -m "feat: add exponential backoff helper"
+# Expected:
+#   - Commit completes immediately (hook is non-blocking)
+#   - Daemon terminal (within ~5-10 seconds) prints the 🧠 Recall Check block
+```
+
+```sh
+# 3.10  Empty/whitespace diff — pipeline skips gracefully
+# (use commit-msg hook only, no pre-commit)
+git commit --allow-empty -m "chore: empty commit"
+# Expected:
+#   - Commit succeeds
+#   - Daemon logs: "[pipeline] no diff in hook payload for commit-msg — skipping"
+#   - No AI call made; no error
+```
+
+---
+
+### Section D — Concept Cache
+
+```sh
+# 3.11  Cache database created after first commit
+ls -la ~/.tr/concepts.db
+# Expected: file exists (created on first successful Save)
+```
+
+```sh
+# 3.12  Inspect cached concepts directly
+sqlite3 ~/.tr/concepts.db \
+  "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
+# Expected: rows with concept names like "exponential backoff", "retry semantics";
+#           source = "code"; weight between 0.0 and 1.0
+#           (exact concepts depend on what the AI returned)
+```
+
+---
+
+### Section E — Provider-Specific Spot Checks
+
+#### Ollama (local, no API key)
+
+```sh
+# 3.13  Configure Ollama in init
+/path/to/tr init
+# Select: Ollama (local · free · runs on your machine)
+# Enter model: llama3.2
+
+# Verify config:
+grep -A4 "^ai:" ~/.tr/config.yaml
+# Expected: provider: ollama, model: llama3.2, api-key: (blank), base-url: (blank)
+```
+
+```sh
+# 3.14  Daemon with Ollama (must have `ollama serve` running locally)
+/path/to/tr serve
+git add . && git commit -m "test: ollama provider"
+# Expected: recall question printed to daemon terminal (no API key needed)
+```
+
+#### Custom endpoint
+
+```sh
+# 3.15  Custom provider with explicit base URL
+/path/to/tr init
+# Select: Custom
+# Base URL: http://localhost:11434/v1   (Ollama OpenAI-compat endpoint)
+# Model: llama3.2
+# API key: (leave blank)
+
+grep "base-url" ~/.tr/config.yaml
+# Expected: base-url: http://localhost:11434/v1
+```
+
+---
+
+### Section F — Graceful Degradation
+
+```sh
+# 3.16  AI failure (bad API key) — daemon continues, no crash
+# Set a garbage API key:
+ANTHROPIC_API_KEY=sk-garbage /path/to/tr serve
+
+git add . && git commit -m "test: bad api key"
+# Expected:
+#   - Commit succeeds (non-blocking)
+#   - Daemon logs: "[pipeline] extraction AI call failed: ..."
+#   - No crash; daemon continues accepting new hook POSTs
+```
+
+```sh
+# 3.17  All Phase 02 regression checks still pass
+# Re-run checks 2.2 (health), 2.4 (status exit code), 2.10 (real commit dispatch),
+# 2.11 (credential scan), 2.13 (graceful degradation)
+# Expected: all pass unchanged — Phase 03 is additive
+```
+
+**Not yet testable in this phase:** Out-of-band delivery to the committing developer's terminal (requires Phase 04 VS Code extension or shell integration); `/recall/next` polling endpoint (Phase 04); answer tracking, spaced repetition, cognitive scoring (future).
 
 ---
 
