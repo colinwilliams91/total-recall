@@ -3,14 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/engine"
 	"github.com/colinwilliams91/total-recall/internal/hooks"
+	"github.com/colinwilliams91/total-recall/internal/recall"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +54,29 @@ func serveCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("loading config: %w", err)
 			}
-			return engine.New(cfg).Start()
+
+			provider, err := newProvider(cfg.AI)
+			if err != nil {
+				if isErrNoProvider(err) {
+					log.Println("[daemon] AI provider not configured — recall questions will not be generated. Run 'total-recall init' to configure.")
+				} else {
+					log.Printf("[daemon] AI provider error: %v — running without recall.", err)
+				}
+				provider = nil
+			}
+
+			store, err := cache.Open()
+			if err != nil {
+				return fmt.Errorf("opening concept cache: %w", err)
+			}
+			defer store.Close()
+
+			var recallEngine *recall.Engine
+			if provider != nil {
+				recallEngine = recall.New(provider, store)
+			}
+
+			return engine.New(cfg, provider, store, recallEngine).Start()
 		},
 	}
 }
@@ -115,6 +140,11 @@ func runInit() error {
 	}
 
 	cfg.Privacy.ConversationAnalysis = enableConversationAnalysis
+
+	// ─── AI Provider Setup ────────────────────────────────────────────────────
+	if err := runInitAI(&cfg); err != nil {
+		return fmt.Errorf("AI provider setup: %w", err)
+	}
 
 	if err := config.WriteUserConfig(&cfg); err != nil {
 		return fmt.Errorf("writing config: %w", err)
@@ -195,6 +225,149 @@ func runInit() error {
 		fmt.Printf("✓ Installed %d hook(s) into %s/.git/hooks/\n", len(installed), repoRoot)
 		fmt.Println("  Start the daemon with: total-recall serve")
 	}
+	return nil
+}
+
+// providerModelDefaults maps each known provider to a sensible starting model.
+var providerModelDefaults = map[string]string{
+	"anthropic": "claude-sonnet-4-5",
+	"openai":    "gpt-4o",
+	"groq":      "llama-3.1-70b-versatile",
+	"ollama":    "llama3.2",
+	"lm-studio": "local-model",
+	"custom":    "",
+}
+
+// providerAPIKeyPlaceholders maps cloud providers to an env: placeholder shown in the TUI.
+var providerAPIKeyPlaceholders = map[string]string{
+	"anthropic": "env:ANTHROPIC_API_KEY",
+	"openai":    "env:OPENAI_API_KEY",
+	"groq":      "env:GROQ_API_KEY",
+}
+
+// runInitAI prompts the user to configure an AI provider for recall questions.
+// It pre-populates prompts from cfg.AI so re-running init preserves existing choices.
+// The caller is responsible for writing the modified cfg to disk.
+func runInitAI(cfg *config.UserConfig) error {
+	fmt.Println()
+
+	// Pre-fill from existing config; default to anthropic on first run.
+	selectedProvider := cfg.AI.Provider
+	if selectedProvider == "" {
+		selectedProvider = "anthropic"
+	}
+
+	providerForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("🤖  AI Provider").
+				Description("Which AI provider should generate your recall questions?").
+				Options(
+					huh.NewOption("Anthropic (Claude) — recommended", "anthropic"),
+					huh.NewOption("OpenAI (GPT-4o)", "openai"),
+					huh.NewOption("Groq  (cloud · fast · free tier)", "groq"),
+					huh.NewOption("Ollama  (local · free · runs on your machine)", "ollama"),
+					huh.NewOption("LM Studio  (local)", "lm-studio"),
+					huh.NewOption("Custom  (advanced — any OpenAI-compatible endpoint)", "custom"),
+				).
+				Value(&selectedProvider),
+		),
+	)
+	if err := providerForm.Run(); err != nil {
+		return fmt.Errorf("provider prompt: %w", err)
+	}
+	cfg.AI.Provider = selectedProvider
+
+	// Pre-populate model from existing config; fall back to provider default.
+	model := cfg.AI.Model
+	if model == "" {
+		model = providerModelDefaults[selectedProvider]
+	}
+	apiKey := cfg.AI.APIKey
+	baseURL := cfg.AI.BaseURL
+
+	switch selectedProvider {
+	case "anthropic", "openai", "groq":
+		// Cloud providers: prompt for API key (env: pattern) and model name.
+		if apiKey == "" {
+			apiKey = providerAPIKeyPlaceholders[selectedProvider]
+		}
+		followUp := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("API Key").
+					Description("Use env:VAR_NAME so your key is never stored in plaintext.\nSet the variable in your shell profile (e.g. export ANTHROPIC_API_KEY=sk-...).").
+					Value(&apiKey),
+				huh.NewInput().
+					Title("Model").
+					Description("Model name to use for recall questions.").
+					Value(&model),
+			),
+		)
+		if err := followUp.Run(); err != nil {
+			return fmt.Errorf("%s prompt: %w", selectedProvider, err)
+		}
+		cfg.AI.APIKey = apiKey
+		cfg.AI.Model = model
+
+	case "ollama":
+		followUp := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Model").
+					Description(`Run "ollama list" to see your installed models.`).
+					Value(&model),
+			),
+		)
+		if err := followUp.Run(); err != nil {
+			return fmt.Errorf("ollama prompt: %w", err)
+		}
+		cfg.AI.Model = model
+		cfg.AI.APIKey = ""
+
+	case "lm-studio":
+		followUp := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Model").
+					Description("Enter the model name as shown in LM Studio's model list.").
+					Value(&model),
+			),
+		)
+		if err := followUp.Run(); err != nil {
+			return fmt.Errorf("lm-studio prompt: %w", err)
+		}
+		cfg.AI.Model = model
+		cfg.AI.APIKey = ""
+
+	case "custom":
+		// Custom: full control — base URL, model, and optional API key.
+		if baseURL == "" {
+			baseURL = "http://localhost:8080/v1"
+		}
+		followUp := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Base URL").
+					Description("Full base URL of your OpenAI-compatible endpoint.\nExample: http://localhost:8080/v1").
+					Value(&baseURL),
+				huh.NewInput().
+					Title("Model").
+					Value(&model),
+				huh.NewInput().
+					Title("API Key (optional)").
+					Description("Leave blank if your endpoint does not require authentication.").
+					Value(&apiKey),
+			),
+		)
+		if err := followUp.Run(); err != nil {
+			return fmt.Errorf("custom provider prompt: %w", err)
+		}
+		cfg.AI.BaseURL = baseURL
+		cfg.AI.Model = model
+		cfg.AI.APIKey = apiKey
+	}
+
 	return nil
 }
 
