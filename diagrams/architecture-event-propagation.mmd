@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    actor User as User / Git / MCP Client
+    participant CLI as cmd/total-recall
+    participant Cfg as internal/config
+    participant UserCfg as ~/.tr/config.yaml
+    participant RepoCfg as .tr.yaml
+    participant Engine as internal/engine.Server
+    participant HTTP as net/http mux
+    participant Health as GET /health
+    participant HookAPI as POST /hooks/*
+    participant HookScripts as hooks + .git/hooks/*
+    participant Gate as internal/eventmonitor
+    participant Pipeline as internal/pipeline
+    participant Cache as internal/cache
+    participant Recall as internal/recall
+    participant Present as internal/presentation
+    participant MCP as /mcp/* + internal/mcp
+
+    User->>CLI: total-recall serve
+    CLI->>Cfg: Load(quiet)
+    Cfg->>UserCfg: EnsureUserConfig()
+    Cfg->>RepoCfg: LoadRepoConfig()
+    Cfg->>Cfg: Merge(user, repo)
+    Cfg-->>CLI: resolved Config
+    CLI->>Engine: New(cfg).Start()
+    Engine->>HTTP: RegisterRoutes()
+    Note over HTTP: Implemented routes:\nGET /health\nPOST /hooks/pre-commit\nPOST /hooks/commit-msg\nPOST /hooks/pre-push\n/mcp/* stub
+
+    User->>CLI: total-recall init
+    CLI->>UserCfg: WriteUserConfig()
+    CLI->>RepoCfg: WriteRepoConfig()
+    CLI->>HookScripts: InstallEnabled()
+
+    User->>HookScripts: git commit / git push
+    HookScripts->>HookScripts: Capture repo / branch / timestamp / hook payload
+    HookScripts->>HTTP: POST HookEnvelope JSON
+    HTTP->>HookAPI: handleHook()
+    HookAPI->>HookAPI: Decode envelope\nLog hook / repo / branch
+    HookAPI-->>HookScripts: 202 {"status":"received"}
+    HookScripts-->>User: Exit 0 (non-blocking)
+
+    User->>CLI: total-recall status
+    CLI->>Health: GET /health
+    Health-->>CLI: {"status":"ok"}
+    CLI->>Cfg: Load(quiet)
+    Cfg-->>CLI: resolved Config with sources
+
+    opt Reserved subsystem path in current source tree
+        Note over Gate,Present: These packages are present or documented,\nbut they are not yet wired into engine/server.go request handling.
+        HookAPI-->>Gate: Future hook / MCP event routing
+        Gate-->>Pipeline: ConversationGate / CodeContextGate
+        Pipeline-->>Cache: Concept fingerprints only
+        Cache-->>Recall: Cached cognition state
+        Recall-->>Present: Recall prompt dispatch
+        Present-->>MCP: Future MCP presentation path
+        HTTP-->>MCP: Current /mcp/* responses are 501 stub
+    end

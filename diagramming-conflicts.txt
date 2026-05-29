@@ -1,0 +1,58 @@
+Diagramming conflict log
+========================
+
+Authoritative priority used:
+1. DOCS/
+2. openspec/
+3. Source files in assets/, cmd/, hooks/, internal/
+
+When the documentation and implementation disagreed, the diagrams defaulted to the current implementation/source files per task instructions.
+
+Conflicts found and decisions
+----------------------------
+
+1. DOCS/ARCHITECTURE/GO_CORE_ENGINE.md and DOCS/ARCHITECTURE/INDEX.md describe filesystem watchers, Git index watchers, background cache writes, recall synthesis, presentation dispatch, and MCP behavior as if they are active runtime paths.
+   Source status:
+   - internal/engine/server.go currently implements /health, /hooks/pre-commit, /hooks/commit-msg, /hooks/pre-push, and an /mcp/* stub.
+   - internal/eventmonitor/gate.go only exposes gating helpers.
+   - internal/pipeline/extraction.go is a stub that returns nil.
+   Decision:
+   - The architecture diagram shows the implemented hook/daemon/config flow as the primary path.
+   - Future/internal packages remain visible as reserved subsystem paths with an explicit note that they are not yet wired into runtime request handling.
+
+2. openspec/changes/daemon-foundation/design.md still states that `total-recall serve` prints "not implemented" and that hook scripts exit immediately.
+   Source status:
+   - cmd/total-recall/main.go and internal/engine/server.go implement a working daemon startup path.
+   - internal/hooks/install.go and internal/hooks/scripts.go implement managed hook installation and HTTP POST dispatch.
+   Decision:
+   - Both diagrams reflect the current shipped implementation rather than the stale design note.
+
+3. DOCS/TESTING/E2E.md Phase 01 check 1.5 says a repo-level `privacy.conversation_analysis` value should appear as a `[repo]` override.
+   Source and spec status:
+   - internal/config/merge.go ignores repo-level privacy keys.
+   - internal/config/loader.go warns that `privacy.*` in `.tr.yaml` is ignored.
+   - openspec/specs/config-override-chain/spec.md says privacy keys are not overridable per repo.
+   Decision:
+   - The diagrams treat conversation analysis as a user-level setting loaded from `~/.tr/config.yaml`, not a repo override.
+
+4. DOCS/TESTING/E2E.md Phase 02 manual POST examples send bare JSON payloads such as `{\"diff\":\"+ foo\"}` to `/hooks/pre-commit`.
+   Source status:
+   - internal/engine/server.go expects a HookEnvelope with `hook`, `repo`, `branch`, `timestamp`, and `payload`.
+   Decision:
+   - The diagrams show hook scripts POSTing a HookEnvelope JSON body.
+
+5. DOCS/TESTING/E2E.md expects the daemon startup text "Total Recall daemon listening on :7331".
+   Source status:
+   - internal/engine/server.go prints "✓ Total Recall daemon running on localhost:7331".
+   Decision:
+   - The user-flow diagram reflects the current startup behavior and address format from source.
+
+6. DOCS/ARCHITECTURE/CONFIG.md says `.tr.yaml` is created manually or by a future `tr init --repo`.
+   Source status:
+   - cmd/total-recall/main.go currently writes `.tr.yaml` during `total-recall init`.
+   Decision:
+   - The user-flow diagram shows `total-recall init` writing both user and repo config files.
+
+7. DOCS/ARCHITECTURE/CONFIG.md links to DAEMON/INDEX.md and EVENT_MONITOR/GIT_HOOKS.md, but those targets are not present in the repository.
+   Decision:
+   - No diagram behavior was derived from those missing references; only existing docs/specs/source were used.
