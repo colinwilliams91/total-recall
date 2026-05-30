@@ -5,8 +5,7 @@ go.sum
 .git/
 .github/
 scripts/*
-openspec/**/**/**/*
-openspec/**/**/*
-openspec/**/*
-openspec/**
-openspec/*
+openspec/specs/**
+openspec/specs/*
+openspec/specs/
+openspec/config.yml
