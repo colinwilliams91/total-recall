@@ -264,9 +264,9 @@ func runInitAI(cfg *config.UserConfig) error {
 				Description("Which AI provider should generate your recall questions?").
 				Options(
 					huh.NewOption("Anthropic (Claude) — recommended", "anthropic"),
-					huh.NewOption("OpenAI (GPT-4o)", "openai"),
+					huh.NewOption("OpenAI (e.g. gpt-4o)", "openai"),
 					huh.NewOption("Groq  (cloud · fast · free tier)", "groq"),
-					huh.NewOption("Ollama  (local · free · runs on your machine)", "ollama"),
+					huh.NewOption("Ollama  (local)", "ollama"),
 					huh.NewOption("LM Studio  (local)", "lm-studio"),
 					huh.NewOption("Custom  (advanced — any OpenAI-compatible endpoint)", "custom"),
 				).
