@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor User as User / Git / MCP Client
+
+    box External Triggers
+        participant Triggers as Filesystem / Git / MCP events
+    end
+
+    box Runtime Coordination
+        participant Monitor as Event Monitoring Layer
+        participant Analysis as Incremental Analysis Layer
+    end
+
+    box Cognitive State
+        participant Cache as Background Concept Cache
+        participant Recall as Recall Engine
+    end
+
+    box Integration Boundaries
+        participant AI as AI Provider Abstraction
+        participant MCP as MCP Server
+        participant Dispatch as Presentation Dispatch
+    end
+
+    box Delivery Surfaces
+        participant Surfaces as Terminal / MCP experience
+    end
+
+    User->>Triggers: Produce change signals or requests
+    Triggers->>Monitor: Normalize incoming events
+    Monitor->>Analysis: Forward relevant work incrementally
+    Analysis->>Cache: Update concept state
+    Analysis->>Recall: Request recall opportunities
+    Cache->>Recall: Supply retained context
+    Recall->>AI: Synthesize or enrich prompts when needed
+    AI-->>Recall: Return model output
+    Recall->>Dispatch: Hand off user-facing result
+    Dispatch->>Surfaces: Route to terminal or MCP channel
+    MCP->>Monitor: Submit tool-driven requests into the same flow
+    Dispatch->>MCP: Deliver MCP-facing responses
+    Surfaces-->>User: Present recall prompt or feedback

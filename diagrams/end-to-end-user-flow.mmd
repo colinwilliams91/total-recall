@@ -1,0 +1,59 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Init as total-recall init
+    participant Prompt as Huh TUI prompts
+    participant UserCfg as ~/.tr/config.yaml
+    participant RepoCfg as .tr.yaml
+    participant Installer as internal/hooks.Installer
+    participant GitHooks as .git/hooks/*
+    participant Serve as total-recall serve
+    participant Config as internal/config
+    participant Daemon as localhost:7331
+    participant Status as total-recall status
+    participant Git as git
+    participant Hook as managed hook script
+
+    User->>Init: Run inside a Git repository
+    Init->>UserCfg: Load existing config or default values
+    Init->>Prompt: Ask for conversation analysis opt-in
+    Prompt-->>Init: true / false
+    Init->>UserCfg: WriteUserConfig()
+    Init->>RepoCfg: Load existing repo config
+    Init->>Prompt: Ask which hooks to enable
+    Prompt-->>Init: pre-commit / commit-msg / pre-push selections
+    Init->>RepoCfg: WriteRepoConfig()
+    Init->>Installer: InstallEnabled(hooks)
+    Installer->>GitHooks: Create or regenerate managed hooks
+    Installer-->>User: Print config + hook install summary
+
+    User->>Serve: Start daemon
+    Serve->>Config: Load(quiet)
+    Config-->>Serve: Resolved merged config
+    Serve->>Daemon: Start HTTP server on localhost:7331
+    Daemon-->>User: Daemon running
+
+    User->>Status: Check status
+    Status->>Daemon: GET /health
+    Daemon-->>Status: {"status":"ok"}
+    Status->>Config: Load(quiet)
+    Config-->>Status: Resolved config with sources
+    Status-->>User: Running + config summary
+
+    loop Regular hook-driven usage
+        User->>Git: git commit / git push
+        Git->>Hook: Run enabled managed hook
+        Hook->>Hook: Gather envelope fields + hook payload
+        alt Daemon reachable
+            Hook->>Daemon: POST /hooks/pre-commit|commit-msg|pre-push
+            Daemon-->>Hook: 202 {"status":"received"}
+            Hook-->>Git: Exit 0
+            Git-->>User: Operation continues
+        else Daemon unavailable
+            Hook-->>User: Print advisory to start total-recall serve
+            Hook-->>Git: Exit 0
+            Git-->>User: Operation continues
+        end
+    end
+
+    Note over Daemon: Current runtime logs hook metadata and returns accepted.\nRecall synthesis, cache writes, and MCP tools are reserved for later phases.
