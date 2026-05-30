@@ -1,0 +1,3 @@
+excludeBranches:
+  - '*'              # Exclude all branches
+  - '!main'          # And except main branch

@@ -1,0 +1,12 @@
+total-recall.exe
+tr.exe
+go.mod
+go.sum
+.git/
+.github/
+scripts/*
+openspec/**/**/**/*
+openspec/**/**/*
+openspec/**/*
+openspec/**
+openspec/*
