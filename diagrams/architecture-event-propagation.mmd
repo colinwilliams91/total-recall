@@ -40,12 +40,6 @@ sequenceDiagram
     HookAPI-->>HookScripts: 202 {"status":"received"}
     HookScripts-->>User: Exit 0 (non-blocking)
 
-    User->>CLI: total-recall status
-    CLI->>Health: GET /health
-    Health-->>CLI: {"status":"ok"}
-    CLI->>Cfg: Load(quiet)
-    Cfg-->>CLI: resolved Config with sources
-
     opt Reserved subsystem path in current source tree
         Note over Gate,Present: These packages are present or documented,\nbut they are not yet wired into engine/server.go request handling.
         HookAPI-->>Gate: Future hook / MCP event routing
