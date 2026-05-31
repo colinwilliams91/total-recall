@@ -258,6 +258,50 @@ See [CONFIG.md](CONFIG.md) for full schema, merge rules, and `total-recall confi
 
 ---
 
+## Intelligence Layer (Phase 3)
+
+### AI Provider Abstraction (`internal/ai/`)
+
+- `Provider` interface: `Complete(ctx, CompletionRequest) (string, error)`
+- `CompletionRequest` carries model, system prompt, user turn, max tokens, and a `JSON bool` that enables structured output mode per-provider
+- Named provider registry (`config.KnownProviders`): `anthropic`, `openai`, `groq`, `ollama`, `lm-studio`, `custom`
+- Adapters in `internal/ai/openai/` (covers all OpenAI-compatible providers) and `internal/ai/anthropic/`
+- Factory (`cmd/total-recall/wire.go`) lives in the cmd layer to avoid Go import cycles
+- `ErrNoProvider` sentinel — graceful no-op when AI is unconfigured
+
+### Concept Extraction Pipeline (`internal/pipeline/`)
+
+- `ExtractConcepts(ctx, provider, diff, model)` — sends staged diff to AI; parses JSON array of `{concept, source, weight}` fingerprints
+- Diff truncated at 8 000 characters; AI failures are non-fatal (logged, empty slice returned)
+- `ExtractionRequest` in `prompts.go` builds the `CompletionRequest` with system prompt embedded
+
+### Concept Cache (`internal/cache/`)
+
+- SQLite via `modernc.org/sqlite` (pure Go, no CGo)
+- Database at `~/.tr/concepts.db`; schema: `concepts(id, concept, source, weight, seen_at)`
+- `Save(ctx, []Fingerprint)` — batch INSERT in a single transaction
+- `Recent(ctx, n)` — SELECT ordered by `seen_at DESC`
+
+### Recall Engine (`internal/recall/`)
+
+- `Synthesize(ctx, difficulty, model)` — loads recent concepts, calls AI for a multiple-choice question
+- `Question{Question string, Choices []string}` — first choice is always correct
+- AI/parse failures are non-fatal (nil, nil)
+
+### Async Pipeline (`internal/engine/server.go`)
+
+- `handleHook` responds 202 Accepted immediately; AI work is offloaded to a background goroutine via `s.wg.Add(1); go s.runPipeline(env)`
+- `runPipeline` extracts concepts → saves to cache → synthesizes question → dispatches
+- `sync.WaitGroup` drained in `Start()` after HTTP server shuts down — ensures no goroutines are abandoned
+
+### Presentation Layer (`internal/presentation/`)
+
+- `Dispatcher` interface (`internal/engine/dispatcher.go`): `Dispatch(recall.Question) error`
+- `terminal.Adapter` (v1): writes question to daemon stdout (see [DELIVERY.md](DELIVERY.md) for v1 limitation and Phase 4 plan)
+- Wired via `cfg.Presentation.Terminal` in `engine.New()`
+
+---
+
 ## Important Clarification About "Daemon"
 The daemon is NOT:
 

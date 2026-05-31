@@ -26,6 +26,9 @@ func Show(cfg *Config, w io.Writer) {
 		apiKeyDisplay = "<not set>"
 	}
 	fmt.Fprintf(w, "  api-key: %s  # \033[0;34m%s\033[0m\n", apiKeyDisplay, s.AIAPIKey)
+	if cfg.AI.BaseURL != "" {
+		fmt.Fprintf(w, "  base-url: %s  # \033[0;34m%s\033[0m\n", cfg.AI.BaseURL, s.AIBaseURL)
+	}
 
 	fmt.Fprintln(w, "recall:")
 	fmt.Fprintf(w, "  difficulty: %s  # \033[0;34m%s\033[0m\n", cfg.Recall.Difficulty, s.RecallDifficulty)
