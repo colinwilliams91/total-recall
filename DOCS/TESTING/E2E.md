@@ -91,19 +91,25 @@ del %USERPROFILE%\.tr\config.yaml  # Windows
 
 ```sh
 # 1. Start the daemon (keep this terminal open throughout)
-./tr serve
+./tr serve # posix
+.\tr.exe serve # windows
+
 # Expected: "Total Recall daemon listening on :7331"
 ```
 
 ```sh
 # 2. Health endpoint
-curl http://localhost:7331/health
+curl http://localhost:7331/health # posix
+Invoke-RestMethod http://localhost:7331/health # windows
+
 # Expected: {"status":"ok"}
 ```
 
 ```sh
 # 3. Status command (separate terminal)
-./tr status
+./tr status # posix
+.\tr.exe status # windows
+
 # Expected:
 #   ✓ Daemon running on localhost:7331
 #   (followed by config --show output)
@@ -111,7 +117,8 @@ curl http://localhost:7331/health
 
 ```sh
 # 4. Status when daemon is NOT running (stop daemon first, then):
-./tr status
+./tr status # posix
+.\tr.exe status # windows
 echo $?          # Linux/macOS
 $LASTEXITCODE    # Windows PowerShell
 # Expected: "✗ Daemon not running on localhost:7331" and exit code 1
@@ -154,8 +161,10 @@ cat .git/hooks/pre-commit
 ```sh
 # 8. Hook chaining (existing unmanaged hook)
 # Reset: remove managed hook
-rm .git/hooks/pre-commit
+rm .git/hooks/pre-commit # posix
+ri .git/hooks/pre-commit # windows
 
+# POSIX:
 # Create an unmanaged hook
 echo '#!/usr/bin/env bash' > .git/hooks/pre-commit
 echo 'echo "existing hook ran"' >> .git/hooks/pre-commit
@@ -163,6 +172,21 @@ chmod +x .git/hooks/pre-commit
 
 /path/to/tr init  # enable pre-commit
 cat .git/hooks/pre-commit
+
+# ---
+
+# WINDOWS:
+# Create an unmanaged hook
+@'
+#!/usr/bin/env bash
+echo "existing hook ran"
+'@ | Set-Content .git/hooks/pre-commit
+
+/path/to/tr init  # enable pre-commit
+cat .git/hooks/pre-commit
+
+# ---
+
 # Expected: file contains both the TR sentinel section AND
 #           the original content wrapped in BEGIN/END existing hook delimiters
 ```
@@ -170,7 +194,7 @@ cat .git/hooks/pre-commit
 #### Hook dispatch (daemon must be running)
 
 ```sh
-# 9. POST a hook payload manually
+# 9. POST a hook payload manually (POSIX)
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST http://localhost:7331/hooks/pre-commit \
   -H "Content-Type: application/json" \
@@ -180,6 +204,28 @@ curl -s -o /dev/null -w "%{http_code}" \
 curl -s http://localhost:7331/hooks/pre-commit \
   -X POST -H "Content-Type: application/json" \
   -d '{"diff":"+ foo","files":["main.go"]}'
+# Expected body: {"status":"received"}
+```
+
+```powershell
+# 9. POST a hook payload manually (WINDOWS)
+$response = Invoke-WebRequest `
+    -Uri 'http://localhost:7331/hooks/pre-commit' `
+    -Method POST `
+    -ContentType 'application/json' `
+    -Body '{"diff":"+ foo","files":["main.go"]}' `
+    -SkipHttpErrorCheck
+
+$response.StatusCode
+
+# Expected: 202
+
+Invoke-RestMethod `
+    -Uri 'http://localhost:7331/hooks/pre-commit' `
+    -Method POST `
+    -ContentType 'application/json' `
+    -Body '{"diff":"+ foo","files":["main.go"]}'
+
 # Expected body: {"status":"received"}
 ```
 
@@ -281,9 +327,18 @@ cat ~/.tr/config.yaml
 **Expected (cloud provider):** `provider: anthropic`, `model: claude-sonnet-4-5`, `api-key: env:ANTHROPIC_API_KEY`, `base-url:` present and blank with an explanatory comment
 
 ```sh
-# 3.3  base-url shown blank in config (not hidden by omitempty)
+# 3.3  (POSIX) base-url shown blank in config (not hidden by omitempty)
 grep "base-url" ~/.tr/config.yaml
 # Expected: line like "  base-url:  # ..." — visible even when empty
+
+# 3.3 (WINDOWS) base-url shown blank in config (not hidden by omitempty)
+
+Select-String `
+    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Pattern "base-url"
+
+# Expected:
+#   base-url:  # ...
 ```
 
 ```sh
@@ -305,11 +360,18 @@ grep "base-url" ~/.tr/config.yaml
 ### Section B — Daemon Startup with AI Configured
 
 ```sh
-# 3.6  Start daemon with AI configured (separate terminal)
+# 3.6 (POSIX)  Start daemon with AI configured (separate terminal)
 ANTHROPIC_API_KEY=sk-... /path/to/tr serve
 # Expected:
 #   ✓ Total Recall daemon running on localhost:7331
 #   (no error about provider — key resolved from env: reference)
+```
+
+```powershell
+# 3.6 Start daemon with AI configured (separate terminal)
+
+$env:ANTHROPIC_API_KEY = "sk-..."
+C:\path\to\tr.exe serve
 ```
 
 ```sh
@@ -327,6 +389,7 @@ ANTHROPIC_API_KEY=sk-... /path/to/tr serve
 
 ### Section C — Async Pipeline (requires configured provider + running daemon)
 
+(POSIX)
 ```sh
 # 3.8  Manual hook POST — async 202 response
 curl -s -o /dev/null -w "%{http_code}" \
@@ -340,6 +403,32 @@ curl -s -o /dev/null -w "%{http_code}" \
     "payload": {"diff": "+ func retryWithBackoff(maxRetries int) error {\n+   time.Sleep(time.Duration(math.Pow(2, float64(attempt))) * time.Second)\n+ }"}
   }'
 # Expected: 202  (immediate — hook does not wait for AI)
+```
+
+(WINDOWS)
+```powershell
+# 3.8 Manual hook POST — async 202 response
+
+$response = Invoke-WebRequest `
+    -Uri 'http://localhost:7331/hooks/pre-commit' `
+    -Method POST `
+    -ContentType 'application/json' `
+    -Body @'
+{
+  "hook": "pre-commit",
+  "repo": "/tmp/tr-test",
+  "branch": "main",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "payload": {
+    "diff": "+ func retryWithBackoff(maxRetries int) error {\n+   time.Sleep(time.Duration(math.Pow(2, float64(attempt))) * time.Second)\n+ }"
+  }
+}
+'@ `
+    -SkipHttpErrorCheck
+
+$response.StatusCode
+
+# Expected: 202
 ```
 
 **Watch daemon terminal after the POST:**
@@ -361,6 +450,7 @@ Expected (within ~5-10 seconds):
 
 > **Note (v1 limitation):** The recall question prints to the daemon's own stdout, not to the committing developer's terminal. Phase 04 will add out-of-band delivery. See `DOCS/ARCHITECTURE/DELIVERY.md`.
 
+(POSIX)
 ```sh
 # 3.9  Real commit triggers async pipeline
 cd /tmp/tr-test
@@ -385,6 +475,32 @@ git commit -m "feat: add exponential backoff helper"
 #   - Daemon terminal (within ~5-10 seconds) prints the 🧠 Recall Check block
 ```
 
+(WINDOWS)
+```powershell
+# 3.9 Real commit triggers async pipeline
+
+@'
+package main
+
+import (
+    "math"
+    "time"
+)
+
+func retryWithBackoff(attempt int) {
+    delay := time.Duration(math.Pow(2, float64(attempt))) * time.Second
+    time.Sleep(delay)
+}
+'@ | Set-Content retry.go
+
+git add retry.go
+git commit -m "feat: add exponential backoff helper"
+
+# Expected:
+#   - Commit completes immediately
+#   - Recall Check appears in daemon terminal
+```
+
 ```sh
 # 3.10  Empty/whitespace diff — pipeline skips gracefully
 # (use commit-msg hook only, no pre-commit)
@@ -401,14 +517,22 @@ git commit --allow-empty -m "chore: empty commit"
 
 ```sh
 # 3.11  Cache database created after first commit
-ls -la ~/.tr/concepts.db
+ls -la ~/.tr/concepts.db # POSIX
+Get-Item "$env:USERPROFILE\.tr\concepts.db" # WINDOWS
 # Expected: file exists (created on first successful Save)
 ```
 
 ```sh
 # 3.12  Inspect cached concepts directly
+
+# (POSIX)
 sqlite3 ~/.tr/concepts.db \
   "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
+
+# (WINDOWS)
+sqlite3 "$env:USERPROFILE\.tr\concepts.db" `
+    "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
+
 # Expected: rows with concept names like "exponential backoff", "retry semantics";
 #           source = "code"; weight between 0.0 and 1.0
 #           (exact concepts depend on what the AI returned)
@@ -426,8 +550,15 @@ sqlite3 ~/.tr/concepts.db \
 # Select: Ollama (local · free · runs on your machine)
 # Enter model: llama3.2
 
-# Verify config:
+# Verify config: (POSIX)
 grep -A4 "^ai:" ~/.tr/config.yaml
+
+# Verify config: (WINDOWS)
+Select-String `
+    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Pattern "^ai:" `
+    -Context 0,4
+
 # Expected: provider: ollama, model: llama3.2, api-key: (blank), base-url: (blank)
 ```
 
@@ -448,7 +579,14 @@ git add . && git commit -m "test: ollama provider"
 # Model: llama3.2
 # API key: (leave blank)
 
+# (POSIX)
 grep "base-url" ~/.tr/config.yaml
+
+# (WINDOWS)
+Select-String `
+    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Pattern "base-url"
+
 # Expected: base-url: http://localhost:11434/v1
 ```
 
@@ -458,8 +596,11 @@ grep "base-url" ~/.tr/config.yaml
 
 ```sh
 # 3.16  AI failure (bad API key) — daemon continues, no crash
-# Set a garbage API key:
+# Set a garbage API key: (POSIX)
 ANTHROPIC_API_KEY=sk-garbage /path/to/tr serve
+
+# Set a garbage API key: (WINDOWS)
+$env:ANTHROPIC_API_KEY = "sk-garbage"
 
 git add . && git commit -m "test: bad api key"
 # Expected:
