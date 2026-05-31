@@ -212,6 +212,18 @@ func (s *Server) Start() error {
 	}()
 
 	fmt.Printf("✓ Total Recall daemon running on %s\n", daemonAddr)
+
+	// Warn if the configured API key is an env-var reference that resolved to nothing.
+	// This happens when the user sets a User-scoped env var but launches the daemon in
+	// a terminal session that predates the assignment — the process never inherited it.
+	if key := s.cfg.AI.APIKey; len(key) > 4 && key[:4] == "env:" {
+		if resolved, _ := s.cfg.AI.ResolvedAPIKey(); resolved == "" {
+			log.Printf("[warn] AI provider key %q resolved to empty — AI features will be disabled.", key)
+			log.Printf("[warn] Set the variable before starting the daemon, or open a new terminal after setting it.")
+			log.Printf("[warn] To set for this session only: $env:%s = \"your-key\"  (PowerShell) / export %s=your-key  (bash)", key[4:], key[4:])
+		}
+	}
+
 	if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("daemon error: %w", err)
 	}
