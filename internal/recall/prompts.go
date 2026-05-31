@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	synthesisMaxTokens = 256
+	synthesisMaxTokens = 512
 
 	synthesisSystemTmpl = `You are a technical recall assistant. Based on the list of concepts the developer has been working with, generate a single multiple-choice recall question to reinforce learning.
 

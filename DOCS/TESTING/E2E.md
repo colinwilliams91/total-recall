@@ -389,6 +389,8 @@ C:\path\to\tr.exe serve
 
 ### Section C — Async Pipeline (requires configured provider + running daemon)
 
+**Make sure your repo and user level config (yaml) files are set up correctly (API key, provider, model, base-url) and repo level config presentation.terminal == true in order to see logs**
+
 (POSIX)
 ```sh
 # 3.8  Manual hook POST — async 202 response
@@ -424,7 +426,6 @@ $response = Invoke-WebRequest `
   }
 }
 '@ `
-    -SkipHttpErrorCheck
 
 $response.StatusCode
 
