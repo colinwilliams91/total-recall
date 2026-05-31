@@ -25,6 +25,7 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 			AIProvider:                  sourceUser,
 			AIModel:                     sourceUser,
 			AIAPIKey:                    sourceUser,
+			AIBaseURL:                   sourceUser,
 			RecallDifficulty:            sourceUser,
 			RecallMaxQuestions:          sourceUser,
 			HooksPreCommit:              sourceDefault,

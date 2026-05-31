@@ -9,10 +9,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/colinwilliams91/total-recall/internal/ai"
+	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
+	"github.com/colinwilliams91/total-recall/internal/pipeline"
+	"github.com/colinwilliams91/total-recall/internal/presentation/terminal"
+	"github.com/colinwilliams91/total-recall/internal/recall"
 )
 
 const (
@@ -51,16 +57,29 @@ type HealthResponse struct {
 
 // Server is the Total Recall daemon HTTP server.
 type Server struct {
-	cfg     *config.Config
-	mux     *http.ServeMux
-	httpSrv *http.Server
+	cfg          *config.Config
+	provider     ai.Provider   // nil when AI is not configured
+	store        *cache.Store  // nil when AI is not configured
+	recallEngine *recall.Engine
+	dispatcher   Dispatcher
+	mux          *http.ServeMux
+	httpSrv      *http.Server
+	wg           sync.WaitGroup // tracks in-flight pipeline goroutines
 }
 
-// New creates a Server configured with the given resolved config.
-func New(cfg *config.Config) *Server {
+// New creates a Server configured with the given resolved config and dependencies.
+// provider, store, and recallEngine may be nil if AI is not configured — in that
+// case hooks are still acknowledged but no recall questions are generated.
+func New(cfg *config.Config, provider ai.Provider, store *cache.Store, recallEngine *recall.Engine) *Server {
 	s := &Server{
-		cfg: cfg,
-		mux: http.NewServeMux(),
+		cfg:          cfg,
+		provider:     provider,
+		store:        store,
+		recallEngine: recallEngine,
+		mux:          http.NewServeMux(),
+	}
+	if cfg.Presentation.Terminal {
+		s.dispatcher = terminal.New()
 	}
 	s.httpSrv = &http.Server{
 		Addr:    daemonAddr,
@@ -92,6 +111,71 @@ func (s *Server) handleHook(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[hook] %s  repo=%s  branch=%s", env.Hook, env.Repo, env.Branch)
 	writeJSON(w, http.StatusAccepted, HookResponse{Status: "received"})
+
+	if s.provider != nil {
+		s.wg.Add(1)
+		go s.runPipeline(env)
+	}
+}
+
+// runPipeline extracts concepts from the hook payload, saves them to the cache,
+// synthesizes a recall question, and dispatches it — all in the background.
+func (s *Server) runPipeline(env HookEnvelope) {
+	defer s.wg.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Extract the diff from the payload (pre-commit hook sends it as a string).
+	var payload struct {
+		Diff string `json:"diff"`
+	}
+	if err := json.Unmarshal(env.Payload, &payload); err != nil || payload.Diff == "" {
+		log.Printf("[pipeline] no diff in hook payload for %s — skipping", env.Hook)
+		return
+	}
+
+	concepts, err := pipeline.ExtractConcepts(ctx, s.provider, payload.Diff, s.cfg.AI.Model)
+	if err != nil {
+		log.Printf("[pipeline] extract error: %v", err)
+		return
+	}
+	if len(concepts) == 0 {
+		log.Printf("[pipeline] no concepts extracted for repo=%s branch=%s", env.Repo, env.Branch)
+		return
+	}
+
+	fingerprints := make([]cache.Fingerprint, len(concepts))
+	for i, c := range concepts {
+		fingerprints[i] = cache.Fingerprint{
+			Concept: c.Concept,
+			Source:  c.Source,
+			Weight:  c.Weight,
+		}
+	}
+	if err := s.store.Save(ctx, fingerprints); err != nil {
+		log.Printf("[pipeline] cache save error: %v", err)
+	}
+
+	if s.recallEngine == nil || s.dispatcher == nil {
+		return
+	}
+	q, err := s.recallEngine.Synthesize(ctx, "", s.cfg.AI.Model)
+	if err != nil {
+		log.Printf("[recall] synthesize error: %v", err)
+		return
+	}
+	if q == nil {
+		return
+	}
+
+	if err := s.dispatcher.Dispatch(recall.Question{
+			Question:     q.Question,
+			Choices:      q.Choices,
+			CorrectIndex: q.CorrectIndex,
+		}); err != nil {
+		log.Printf("[recall] dispatch error: %v", err)
+	}
 }
 
 func (s *Server) handleMCPStub(w http.ResponseWriter, _ *http.Request) {
@@ -129,9 +213,22 @@ func (s *Server) Start() error {
 	}()
 
 	fmt.Printf("✓ Total Recall daemon running on %s\n", daemonAddr)
+
+	// Warn if the configured API key is an env-var reference that resolved to nothing.
+	// This happens when the user sets a User-scoped env var but launches the daemon in
+	// a terminal session that predates the assignment — the process never inherited it.
+	if key := s.cfg.AI.APIKey; len(key) > 4 && key[:4] == "env:" {
+		if resolved, _ := s.cfg.AI.ResolvedAPIKey(); resolved == "" {
+			log.Printf("[warn] AI provider key %q resolved to empty — AI features will be disabled.", key)
+			log.Printf("[warn] Set the variable before starting the daemon, or open a new terminal after setting it.")
+			log.Printf("[warn] To set for this session only: $env:%s = \"your-key\"  (PowerShell) / export %s=your-key  (bash)", key[4:], key[4:])
+		}
+	}
+
 	if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("daemon error: %w", err)
 	}
+	s.wg.Wait()
 	log.Println("[daemon] stopped")
 	return nil
 }

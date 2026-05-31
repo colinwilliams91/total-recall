@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -71,17 +73,54 @@ func WriteUserConfig(cfg *UserConfig) error {
 	return writeUserConfig(path, cfg)
 }
 
-// writeUserConfig is the internal write helper. It creates parent directories
-// with mode 0700 and writes the file with mode 0600.
+// userConfigTemplate is the Go text/template that produces the self-documenting
+// ~/.tr/config.yaml. Using a template (instead of yaml.Marshal) gives full
+// control over field ordering, inline comments, and the always-visible base-url.
+var userConfigTemplate = template.Must(template.New("user-config").Parse(`# Total Recall user configuration
+# Run 'total-recall init' to reconfigure interactively.
+# This file is never committed — it lives at ~/.tr/config.yaml.
+
+privacy:
+  # Set to true to allow MCP conversation content to feed the concept cache.
+  # This is an opt-in feature. See: https://github.com/colinwilliams91/total-recall
+  conversation_analysis: {{.Privacy.ConversationAnalysis}}
+
+ai:
+  # Provider: anthropic | openai | ollama | groq | lm-studio | custom
+  # Run 'total-recall init' to change provider interactively.
+  provider: {{.AI.Provider}}
+
+  # Model to use for concept extraction and question synthesis.
+  model: {{.AI.Model}}
+
+  # API key. Use env:VAR_NAME to avoid storing keys in plaintext.
+  # Example: env:ANTHROPIC_API_KEY
+  api-key: {{.AI.APIKey}}
+
+  # Base URL override for OpenAI-compatible endpoints (ollama, groq, lm-studio, custom).
+  # Leave blank for standard cloud providers (anthropic, openai).
+  # Example: http://localhost:11434/v1
+  base-url: {{.AI.BaseURL}}
+
+recall:
+  # Difficulty level: easy | medium | hard | adaptive
+  difficulty: {{.Recall.Difficulty}}
+
+  # Maximum number of recall questions per commit (default: 1).
+  max_questions: {{.Recall.MaxQuestions}}
+`))
+
+// writeUserConfig writes cfg to path using the self-documenting YAML template.
+// It creates parent directories with mode 0700 and writes the file with mode 0600.
 func writeUserConfig(path string, cfg *UserConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("serializing user config: %w", err)
+	var buf bytes.Buffer
+	if err := userConfigTemplate.Execute(&buf, cfg); err != nil {
+		return fmt.Errorf("rendering user config template: %w", err)
 	}
-	return os.WriteFile(path, data, 0o600)
+	return os.WriteFile(path, buf.Bytes(), 0o600)
 }
 
 // WriteRepoConfig serializes cfg to .tr.yaml in repoRoot.

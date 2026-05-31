@@ -32,14 +32,26 @@
 
 ---
 
-## Phase 03 — Intelligence Layer (Next)
+## Phase 03 — Intelligence Layer (Shipped)
 
-Critical path to a working demo:
-- AI provider interface (`internal/ai/Provider`) with raw HTTP + BYOK
-- Concept extraction from staged diffs (Background Concept Cache)
-- Recall question synthesis from cached concepts (Recall Engine)
-- Terminal presentation adapter (displays question at commit time)
-- SQLite concept cache (`~/.tr/cache.db`)
+- AI provider interface (`internal/ai/Provider`) — raw HTTP, BYOK-first, no SDK dependencies
+- Named provider registry: Anthropic, OpenAI, Groq, Ollama, LM Studio, Custom
+- `tr init` AI provider setup TUI — provider select, API key (env: pattern), model name, base URL for custom
+- Concept extraction from staged diffs (`internal/pipeline/`) with 8 KB diff guard
+- SQLite concept cache (`~/.tr/concepts.db`, `modernc.org/sqlite`) — no CGo required
+- Recall Engine: question synthesis from recent cached concepts (`internal/recall/`)
+- Async pipeline in `handleHook` — hook responds 202 immediately; AI work runs in background goroutine; graceful drain on shutdown via `sync.WaitGroup`
+- `Dispatcher` interface + terminal adapter (`internal/presentation/terminal/`) — v1 delivers to daemon stdout
+- `DOCS/ARCHITECTURE/DELIVERY.md` — documents v1 limitation and Phase 4 plan
+
+---
+
+## Phase 04 — Out-of-Band Delivery (Next)
+
+- VS Code extension: polls `GET /recall/next`; surfaces question as workspace notification with clickable answer choices
+- Shell integration: post-commit shell function added by `tr init`; calls `GET /recall/next` to display question in committing terminal
+- `/recall/next` daemon endpoint: dequeues synthesized questions from SQLite
+- `Dispatcher` pluggable adapter wired via config (`presentation:` block)
 
 ---
 

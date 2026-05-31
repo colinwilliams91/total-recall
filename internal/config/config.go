@@ -25,6 +25,28 @@ type AIConfig struct {
 	Provider string `yaml:"provider"`
 	Model    string `yaml:"model"`
 	APIKey   string `yaml:"api-key"`
+	BaseURL  string `yaml:"base-url,omitempty"`
+}
+
+// KnownProviders maps user-facing provider names to their default base URLs.
+// The adapter column is determined by which package handles each provider:
+//
+//	anthropic → internal/ai/anthropic (native Messages API)
+//	openai    → internal/ai/openai    (OpenAI Chat Completions API)
+//	ollama    → internal/ai/openai    (OpenAI-compatible)
+//	groq      → internal/ai/openai    (OpenAI-compatible)
+//	lm-studio → internal/ai/openai    (OpenAI-compatible)
+//	custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
+//
+// For named presets, BaseURL in AIConfig is ignored — the registry value is used.
+// For "custom", AIConfig.BaseURL is required; ai.New returns ErrNoProvider if empty.
+var KnownProviders = map[string]string{
+	"anthropic": "https://api.anthropic.com",
+	"openai":    "https://api.openai.com/v1",
+	"ollama":    "http://localhost:11434/v1",
+	"groq":      "https://api.groq.com/openai/v1",
+	"lm-studio": "http://localhost:1234/v1",
+	"custom":    "", // user must supply BaseURL
 }
 
 // ResolvedAPIKey returns the actual API key value.
@@ -94,6 +116,7 @@ type ConfigSources struct {
 	AIProvider                  string
 	AIModel                     string
 	AIAPIKey                    string
+	AIBaseURL                   string
 	RecallDifficulty            string
 	RecallMaxQuestions          string
 	HooksPreCommit              string
@@ -110,8 +133,9 @@ func DefaultUserConfig() UserConfig {
 		Privacy: PrivacyConfig{ConversationAnalysis: false},
 		AI: AIConfig{
 			Provider: "anthropic",
-			Model:    "claude-sonnet",
+			Model:    "claude-sonnet-4-5",
 			APIKey:   "env:ANTHROPIC_API_KEY",
+			BaseURL:  "",
 		},
 		Recall: RecallConfig{
 			Difficulty:   "adaptive",

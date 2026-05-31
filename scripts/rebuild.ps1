@@ -28,5 +28,5 @@ Invoke-Command -ScriptBlock {
         exit $LASTEXITCODE
     }
 
-    Write-Host "🤖⚡Build completed successfully."
+    Write-Host "🤖💗Build completed successfully."
 }
