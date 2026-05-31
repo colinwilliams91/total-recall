@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"math/rand/v2"
 
 	"github.com/colinwilliams91/total-recall/internal/ai"
 	"github.com/colinwilliams91/total-recall/internal/cache"
@@ -12,10 +13,11 @@ import (
 const defaultDifficulty = "intermediate"
 
 // Question is a synthesized recall question with multiple-choice answers.
-// The first element in Choices is always the correct answer.
+// Choices are shuffled before delivery; CorrectIndex indicates which element is correct.
 type Question struct {
-	Question string   `json:"question"`
-	Choices  []string `json:"choices"`
+	Question     string   `json:"question"`
+	Choices      []string `json:"choices"`
+	CorrectIndex int      `json:"correct_index"`
 }
 
 // Engine synthesizes recall questions by pulling recent concepts from the
@@ -63,6 +65,21 @@ func (e *Engine) Synthesize(ctx context.Context, difficulty, model string) (*Que
 	if err := json.Unmarshal([]byte(raw), &q); err != nil {
 		log.Printf("[recall] synthesis parse failed (response: %.200s): %v", raw, err)
 		return nil, nil
+	}
+
+	// Shuffle choices so the correct answer (index 0 per AI contract) lands at a
+	// random position, and record that position in CorrectIndex.
+	if len(q.Choices) >= 2 {
+		correctIdx := 0
+		rand.Shuffle(len(q.Choices), func(i, j int) {
+			if correctIdx == i {
+				correctIdx = j
+			} else if correctIdx == j {
+				correctIdx = i
+			}
+			q.Choices[i], q.Choices[j] = q.Choices[j], q.Choices[i]
+		})
+		q.CorrectIndex = correctIdx
 	}
 
 	return &q, nil

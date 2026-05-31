@@ -170,9 +170,10 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	}
 
 	if err := s.dispatcher.Dispatch(recall.Question{
-		Question: q.Question,
-		Choices:  q.Choices,
-	}); err != nil {
+			Question:     q.Question,
+			Choices:      q.Choices,
+			CorrectIndex: q.CorrectIndex,
+		}); err != nil {
 		log.Printf("[recall] dispatch error: %v", err)
 	}
 }
