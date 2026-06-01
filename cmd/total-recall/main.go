@@ -74,11 +74,11 @@ func serveCmd() *cobra.Command {
 			defer store.Close()
 
 			var recallEngine *recall.Engine
-				if provider != nil {
-					recallEngine = recall.New(provider, store)
-				}
+			if provider != nil {
+				recallEngine = recall.New(provider, store)
+			}
 
-				return engine.New(cfg, provider, store, recallEngine).Start()
+			return engine.New(cfg, provider, store, recallEngine).Start()
 		},
 	}
 }
