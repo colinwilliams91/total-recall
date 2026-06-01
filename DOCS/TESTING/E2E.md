@@ -621,6 +621,283 @@ git add . && git commit -m "test: bad api key"
 
 ---
 
+## Phase 04A — Out-of-Band Delivery (MCP + Shell)
+
+**Goal:** Questions are delivered via MCP to AI coding agents and via `tr ask` (post-commit hook) to terminal users — not through daemon stdout.
+
+### Prerequisites
+
+- Binary built from current source.
+- Daemon running (`total-recall serve`) with AI configured (see Phase 03 prereqs).
+- Scratch Git repo from Phase 03 with at least one concept-generating commit already made (so `memory.db` exists).
+
+---
+
+### Section A — MCP Endpoint
+
+```sh
+# 4.1  Verify /mcp/ handler is registered (POSIX)
+curl -s -o /dev/null -w "%{http_code}" http://localhost:7331/mcp/
+# Expected: 200 or 400 (MCP requires a valid SSE/streaming request — not 404)
+```
+
+```powershell
+# 4.1 (WINDOWS)
+$r = Invoke-WebRequest -Uri 'http://localhost:7331/mcp/' -SkipHttpErrorCheck
+$r.StatusCode
+# Expected: 200 or 400 (not 404)
+```
+
+```sh
+# 4.2  recall_status tool via MCP — smoke test: POST a hook to queue a question (POSIX)
+curl -s -X POST http://localhost:7331/hooks/pre-commit \
+  -H "Content-Type: application/json" \
+  -d '{"hook":"pre-commit","repo":"/tmp/tr-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}'
+# Expected: 202 (question will be queued after AI pipeline completes ~5-10s)
+```
+
+```powershell
+# 4.2 (WINDOWS)
+$response = Invoke-WebRequest `
+    -Uri 'http://localhost:7331/hooks/pre-commit' `
+    -Method POST `
+    -ContentType 'application/json' `
+    -Body '{"hook":"pre-commit","repo":"C:\\tmp\\tr-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}' `
+    -SkipHttpErrorCheck
+$response.StatusCode
+# Expected: 202
+```
+
+---
+
+### Section B — REST Dequeue (`/recall/next` and `/recall/answer`)
+
+> Wait ~10 seconds after the POST in check 4.2 before running check 4.3.
+
+```sh
+# 4.3  GET /recall/next — dequeue a question
+curl -s http://localhost:7331/recall/next
+# Expected (if question is ready):
+#   {"id":1,"question":"Why does...","choices":["...","...","..."],"queued_at":"..."}
+# Expected (if nothing queued yet):
+#   204 No Content
+```
+
+```powershell
+# 4.3 (WINDOWS)
+Invoke-RestMethod -Uri 'http://localhost:7331/recall/next'
+# 204 = no question yet; 200 + JSON = question ready
+```
+
+```sh
+# 4.4  GET /recall/next is idempotent until claimed (POSIX)
+# Second call with no answer posted should return 204 (question was claimed by first call)
+curl -s -o /dev/null -w "%{http_code}" http://localhost:7331/recall/next
+# Expected: 204
+```
+
+```powershell
+# 4.4 (WINDOWS)
+$r = Invoke-WebRequest -Uri 'http://localhost:7331/recall/next' -SkipHttpErrorCheck
+$r.StatusCode
+# Expected: 204
+```
+
+```sh
+# 4.5  POST /recall/answer — record answer
+# Use the id returned from check 4.3 (replace 1 with actual id)
+curl -s -X POST http://localhost:7331/recall/answer \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"answer":"1"}'
+# Expected: {"ok":true}
+```
+
+```powershell
+# 4.5 (WINDOWS)
+Invoke-RestMethod `
+  -Uri 'http://localhost:7331/recall/answer' `
+  -Method POST `
+  -ContentType 'application/json' `
+  -Body '{"id":1,"answer":"1"}'
+# Expected: ok = True
+```
+
+```sh
+# 4.6  POST /recall/answer — skip (POSIX)
+curl -s -X POST http://localhost:7331/recall/answer \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"answer":"skip"}'
+# Expected: {"ok":true}
+```
+
+```powershell
+# 4.6 (WINDOWS)
+Invoke-RestMethod `
+  -Uri 'http://localhost:7331/recall/answer' `
+  -Method POST `
+  -ContentType 'application/json' `
+  -Body '{"id":1,"answer":"skip"}'
+# Expected: ok = True
+```
+
+```sh
+# 4.7  Verify memory.db exists and questions table is populated
+
+# (POSIX)
+sqlite3 ~/.tr/memory.db \
+  "SELECT id, question, claimed_by, answer FROM questions ORDER BY queued_at DESC LIMIT 5;"
+
+# (WINDOWS)
+sqlite3 "$env:USERPROFILE\.tr\memory.db" `
+  "SELECT id, question, claimed_by, answer FROM questions ORDER BY queued_at DESC LIMIT 5;"
+
+# Expected: rows with question text, claimed_by = "rest" or "mcp", answer or null
+```
+
+---
+
+### Section C — `tr ask` Subcommand
+
+```sh
+# 4.8  tr ask with no question queued (daemon running)
+./tr ask  # POSIX
+.\tr.exe ask  # Windows
+
+# Expected: "Thinking." animation for up to 30 seconds, then exits silently (no question)
+# (Run this immediately after check 4.5 cleaned out the queue)
+```
+
+```sh
+# 4.9  tr ask with a question queued (POSIX)
+# First, queue a question by posting a hook payload (check 4.2), wait ~10s, then:
+./tr ask
+
+# Expected TUI flow:
+#   "Thinking." animation (cycling) while polling
+#   → Question text displayed with word-wrap
+#   → Choices displayed as [1] / [2] / [3]
+#   → Press 1, 2, or 3 to select; Enter to confirm; q/Esc to skip
+#   → Exits after selection
+```
+
+```powershell
+# 4.9 (WINDOWS)
+# First, post a hook payload (check 4.2), wait ~10s, then:
+.\tr.exe ask
+
+# Expected TUI flow: same as POSIX above
+```
+
+```sh
+# 4.10  tr ask TTY guard — silent in non-interactive shell (POSIX)
+echo "" | ./tr ask
+# Expected: exits 0 with no output (not a TTY → silently no-op)
+```
+
+```powershell
+# 4.10 (WINDOWS)
+cmd /c "tr.exe ask < nul"
+$LASTEXITCODE
+# Expected: exits 0 with no output (not a TTY → silently no-op)
+```
+
+```sh
+# 4.11  tr ask when daemon is not running (POSIX)
+# Stop daemon, then:
+./tr ask
+# Expected: prints advisory message about daemon not running, exits 0
+```
+
+```powershell
+# 4.11 (WINDOWS)
+# Stop daemon, then:
+.\tr.exe ask
+# Expected: prints advisory message about daemon not running, exits 0
+```
+
+---
+
+### Section D — Post-Commit Hook
+
+```sh
+# 4.12  Verify post-commit hook was installed by tr init (POSIX)
+cat .git/hooks/post-commit
+# Expected: contains "total-recall ask" or "$(which total-recall) ask"
+```
+
+```powershell
+# 4.12 (WINDOWS)
+Get-Content .git/hooks/post-commit
+# Expected: contains "total-recall ask" or "$(which total-recall) ask"
+```
+
+```sh
+# 4.13  Post-commit hook fires after a real commit (POSIX)
+# With a question in the queue (daemon running):
+echo "test" >> foo.txt && git add . && git commit -m "test: 4A post-commit hook"
+
+# Expected:
+#   - Commit completes immediately
+#   - tr ask TUI appears in the committing terminal
+#   - Question displayed; press key to answer or skip
+```
+
+```powershell
+# 4.13 (WINDOWS)
+# With a question in the queue (daemon running):
+Add-Content foo.txt "test"
+git add .
+git commit -m "test: 4A post-commit hook"
+
+# Expected:
+#   - Commit completes immediately
+#   - tr ask TUI appears in the committing terminal
+#   - Question displayed; press key to answer or skip
+```
+
+---
+
+### Section E — Graceful Degradation
+
+```sh
+# 4.14  /recall/next when no questions have been generated (POSIX)
+# Fresh state: daemon running, no hook POSTs made
+curl -s -o /dev/null -w "%{http_code}" http://localhost:7331/recall/next
+# Expected: 204 No Content (not 500 or 404)
+```
+
+```powershell
+# 4.14 (WINDOWS)
+$r = Invoke-WebRequest -Uri 'http://localhost:7331/recall/next' -SkipHttpErrorCheck
+$r.StatusCode
+# Expected: 204 (not 500 or 404)
+```
+
+```sh
+# 4.15  tr ask when daemon is unreachable (POSIX)
+# Stop daemon, then run tr ask
+./tr ask
+# Expected: advisory printed, exits 0 — no panic, no error
+```
+
+```powershell
+# 4.15 (WINDOWS)
+# Stop daemon, then run tr ask
+.\tr.exe ask
+# Expected: advisory printed, exits 0 — no panic, no error
+```
+
+```sh
+# 4.16  All Phase 03 regression checks still pass (POSIX + WINDOWS)
+# Re-run checks 3.8 (202 from hook POST), 3.9 (real commit → AI pipeline),
+# 3.11 (cache DB exists), 3.16 (bad key → no crash)
+# Expected: all pass unchanged — Phase 4A is additive
+```
+
+**Not yet testable in this phase:** VS Code extension delivery (Phase 4B); daemon autostart; spaced repetition / answer scoring (future).
+
+---
+
 ## Adding a New Phase
 
 When a new phase is archived, append a section following this template:
