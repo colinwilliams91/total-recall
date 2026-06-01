@@ -20,7 +20,7 @@ func New() *Adapter { return &Adapter{} }
 // Dispatch prints the recall question and choices to stdout in a styled format.
 func (a *Adapter) Dispatch(q recall.Question) error {
 	fmt.Println()
-	fmt.Println("🧠 Recall Check")
+	fmt.Println("🧠🤖 Total-Recall Check")
 	fmt.Println("─────────────────────────────────────────")
 	fmt.Printf("  %s\n\n", q.Question)
 	for i, choice := range q.Choices {

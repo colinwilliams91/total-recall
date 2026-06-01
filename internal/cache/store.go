@@ -3,7 +3,10 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,10 +15,11 @@ import (
 )
 
 const (
-	defaultDBFilename = "concepts.db"
+	defaultDBFilename = "memory.db"
+	legacyDBFilename  = "concepts.db"
 	recentLimit       = 50
 
-	createTableSQL = `
+	createConceptsTableSQL = `
 CREATE TABLE IF NOT EXISTS concepts (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   concept   TEXT    NOT NULL,
@@ -24,6 +28,19 @@ CREATE TABLE IF NOT EXISTS concepts (
   seen_at   DATETIME NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_concepts_seen_at ON concepts(seen_at DESC);
+`
+
+	createQuestionsTableSQL = `
+CREATE TABLE IF NOT EXISTS questions (
+    id           INTEGER  PRIMARY KEY AUTOINCREMENT,
+    question     TEXT     NOT NULL,
+    choices      TEXT     NOT NULL,
+    queued_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    delivered_at DATETIME,
+    claimed_by   TEXT,
+    answer       TEXT,
+    answered_at  DATETIME
+);
 `
 )
 
@@ -36,12 +53,22 @@ type ConceptRow struct {
 	SeenAt  time.Time
 }
 
-// Store wraps the SQLite database used as the concept cache.
+// StoredQuestion is a recall question retrieved from the questions table.
+type StoredQuestion struct {
+	ID       int64
+	Question string
+	Choices  []string
+	QueuedAt time.Time
+}
+
+// Store wraps the SQLite database used as the memory store.
 type Store struct {
 	db *sql.DB
 }
 
-// Open opens (or creates) the concept cache at ~/.tr/concepts.db.
+// Open opens (or creates) the memory store at ~/.tr/memory.db.
+// If memory.db does not exist but the legacy concepts.db does, it is copied
+// to memory.db before opening (one-time migration).
 // Returns a non-nil *Store on success.
 func Open() (*Store, error) {
 	dir, err := trDir()
@@ -49,18 +76,50 @@ func Open() (*Store, error) {
 		return nil, err
 	}
 
-	dbPath := filepath.Join(dir, defaultDBFilename)
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening concept cache at %s: %w", dbPath, err)
+	memoryPath := filepath.Join(dir, defaultDBFilename)
+	legacyPath := filepath.Join(dir, legacyDBFilename)
+
+	if _, err := os.Stat(memoryPath); os.IsNotExist(err) {
+		if _, legacyErr := os.Stat(legacyPath); legacyErr == nil {
+			if copyErr := copyFile(legacyPath, memoryPath); copyErr == nil {
+				log.Printf("[store] migrated %s → %s", legacyPath, memoryPath)
+			}
+		}
 	}
 
-	if _, err := db.ExecContext(context.Background(), createTableSQL); err != nil {
+	db, err := sql.Open("sqlite", memoryPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening memory store at %s: %w", memoryPath, err)
+	}
+
+	bg := context.Background()
+	if _, err := db.ExecContext(bg, createConceptsTableSQL); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("initializing concept cache schema: %w", err)
+		return nil, fmt.Errorf("initializing concepts schema: %w", err)
+	}
+	if _, err := db.ExecContext(bg, createQuestionsTableSQL); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initializing questions schema: %w", err)
 	}
 
 	return &Store{db: db}, nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // Save persists a batch of concept fingerprints to the cache.
@@ -117,6 +176,118 @@ func (s *Store) Recent(ctx context.Context, n int) ([]ConceptRow, error) {
 		result = append(result, r)
 	}
 	return result, rows.Err()
+}
+
+// SaveQuestion inserts a synthesized question into the questions table.
+// Choices are JSON-marshalled into a TEXT column.
+func (s *Store) SaveQuestion(ctx context.Context, question string, choices []string) error {
+	choicesJSON, err := json.Marshal(choices)
+	if err != nil {
+		return fmt.Errorf("marshalling choices: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO questions (question, choices) VALUES (?, ?)`,
+		question, string(choicesJSON),
+	)
+	return err
+}
+
+// NextQuestion atomically claims and returns the oldest unclaimed question.
+// It sets delivered_at and claimed_by in a single UPDATE ... RETURNING statement.
+// Returns nil, nil when no unclaimed question exists.
+func (s *Store) NextQuestion(ctx context.Context, claimedBy string) (*StoredQuestion, error) {
+	row := s.db.QueryRowContext(ctx, `
+UPDATE questions
+SET delivered_at = datetime('now'), claimed_by = ?
+WHERE id = (
+  SELECT id FROM questions
+  WHERE delivered_at IS NULL
+  ORDER BY queued_at ASC
+  LIMIT 1
+)
+RETURNING id, question, choices, queued_at`, claimedBy)
+
+	var sq StoredQuestion
+	var choicesJSON string
+	var queuedAt string
+	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("claiming next question: %w", err)
+	}
+	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
+		return nil, fmt.Errorf("unmarshalling choices: %w", err)
+	}
+	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
+	sq.QueuedAt = t
+	return &sq, nil
+}
+
+// AnswerQuestion records the user's answer for the question with the given ID.
+func (s *Store) AnswerQuestion(ctx context.Context, id int64, answer string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE questions SET answer = ?, answered_at = datetime('now') WHERE id = ?`,
+		answer, id,
+	)
+	return err
+}
+
+// QueueDepth returns the number of unclaimed (undelivered) questions.
+func (s *Store) QueueDepth(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM questions WHERE delivered_at IS NULL`).Scan(&n)
+	return n, err
+}
+
+// RecentAnswered returns up to limit answered questions ordered by most recently answered.
+func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, question, choices, queued_at FROM questions WHERE answered_at IS NOT NULL ORDER BY answered_at DESC LIMIT ?`,
+		limit)
+	if err != nil {
+		return nil, fmt.Errorf("querying recent answered: %w", err)
+	}
+	defer rows.Close()
+
+	var result []StoredQuestion
+	for rows.Next() {
+		var sq StoredQuestion
+		var choicesJSON, queuedAt string
+		if err := rows.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+			return nil, fmt.Errorf("scanning question row: %w", err)
+		}
+		if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
+			return nil, fmt.Errorf("unmarshalling choices: %w", err)
+		}
+		t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
+		sq.QueuedAt = t
+		result = append(result, sq)
+	}
+	return result, rows.Err()
+}
+
+// PeekNextQuestion returns the next unclaimed question without claiming it.
+// Used by the recall://queue resource handler.
+func (s *Store) PeekNextQuestion(ctx context.Context) (*StoredQuestion, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, question, choices, queued_at FROM questions WHERE delivered_at IS NULL ORDER BY queued_at ASC LIMIT 1`)
+
+	var sq StoredQuestion
+	var choicesJSON, queuedAt string
+	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("peeking next question: %w", err)
+	}
+	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
+		return nil, fmt.Errorf("unmarshalling choices: %w", err)
+	}
+	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
+	sq.QueuedAt = t
+	return &sq, nil
 }
 
 // Close closes the underlying database connection.
