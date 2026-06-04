@@ -34,9 +34,16 @@ func askCmd() *cobra.Command {
 				return nil
 			}
 			m := newAskModel(time.Duration(timeout) * time.Second)
-			p := tea.NewProgram(m)
-			_, err := p.Run()
-			return err
+			p := tea.NewProgram(m, tea.WithAltScreen())
+			finalModel, err := p.Run()
+			if err != nil {
+				return err
+			}
+			// Print feedback on the main screen after the alt-screen has exited.
+			if am, ok := finalModel.(askModel); ok && am.feedback != "" {
+				fmt.Println(am.feedback)
+			}
+			return nil
 		},
 	}
 
@@ -68,12 +75,13 @@ type daemonUnreachableMsg struct{}
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type askModel struct {
-	state     askState
-	frame     int
-	started   time.Time
-	timeout   time.Duration
-	polling   bool // true while an HTTP poll is in flight
-	question  questionMsg
+	state      askState
+	frame      int
+	started    time.Time
+	timeout    time.Duration
+	polling    bool // true while an HTTP poll is in flight
+	question   questionMsg
+	feedback   string
 	httpClient *http.Client
 }
 
@@ -182,7 +190,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch k.String() {
 	case "1", "2", "3":
-		idx := int(k.String()[0]-'1')
+		idx := int(k.String()[0] - '1')
 		if idx < len(m.question.choices) {
 			answer = m.question.choices[idx]
 			feedback = "✓ recorded"
@@ -202,7 +210,8 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if answer != "" {
 		_ = m.postAnswer(m.question.id, answer)
-		fmt.Println(feedback)
+		// fmt.Println(feedback)
+		m.feedback = feedback
 	}
 	m.state = stateDone
 	return m, tea.Quit
@@ -230,7 +239,7 @@ func (m askModel) View() string {
 
 func renderQuestion(q questionMsg) string {
 	var b strings.Builder
-	b.WriteString("\n🧠  Recall Check\n")
+	b.WriteString("\n🧠🤖 Total-Recall Check\n")
 	b.WriteString("──────────────────────────────────────\n")
 	b.WriteString("  ")
 	b.WriteString(wordWrap(q.question, 60))
