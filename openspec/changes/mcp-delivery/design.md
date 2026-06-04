@@ -155,21 +155,22 @@ State machine:
                              │
                ┌─────────────┴──────────────┐
                │                            │
-          no question                  question received
-          + timeout elapsed             │
-               │                       ▼
-               ▼              ┌──────────────────────┐
-          exit 0              │      "question"       │
-          silently            │                       │
-                              │  🧠  Recall Check    │
-                              │  ─────────────────   │
-                              │  <question text>     │
-                              │  1. <choice>         │
-                              │  2. <choice>         │
-                              │  3. <choice>         │
-                              │  ─────────────────   │
-                              │  [1-3] or Enter:     │
-                              └──────────┬───────────┘
+        question received            no question
+               │                     + <= 4s remain
+               ▼                            │
+      ┌──────────────────────┐             ▼
+      │      "question"       │    ┌──────────────────┐
+      │                       │    │    "caught up"   │
+      │  🧠  Recall Check    │    │                  │
+      │  ─────────────────   │    │  You're all      │
+      │  <question text>     │    │  caught up...    │
+      │  1. <choice>         │    └────────┬─────────┘
+      │  2. <choice>         │             │
+      │  3. <choice>         │       timeout elapsed
+      │  ─────────────────   │             │
+      │  [1-3] or Enter:     │             ▼
+      └──────────┬───────────┘        exit 0
+                 │                 print caught-up message
                                          │
                               keypress handler
                                          │
@@ -182,7 +183,7 @@ State machine:
                   exit 0             exit 0
 ```
 
-Animation frames cycle at 400ms. Each tick: advance frame + poll (if no outstanding poll). Polling is not concurrent — the Bubbletea `Cmd` model ensures one poll in flight at a time.
+Animation frames cycle at 400ms. Each tick: advance frame + poll (if no outstanding poll). During the final 4 seconds of the timeout window, the animation is replaced by a caught-up message while polling continues. Polling is not concurrent — the Bubbletea `Cmd` model ensures one poll in flight at a time.
 
 **Daemon unreachable**: if `GET /recall/next` returns a connection error (daemon not running), `tr ask` exits 0 silently with no output. The post-commit hook must never block or error visibly in normal workflows.
 
@@ -212,7 +213,7 @@ exec "$(which total-recall)" ask
 - Returns `{"id": N, "question": "...", "choices": ["...", "...", "..."]}` or `null` if queue empty
 
 **`recall_answer` tool**:
-- Input: `{"id": N, "answer": "choice text or 'skip'"}` 
+- Input: `{"id": N, "answer": "choice text or 'skip'"}`
 - Calls `store.AnswerQuestion(ctx, id, answer)`
 - Returns `{"ok": true}`
 
@@ -231,8 +232,8 @@ exec "$(which total-recall)" ask
 
 **`recall_workflow` prompt**:
 ```
-After any git commit in this project, call recall_next to check for a pending 
-recall question. If a question is returned, present it to the user and record 
+After any git commit in this project, call recall_next to check for a pending
+recall question. If a question is returned, present it to the user and record
 their answer with recall_answer. If the queue is empty, continue normally.
 ```
 

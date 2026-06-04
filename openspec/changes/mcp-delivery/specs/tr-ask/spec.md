@@ -12,6 +12,8 @@ On startup, `tr ask` SHALL check `term.IsTerminal(int(os.Stdout.Fd()))`. If fals
 ### Requirement: tr ask displays a "Thinking." animation while polling
 In an interactive TTY, `tr ask` SHALL display a cycling animation: `Thinking.` → `Thinking..` → `Thinking...` → `Thinking.` (reset), advancing one frame every 400ms. The animation SHALL render on a single line (overwrite previous frame).
 
+If no question has arrived and 4 seconds or less remain in the timeout window, `tr ask` SHALL replace the cycling animation with `You're all caught up on your recall questions. Good job 🤖💗` while continuing to poll for a late-arriving question.
+
 #### Scenario: Animation cycling
 - **WHEN** `tr ask` is running and no question has been received
 - **THEN** the terminal shows the cycling animation, one frame per 400ms
@@ -31,12 +33,12 @@ When `GET /recall/next` returns a question, `tr ask` SHALL clear the animation l
 
 ---
 
-### Requirement: tr ask exits silently on timeout or daemon unreachable
-If `--timeout N` seconds elapse without a question received, `tr ask` SHALL exit 0 silently. If the daemon is not reachable (connection refused), `tr ask` SHALL exit 0 silently with no output.
+### Requirement: tr ask shows a caught-up message on timeout and exits silently when daemon unreachable
+If `--timeout N` seconds elapse without a question received, `tr ask` SHALL display `You're all caught up on your recall questions. Good job 🤖💗` during the final 4 seconds of the wait, then exit 0. If the daemon is not reachable (connection refused), `tr ask` SHALL exit 0 silently with no output.
 
 #### Scenario: Timeout elapsed (no question)
 - **WHEN** 15 seconds pass with an empty queue
-- **THEN** `tr ask` clears the animation and exits 0 with no output
+- **THEN** `tr ask` shows the caught-up message for the final 4 seconds, exits 0, and leaves that message visible when returning to the main terminal screen
 
 #### Scenario: Daemon not running
 - **WHEN** `GET /recall/next` returns a connection error

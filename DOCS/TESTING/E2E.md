@@ -763,7 +763,9 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 ./tr ask  # POSIX
 .\tr.exe ask  # Windows
 
-# Expected: "Thinking." animation for up to 30 seconds, then exits silently (no question)
+# Expected: "Thinking." animation while polling, then for the final 4 seconds:
+#   "You're all caught up on your recall questions. Good job 🤖💗"
+# Then returns to the shell once the 15-second timeout elapses.
 # (Run this immediately after check 4.5 cleaned out the queue)
 ```
 
