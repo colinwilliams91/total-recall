@@ -18,9 +18,12 @@ const (
 	daemonBaseURL  = "http://localhost:7331"
 	defaultTimeout = 15 * time.Second
 	animTick       = 400 * time.Millisecond
+	caughtUpWindow = 4 * time.Second
 )
 
 var animFrames = []string{"Thinking.", "Thinking..", "Thinking..."}
+
+const caughtUpMessage = "You're all caught up on your recall questions. Good job 🤖💗"
 
 // askCmd is the Cobra command for surfacing a recall question in the terminal.
 func askCmd() *cobra.Command {
@@ -139,11 +142,12 @@ func (m askModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tickMsg:
 		m.frame = (m.frame + 1) % len(animFrames)
 		if time.Since(m.started) >= m.timeout {
 			m.state = stateDone
+			m.feedback = caughtUpMessage
 			return m, tea.Quit
 		}
 		var cmds []tea.Cmd
@@ -155,7 +159,6 @@ func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case questionMsg:
-		msg := msg.(questionMsg)
 		m.polling = false
 		m.state = stateQuestion
 		m.question = msg
@@ -170,8 +173,7 @@ func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		k := msg.(tea.KeyMsg)
-		if k.Type == tea.KeyCtrlC {
+		if msg.Type == tea.KeyCtrlC {
 			m.state = stateDone
 			return m, tea.Quit
 		}
@@ -230,11 +232,21 @@ func (m askModel) postAnswer(id int64, answer string) error {
 func (m askModel) View() string {
 	switch m.state {
 	case stateThinking:
+		if m.showCaughtUpMessage() {
+			return "\r" + caughtUpMessage + "   "
+		}
 		return "\r" + animFrames[m.frame] + "   "
 	case stateQuestion:
 		return renderQuestion(m.question)
 	}
 	return ""
+}
+
+func (m askModel) showCaughtUpMessage() bool {
+	if m.timeout <= caughtUpWindow {
+		return true
+	}
+	return time.Since(m.started) >= m.timeout-caughtUpWindow
 }
 
 func renderQuestion(q questionMsg) string {
