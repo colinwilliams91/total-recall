@@ -33,8 +33,8 @@ When `GET /recall/next` returns a question, `tr ask` SHALL clear the animation l
 
 ---
 
-### Requirement: tr ask shows a caught-up message on timeout and exits silently when daemon unreachable
-If `--timeout N` seconds elapse without a question received, `tr ask` SHALL display `You're all caught up on your recall questions. Good job 🤖💗` during the final 4 seconds of the wait, then exit 0. If the daemon is not reachable (connection refused), `tr ask` SHALL exit 0 silently with no output.
+### Requirement: tr ask shows terminal feedback on timeout and daemon unreachable
+If `--timeout N` seconds elapse without a question received, `tr ask` SHALL display `You're all caught up on your recall questions. Great job 🤖💗` during the final 4 seconds of the wait, then exit 0. If the daemon is not reachable (connection refused), `tr ask` SHALL display `[total-recall] Daemon not running. Start with total-recall serve.` and exit 0.
 
 #### Scenario: Timeout elapsed (no question)
 - **WHEN** 15 seconds pass with an empty queue
@@ -42,4 +42,4 @@ If `--timeout N` seconds elapse without a question received, `tr ask` SHALL disp
 
 #### Scenario: Daemon not running
 - **WHEN** `GET /recall/next` returns a connection error
-- **THEN** `tr ask` exits 0 immediately with no output
+- **THEN** `tr ask` exits 0 and leaves `[total-recall] Daemon not running. Start with total-recall serve.` visible when returning to the main terminal screen

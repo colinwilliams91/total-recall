@@ -807,14 +807,14 @@ $LASTEXITCODE
 # 4.11  tr ask when daemon is not running (POSIX)
 # Stop daemon, then:
 ./tr ask
-# Expected: prints advisory message about daemon not running, exits 0
+# Expected: prints "[total-recall] Daemon not running. Start with total-recall serve." and exits 0
 ```
 
 ```powershell
 # 4.11 (WINDOWS)
 # Stop daemon, then:
 .\tr.exe ask
-# Expected: prints advisory message about daemon not running, exits 0
+# Expected: prints "[total-recall] Daemon not running. Start with total-recall serve." and exits 0
 ```
 
 ---

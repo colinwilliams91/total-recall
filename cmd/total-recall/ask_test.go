@@ -34,7 +34,7 @@ func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
 	}
 }
 
-func TestAskDaemonUnreachableRemainsSilent(t *testing.T) {
+func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 	m := newAskModel(10 * time.Second)
 
 	updated, _ := m.updateThinking(daemonUnreachableMsg{})
@@ -43,8 +43,8 @@ func TestAskDaemonUnreachableRemainsSilent(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone, got %v", got.state)
 	}
-	if got.feedback != "" {
-		t.Fatalf("expected no feedback, got %q", got.feedback)
+	if got.feedback != daemonUnavailableMessage {
+		t.Fatalf("expected feedback %q, got %q", daemonUnavailableMessage, got.feedback)
 	}
 }
 

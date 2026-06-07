@@ -185,7 +185,7 @@ State machine:
 
 Animation frames cycle at 400ms. Each tick: advance frame + poll (if no outstanding poll). During the final 4 seconds of the timeout window, the animation is replaced by a caught-up message while polling continues. Polling is not concurrent — the Bubbletea `Cmd` model ensures one poll in flight at a time.
 
-**Daemon unreachable**: if `GET /recall/next` returns a connection error (daemon not running), `tr ask` exits 0 silently with no output. The post-commit hook must never block or error visibly in normal workflows.
+**Daemon unreachable**: if `GET /recall/next` returns a connection error (daemon not running), `tr ask` exits 0 and prints `[total-recall] Daemon not running. Start with total-recall serve.` after the alt-screen closes. The post-commit hook still does not block and the command remains exit-0 friendly.
 
 ---
 
