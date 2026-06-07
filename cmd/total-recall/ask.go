@@ -23,7 +23,9 @@ const (
 
 var animFrames = []string{"Thinking.", "Thinking..", "Thinking..."}
 
-const caughtUpMessage = "You're all caught up on your recall questions. Good job 🤖💗"
+const caughtUpMessage = "You're all caught up on your recall questions. Great job 🤖💗"
+
+const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with total-recall serve."
 
 // askCmd is the Cobra command for surfacing a recall question in the terminal.
 func askCmd() *cobra.Command {
@@ -170,6 +172,7 @@ func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case daemonUnreachableMsg:
 		m.state = stateDone
+		m.feedback = daemonUnavailableMessage
 		return m, tea.Quit
 
 	case tea.KeyMsg:
@@ -235,7 +238,7 @@ func (m askModel) View() string {
 		if m.showCaughtUpMessage() {
 			return "\r" + caughtUpMessage + "   "
 		}
-		return "\r" + animFrames[m.frame] + "   "
+		return "\r" + "🤖🧠" + " " + animFrames[m.frame] + "   "
 	case stateQuestion:
 		return renderQuestion(m.question)
 	}
