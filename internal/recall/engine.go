@@ -64,6 +64,7 @@ func (e *Engine) Synthesize(ctx context.Context, difficulty, model string) (*Que
 	var q Question
 	if err := json.Unmarshal([]byte(raw), &q); err != nil {
 		log.Printf("[recall] synthesis parse failed (response: %.200s): %v", raw, err)
+		log.Printf("error type: %T", err)
 		return nil, nil
 	}
 
