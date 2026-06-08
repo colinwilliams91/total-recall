@@ -764,7 +764,7 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 .\tr.exe ask  # Windows
 
 # Expected: "Thinking." animation while polling, then for the final 4 seconds:
-#   "You're all caught up on your recall questions. Good job 🤖💗"
+#   "You're all caught up on your recall questions. Great job 🤖💗"
 # Then returns to the shell once the 15-second timeout elapses.
 # (Run this immediately after check 4.5 cleaned out the queue)
 ```
@@ -777,8 +777,8 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 # Expected TUI flow:
 #   "Thinking." animation (cycling) while polling
 #   → Question text displayed with word-wrap
-#   → Choices displayed as [1] / [2] / [3]
-#   → Press 1, 2, or 3 to select; Enter to confirm; q/Esc to skip
+#   → All returned choices displayed with matching numeric labels
+#   → Press the matching number key to select; Enter to skip; q/Esc to abandon
 #   → Exits after selection
 ```
 
@@ -840,7 +840,8 @@ echo "test" >> foo.txt && git add . && git commit -m "test: 4A post-commit hook"
 
 # Expected:
 #   - Commit completes immediately
-#   - tr ask TUI appears in the committing terminal
+#   - daemon terminal logs a single "[recall] question queued for terminal delivery choices=N" line
+#   - tr ask TUI appears only in the committing terminal
 #   - Question displayed; press key to answer or skip
 ```
 

@@ -166,9 +166,10 @@ State machine:
       │  <question text>     │    │  caught up...    │
       │  1. <choice>         │    └────────┬─────────┘
       │  2. <choice>         │             │
-      │  3. <choice>         │       timeout elapsed
+    │  3. <choice>         │       timeout elapsed
+    │  4. <choice>         │             │
       │  ─────────────────   │             │
-      │  [1-3] or Enter:     │             ▼
+    │  [1-N] or Enter:     │             ▼
       └──────────┬───────────┘        exit 0
                  │                 print caught-up message
                                          │
@@ -176,7 +177,7 @@ State machine:
                                          │
                         ┌────────────────┼────────────────┐
                         │                │                │
-                      '1'-'3'          Enter            'q'/Esc
+              '1'-'N'           Enter            'q'/Esc
                         │                │                │
                   POST answer        POST skip        exit 0
                   print "✓ recorded" print "→ skipped" (abandon)
@@ -186,6 +187,8 @@ State machine:
 Animation frames cycle at 400ms. Each tick: advance frame + poll (if no outstanding poll). During the final 4 seconds of the timeout window, the animation is replaced by a caught-up message while polling continues. Polling is not concurrent — the Bubbletea `Cmd` model ensures one poll in flight at a time.
 
 **Daemon unreachable**: if `GET /recall/next` returns a connection error (daemon not running), `tr ask` exits 0 and prints `[total-recall] Daemon not running. Start with total-recall serve.` after the alt-screen closes. The post-commit hook still does not block and the command remains exit-0 friendly.
+
+**Daemon-side presentation**: when the recall pipeline queues a question, the daemon logs `[recall] question queued for terminal delivery choices=N` instead of printing the full question card. The interactive recall prompt is only rendered by `tr ask` in the committing terminal.
 
 ---
 

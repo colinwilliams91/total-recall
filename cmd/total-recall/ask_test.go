@@ -34,6 +34,30 @@ func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
 	}
 }
 
+func TestRenderQuestionShowsAllChoices(t *testing.T) {
+	view := renderQuestion(questionMsg{
+		question: "What does the diff hunk header mean?",
+		choices: []string{"first", "second", "third", "fourth"},
+	})
+
+	if !strings.Contains(view, "4. fourth") {
+		t.Fatalf("expected fourth choice in view, got %q", view)
+	}
+	if !strings.Contains(view, "[1-4] or Enter to skip: ") {
+		t.Fatalf("expected dynamic prompt in view, got %q", view)
+	}
+}
+
+func TestParseChoiceSelectionSupportsFourthChoice(t *testing.T) {
+	idx, ok := parseChoiceSelection("4", 4)
+	if !ok {
+		t.Fatalf("expected fourth choice to parse")
+	}
+	if idx != 3 {
+		t.Fatalf("expected index 3, got %d", idx)
+	}
+}
+
 func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 	m := newAskModel(10 * time.Second)
 
