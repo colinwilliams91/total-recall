@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,24 +194,25 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	answer := ""
 	feedback := ""
 
-	switch k.String() {
-	case "1", "2", "3":
-		idx := int(k.String()[0] - '1')
+	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			answer = m.question.choices[idx]
 			feedback = "✓ recorded"
 		}
-	case "enter":
+	} else {
+		switch k.String() {
+		case "enter":
 		answer = "skip"
 		feedback = "→ skipped"
-	case "q", "esc":
+		case "q", "esc":
 		m.state = stateDone
 		return m, tea.Quit
-	case "ctrl+c":
+		case "ctrl+c":
 		m.state = stateDone
 		return m, tea.Quit
-	default:
+		default:
 		return m, nil
+		}
 	}
 
 	if answer != "" {
@@ -260,14 +262,33 @@ func renderQuestion(q questionMsg) string {
 	b.WriteString(wordWrap(q.question, 60))
 	b.WriteString("\n")
 	for i, c := range q.choices {
-		if i >= 3 {
-			break
-		}
 		fmt.Fprintf(&b, "  %d. %s\n", i+1, c)
 	}
 	b.WriteString("──────────────────────────────────────\n")
-	b.WriteString("[1-3] or Enter to skip: ")
+	fmt.Fprintf(&b, "%s", choicePrompt(len(q.choices)))
 	return b.String()
+}
+
+func parseChoiceSelection(key string, choiceCount int) (int, bool) {
+	if choiceCount <= 0 || len(key) != 1 {
+		return 0, false
+	}
+	selection, err := strconv.Atoi(key)
+	if err != nil || selection < 1 || selection > choiceCount || selection > 9 {
+		return 0, false
+	}
+	return selection - 1, true
+}
+
+func choicePrompt(choiceCount int) string {
+	if choiceCount <= 0 {
+		return "Press Enter to skip: "
+	}
+	upper := choiceCount
+	if upper > 9 {
+		upper = 9
+	}
+	return fmt.Sprintf("[1-%d] or Enter to skip: ", upper)
 }
 
 func wordWrap(s string, width int) string {

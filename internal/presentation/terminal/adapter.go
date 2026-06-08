@@ -1,32 +1,23 @@
 package terminal
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/colinwilliams91/total-recall/internal/recall"
 )
 
-// Adapter implements engine.Dispatcher by printing recall questions to stdout.
+// Adapter implements engine.Dispatcher by logging recall delivery events.
 //
-// NOTE (v1 limitation): This writes to the daemon's stdout, not to the
-// committing developer's terminal. Phase 4 will replace this with true
-// out-of-band delivery (VS Code extension notifications API, or a
-// /recall/next polling endpoint) so the question surfaces in the right place.
+// The actual interactive question is delivered through tr ask via /recall/next.
+// The daemon terminal only gets a compact operational log so pipeline activity
+// remains visible without duplicating the recall card.
 type Adapter struct{}
 
 // New returns a new terminal Adapter.
 func New() *Adapter { return &Adapter{} }
 
-// Dispatch prints the recall question and choices to stdout in a styled format.
+// Dispatch logs that a recall question was queued for terminal delivery.
 func (a *Adapter) Dispatch(q recall.Question) error {
-	fmt.Println()
-	fmt.Println("🧠🤖 Total-Recall Check")
-	fmt.Println("─────────────────────────────────────────")
-	fmt.Printf("  %s\n\n", q.Question)
-	for i, choice := range q.Choices {
-		fmt.Printf("  %d. %s\n", i+1, choice)
-	}
-	fmt.Println("─────────────────────────────────────────")
-	fmt.Println()
+	log.Printf("[recall] question queued for terminal delivery choices=%d", len(q.Choices))
 	return nil
 }
