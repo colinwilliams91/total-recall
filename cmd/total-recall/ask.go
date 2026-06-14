@@ -40,12 +40,12 @@ func askCmd() *cobra.Command {
 				return nil
 			}
 			m := newAskModel(time.Duration(timeout) * time.Second)
-			p := tea.NewProgram(m, tea.WithAltScreen())
+			p := tea.NewProgram(m)
 			finalModel, err := p.Run()
 			if err != nil {
 				return err
 			}
-			// Print feedback on the main screen after the alt-screen has exited.
+			// Print feedback after the Bubble Tea program exits.
 			if am, ok := finalModel.(askModel); ok && am.feedback != "" {
 				fmt.Println(am.feedback)
 			}
@@ -202,16 +202,16 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		switch k.String() {
 		case "enter":
-		answer = "skip"
-		feedback = "→ skipped"
+			answer = "skip"
+			feedback = "→ skipped"
 		case "q", "esc":
-		m.state = stateDone
-		return m, tea.Quit
+			m.state = stateDone
+			return m, tea.Quit
 		case "ctrl+c":
-		m.state = stateDone
-		return m, tea.Quit
+			m.state = stateDone
+			return m, tea.Quit
 		default:
-		return m, nil
+			return m, nil
 		}
 	}
 
