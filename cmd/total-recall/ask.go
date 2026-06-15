@@ -15,6 +15,10 @@ import (
 	"golang.org/x/term"
 )
 
+func trDebug(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "[TR-DEBUG %s] %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+}
+
 const (
 	daemonBaseURL  = "http://localhost:7331"
 	defaultTimeout = 15 * time.Second
@@ -39,17 +43,20 @@ func askCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return nil
 			}
-			m := newAskModel(time.Duration(timeout) * time.Second)
-			p := tea.NewProgram(m)
-			finalModel, err := p.Run()
-			if err != nil {
-				return err
-			}
-			// Print feedback after the Bubble Tea program exits.
-			if am, ok := finalModel.(askModel); ok && am.feedback != "" {
-				fmt.Println(am.feedback)
-			}
-			return nil
+		m := newAskModel(time.Duration(timeout) * time.Second)
+		p := tea.NewProgram(m)
+		finalModel, err := p.Run()
+		trDebug("p.Run() returned err=%v", err)
+		if err != nil {
+			return err
+		}
+		// Print feedback after the Bubble Tea program exits.
+		if am, ok := finalModel.(askModel); ok && am.feedback != "" {
+			trDebug("about to print feedback=%q", am.feedback)
+			fmt.Println(am.feedback)
+		}
+		trDebug("returning nil — process should exit")
+		return nil
 		},
 	}
 
@@ -77,6 +84,7 @@ type questionMsg struct {
 }
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
+type answerPostedMsg struct{}
 
 // ── model ─────────────────────────────────────────────────────────────────────
 
@@ -190,6 +198,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	trDebug("keypress received key=%s", k.String())
 
 	answer := ""
 	feedback := ""
@@ -216,11 +225,19 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if answer != "" {
-		_ = m.postAnswer(m.question.id, answer)
-		// fmt.Println(feedback)
+		trDebug("posting answer id=%d answer=%q", m.question.id, answer)
 		m.feedback = feedback
+		m.state = stateDone
+		go func() {
+			trDebug("postAnswer goroutine executing id=%d answer=%q", m.question.id, answer)
+			_ = m.postAnswer(m.question.id, answer)
+			trDebug("postAnswer goroutine completed")
+		}()
+		trDebug("returning tea.Quit state=%d feedback=%q", m.state, m.feedback)
+		return m, tea.Quit
 	}
 	m.state = stateDone
+	trDebug("returning tea.Quit state=%d feedback=%q", m.state, m.feedback)
 	return m, tea.Quit
 }
 
@@ -234,6 +251,15 @@ func (m askModel) postAnswer(id int64, answer string) error {
 	return nil
 }
 
+func (m askModel) postAnswerCmd(id int64, answer string) tea.Cmd {
+	return func() tea.Msg {
+		trDebug("postAnswerCmd executing id=%d answer=%q", id, answer)
+		_ = m.postAnswer(id, answer)
+		trDebug("postAnswerCmd completed")
+		return answerPostedMsg{}
+	}
+}
+
 func (m askModel) View() string {
 	switch m.state {
 	case stateThinking:
@@ -243,6 +269,8 @@ func (m askModel) View() string {
 		return "\r" + "🤖🧠" + " " + animFrames[m.frame] + "   "
 	case stateQuestion:
 		return renderQuestion(m.question)
+	case stateDone:
+		return "\n\nPress any key to continue...\n"
 	}
 	return ""
 }
