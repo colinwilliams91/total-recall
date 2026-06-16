@@ -43,20 +43,23 @@ func askCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return nil
 			}
-		m := newAskModel(time.Duration(timeout) * time.Second)
-		p := tea.NewProgram(m)
-		finalModel, err := p.Run()
-		trDebug("p.Run() returned err=%v", err)
-		if err != nil {
-			return err
-		}
-		// Print feedback after the Bubble Tea program exits.
-		if am, ok := finalModel.(askModel); ok && am.feedback != "" {
-			trDebug("about to print feedback=%q", am.feedback)
-			fmt.Println(am.feedback)
-		}
-		trDebug("returning nil — process should exit")
-		return nil
+			m := newAskModel(time.Duration(timeout) * time.Second)
+			p := tea.NewProgram(m)
+			finalModel, err := p.Run()
+			trDebug("p.Run() returned err=%v", err)
+			if err != nil {
+				return err
+			}
+			// Print feedback after the Bubble Tea program exits.
+			if am, ok := finalModel.(askModel); ok && am.feedback != "" {
+				trDebug("about to print feedback=%q", am.feedback)
+				fmt.Println(am.feedback)
+			}
+			// else {
+			// 	p.Println("\nPress any key to continue...")
+			// }
+			trDebug("returning nil — process should exit")
+			return nil
 		},
 	}
 
