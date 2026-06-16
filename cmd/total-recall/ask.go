@@ -209,13 +209,13 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			answer = m.question.choices[idx]
-			feedback = "✓ recorded"
+			feedback = "🧠🤖 ✓ recorded"
 		}
 	} else {
 		switch k.String() {
 		case "enter":
 			answer = "skip"
-			feedback = "→ skipped"
+			feedback = "🧠🤖 → skipped"
 		case "q", "esc":
 			m.state = stateDone
 			return m, tea.Quit
