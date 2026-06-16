@@ -19,6 +19,7 @@ import (
 	"github.com/colinwilliams91/total-recall/internal/pipeline"
 	"github.com/colinwilliams91/total-recall/internal/presentation/terminal"
 	"github.com/colinwilliams91/total-recall/internal/recall"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const (
@@ -62,6 +63,7 @@ type Server struct {
 	store        *cache.Store  // nil when AI is not configured
 	recallEngine *recall.Engine
 	dispatcher   Dispatcher
+	mcpServer    *mcp.Server
 	mux          *http.ServeMux
 	httpSrv      *http.Server
 	wg           sync.WaitGroup // tracks in-flight pipeline goroutines
@@ -76,6 +78,7 @@ func New(cfg *config.Config, provider ai.Provider, store *cache.Store, recallEng
 		provider:     provider,
 		store:        store,
 		recallEngine: recallEngine,
+		mcpServer:    buildMCPServer(store, cfg),
 		mux:          http.NewServeMux(),
 	}
 	if cfg.Presentation.Terminal {
@@ -95,8 +98,9 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /hooks/pre-commit", s.handleHook)
 	s.mux.HandleFunc("POST /hooks/commit-msg", s.handleHook)
 	s.mux.HandleFunc("POST /hooks/pre-push", s.handleHook)
-	// MCP route group — placeholder for Phase 3+
-	s.mux.HandleFunc("/mcp/", s.handleMCPStub)
+	s.mux.HandleFunc("GET /recall/next", s.handleRecallNext)
+	s.mux.HandleFunc("POST /recall/answer", s.handleRecallAnswer)
+	s.mux.Handle("/mcp/", mcpHandler(s.mcpServer))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -157,7 +161,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		log.Printf("[pipeline] cache save error: %v", err)
 	}
 
-	if s.recallEngine == nil || s.dispatcher == nil {
+	if s.recallEngine == nil {
 		return
 	}
 	q, err := s.recallEngine.Synthesize(ctx, "", s.cfg.AI.Model)
@@ -169,17 +173,56 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
-	if err := s.dispatcher.Dispatch(recall.Question{
+	if err := s.store.SaveQuestion(ctx, q.Question, q.Choices); err != nil {
+		log.Printf("[pipeline] save question: %v", err)
+	}
+
+	if err := s.mcpServer.ResourceUpdated(ctx, &mcp.ResourceUpdatedNotificationParams{URI: "recall://queue"}); err != nil {
+		log.Printf("[mcp] notify resource updated: %v", err)
+	}
+
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Dispatch(recall.Question{
 			Question:     q.Question,
 			Choices:      q.Choices,
 			CorrectIndex: q.CorrectIndex,
 		}); err != nil {
-		log.Printf("[recall] dispatch error: %v", err)
+			log.Printf("[recall] dispatch error: %v", err)
+		}
 	}
 }
 
-func (s *Server) handleMCPStub(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "MCP not yet implemented"})
+func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
+	q, err := s.store.NextQuestion(r.Context(), "shell")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if q == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":       q.ID,
+		"question": q.Question,
+		"choices":  q.Choices,
+	})
+}
+
+func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID     int64  `json:"id"`
+		Answer string `json:"answer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := s.store.AnswerQuestion(r.Context(), body.ID, body.Answer); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // writeJSON sets Content-Type and encodes v as JSON.

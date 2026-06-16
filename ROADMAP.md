@@ -46,12 +46,22 @@
 
 ---
 
-## Phase 04 — Out-of-Band Delivery (Next)
+## Phase 04 — Out-of-Band Delivery (Shipped: 4A)
 
-- VS Code extension: polls `GET /recall/next`; surfaces question as workspace notification with clickable answer choices
-- Shell integration: post-commit shell function added by `tr init`; calls `GET /recall/next` to display question in committing terminal
-- `/recall/next` daemon endpoint: dequeues synthesized questions from SQLite
-- `Dispatcher` pluggable adapter wired via config (`presentation:` block)
+### Phase 4A — MCP + Shell (Shipped)
+
+- **MCP server** mounted at `/mcp/` — AI coding agents (Copilot CLI, Claude Code) receive questions via `recall_next` tool, subscribe to `recall://queue` resource, and are guided by the `recall_workflow` prompt
+- **REST endpoints**: `GET /recall/next` (atomic dequeue) and `POST /recall/answer` (answer/skip recording)
+- **`tr ask` subcommand** — Bubbletea TUI with "Thinking." animation, multiple-choice keypress handler, 30-second timeout; TTY-aware (silent in CI/CD)
+- **Post-commit hook** — `tr init` writes `.git/hooks/post-commit` that calls `total-recall ask` after each successful commit
+- **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); one-time migration guard from `concepts.db`
+- **`terminal.Adapter` opt-in** — `presentation.terminal: true` retains daemon-pane delivery for users who prefer it; off by default
+
+### Phase 4B — VS Code Extension (Next)
+
+- VS Code extension surfaces questions as workspace notifications with clickable answer choices
+- Polls `GET /recall/next`; uses VS Code Notifications API (`window.showInformationMessage`)
+- Daemon autostart: `tr init` will offer launchd/systemd/Task Scheduler entry so `tr serve` starts on reboot
 
 ---
 

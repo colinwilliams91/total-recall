@@ -1,2 +1,2 @@
-// Package terminal implements the terminal output adapter for the Total Recall Presentation Layer.
+// Package terminal implements daemon-side terminal delivery logging for the Total Recall Presentation Layer.
 package terminal
