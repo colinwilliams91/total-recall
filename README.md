@@ -153,6 +153,15 @@ make install
 go install ./cmd/total-recall
 ```
 
+#### ENV
+
+*Note*: There are no environment variables required to run Total Recall.
+
+- The daemon will run on `localhost:7331` by default, and the config file is located at `~/.tr/config.yaml`.
+- You can override the config file location with `--config <path>`.
+- The init should walk you through the config setup and create the file if it does not exist.
+**USE YOUR LOCAL MACHINE ENV VARIABLES FOR API KEYS AND EXTRA SECURITY**. Total Recall will not store your API keys in the repo config file.
+
 ---
 
 ### Run
@@ -167,6 +176,7 @@ Available subcommands:
 
 | Command   |	Description |
 | --------- | ------------- |
+| --help    | Show the help/man page                |
 | serve     | Start the daemon on localhost:7331    |
 | init      | Initialize Total Recall for a project |
 | config    | Read/write config values              |
@@ -181,6 +191,16 @@ Example:
 ---
 
 ### Test
+
+#### E2E
+
+> You can run the E2E tests in `./scripts/e2e/` using PowerShell. These tests require the daemon to be running and will create a temporary Git repo for testing.
+> They will output an agent-first JSON log of the test run to `./scripts/e2e/output/` -- add that directory to the `.gitignore` if it is not already there.
+```sh
+./scripts/e2e/run-all.ps1
+```
+
+#### Unit
 
 ```sh
 make test
