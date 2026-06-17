@@ -1,10 +1,11 @@
 param(
     [string]$BinaryPath,
-    [string]$ScratchDir
+    [string]$ScratchDir,
+    [switch]$Clean
 )
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
-Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
+Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir -Clean:$Clean
 Set-PhaseId "00"
 
 Write-Host "  Phase 00 — Foundation" -ForegroundColor White

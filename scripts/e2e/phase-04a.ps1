@@ -2,11 +2,12 @@ param(
     [string]$BinaryPath,
     [string]$ScratchDir,
     [string]$Provider,
-    [string]$ApiKey
+    [string]$ApiKey,
+    [switch]$Clean
 )
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
-Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
+Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir -Clean:$Clean
 Set-PhaseId "04a"
 
 Write-Host "  Phase 04A — Out-of-Band Delivery (MCP + Shell)" -ForegroundColor White

@@ -1,10 +1,11 @@
 param(
     [string]$BinaryPath,
-    [string]$ScratchDir
+    [string]$ScratchDir,
+    [switch]$Clean
 )
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
-Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
+Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir -Clean:$Clean
 Set-PhaseId "02"
 
 Write-Host "  Phase 02 — Daemon Foundation" -ForegroundColor White
@@ -44,8 +45,24 @@ Assert-Contains "2.3b" "tr status shows 'not running' message" $statusDownText "
 
 New-ScratchRepo
 
-Write-Manual "2.4" "Hook installation via tr init" `
-    "Run 'tr init' in $script:ScratchRepo. Expect TUI prompts for conversation analysis, AI provider, and hook selection. Verify hooks are installed to .git/hooks/"
+Write-Manual -Id "2.4" `
+    -Description "Hook installation via tr init" `
+    -Command "cd $script:ScratchRepo; & $script:TrBin init" `
+    -Expected "TUI prompts, then 'Installed N hook(s) into .git/hooks/'" `
+    -Verify {
+        $hookPath = Join-Path $script:ScratchRepo ".git\hooks\pre-commit"
+        if (-not (Test-Path $hookPath)) {
+            return @{ Passed = $false; Detail = "Hook not found: $hookPath" }
+        }
+        $content = Get-Content $hookPath -Raw
+        $issues = @()
+        if (-not ($content -match "# total-recall managed")) { $issues += "missing sentinel" }
+        if (-not ($content -match "^#!")) { $issues += "missing shebang" }
+        if ($issues.Count -gt 0) {
+            return @{ Passed = $false; Detail = ($issues -join "; ") }
+        }
+        return @{ Passed = $true; Detail = "" }
+    }
 
 $hookPath = Join-Path $script:ScratchRepo ".git\hooks\pre-commit"
 if (Test-Path $hookPath) {
@@ -65,11 +82,63 @@ if (Test-Path $hookPath) {
     Write-Skip "2.5b" "pre-commit hook not installed (tr init may not have been run)"
 }
 
-Write-Manual "2.6" "Hook installation idempotency" `
-    "Re-run 'tr init' and verify hooks are regenerated in-place (not duplicated), with previous selections pre-populated."
+Write-Host ""
+Write-Host "  [TEST] 2.6 — Hook installation idempotency" -ForegroundColor Cyan
 
-Write-Manual "2.7" "Hook chaining with existing unmanaged hook" `
-    "Create an unmanaged pre-commit hook, re-run 'tr init', verify both the TR sentinel and original hook content are present."
+$configPath = Join-Path $env:USERPROFILE ".tr\config.yaml"
+$hookPath = Join-Path $script:ScratchRepo ".git\hooks\pre-commit"
+
+$configHashBefore = $null
+$hookHashBefore = $null
+
+if (Test-Path $configPath) {
+    $configHashBefore = (Get-FileHash $configPath -Algorithm SHA256).Hash
+}
+
+if (Test-Path $hookPath) {
+    $hookHashBefore = (Get-FileHash $hookPath -Algorithm SHA256).Hash
+}
+
+if (-not $configHashBefore -or -not $hookHashBefore) {
+    Write-Skip "2.6" "Cannot test idempotency: config or hooks not installed"
+} else {
+    Write-Host ""
+    Write-Host "  Run this command:" -ForegroundColor DarkCyan
+    Write-Host "    cd $script:ScratchRepo; & $script:TrBin init" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Expected: Previous selections pre-populated, confirm all prompts" -ForegroundColor DarkCyan
+    Write-Host ""
+    Read-Host "  Press Enter when done"
+
+    $configHashAfter = (Get-FileHash $configPath -Algorithm SHA256).Hash
+    $hookHashAfter = (Get-FileHash $hookPath -Algorithm SHA256).Hash
+
+    $configUnchanged = ($configHashBefore -eq $configHashAfter)
+    $hookUnchanged = ($hookHashBefore -eq $hookHashAfter)
+
+    if ($configUnchanged -and $hookUnchanged) {
+        Write-Pass "2.6" "Idempotency: config and hooks unchanged after re-init"
+    } else {
+        $details = @()
+        if (-not $configUnchanged) {
+            $details += "Config file changed"
+        }
+        if (-not $hookUnchanged) {
+            $details += "Hook file changed"
+        }
+        Write-Fail "2.6" "Idempotency: files changed unexpectedly" ($details -join "; ")
+    }
+}
+
+Write-Manual -Id "2.7" `
+    -Description "Hook chaining with existing unmanaged hook" `
+    -Command @"
+cd $script:ScratchRepo
+echo '#!/usr/bin/env bash' > .git/hooks/pre-commit
+echo 'echo "existing hook ran"' >> .git/hooks/pre-commit
+& $script:TrBin init
+"@ `
+    -Expected "Both TR sentinel AND original hook content present in .git/hooks/pre-commit"
 
 Write-Host ""
 Write-Host "  [setup] Restarting daemon for hook dispatch tests..." -ForegroundColor DarkGray

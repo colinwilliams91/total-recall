@@ -6,7 +6,8 @@ param(
     [string]$ApiKey,
     [string]$Model,
     [string]$BaseUrl,
-    [switch]$ContinueOnError
+    [switch]$ContinueOnError,
+    [switch]$Clean
 )
 
 $runStartTime = Get-Date
@@ -26,6 +27,7 @@ Write-Host "  Total Recall -- E2E Test Runner" -ForegroundColor White
 Write-Host "  -------------------------------------------" -ForegroundColor DarkGray
 Write-Host "  Phases: $($Phases -join ', ')" -ForegroundColor DarkGray
 Write-Host "  Halt on first failure: $(if ($ContinueOnError) { 'No' } else { 'Yes' })" -ForegroundColor DarkGray
+Write-Host "  Clean scratch repo:    $(if ($Clean) { 'Yes' } else { 'No' })" -ForegroundColor DarkGray
 Write-Host ""
 
 $completedPhases = @()
@@ -54,6 +56,7 @@ foreach ($phase in $Phases) {
     $phaseArgs = @()
     if ($BinaryPath) { $phaseArgs += "-BinaryPath"; $phaseArgs += $BinaryPath }
     if ($ScratchDir) { $phaseArgs += "-ScratchDir"; $phaseArgs += $ScratchDir }
+    if ($Clean) { $phaseArgs += "-Clean" }
 
     if ($phaseLower -eq "03" -or $phaseLower -eq "04a") {
         if ($Provider) { $phaseArgs += "-Provider"; $phaseArgs += $Provider }

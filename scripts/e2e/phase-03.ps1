@@ -4,11 +4,12 @@ param(
     [string]$Provider,
     [string]$ApiKey,
     [string]$Model,
-    [string]$BaseUrl
+    [string]$BaseUrl,
+    [switch]$Clean
 )
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
-Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
+Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir -Clean:$Clean
 Set-PhaseId "03"
 
 Write-Host "  Phase 03 — Intelligence Layer" -ForegroundColor White

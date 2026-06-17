@@ -33,3 +33,6 @@ go.work.sum
 
 # E2E test output reports
 scripts/e2e/output/
+
+# E2E test scratch repo
+scripts/e2e/scratch/

@@ -16,14 +16,17 @@ $script:DaemonOutput = @()
 $script:startTime   = $null
 $script:phaseId     = "unknown"
 $script:outputDir   = Join-Path $PSScriptRoot "output"
+$script:CleanAfter  = $false
 
 function Initialize-E2E {
     param(
         [string]$BinaryPath,
-        [string]$ScratchDir
+        [string]$ScratchDir,
+        [switch]$Clean
     )
 
     $script:startTime = Get-Date
+    $script:CleanAfter = $Clean.IsPresent
 
     if ($BinaryPath -and (Test-Path $BinaryPath)) {
         $script:TrBin = (Resolve-Path $BinaryPath).Path
@@ -41,7 +44,7 @@ function Initialize-E2E {
     if ($ScratchDir) {
         $script:ScratchRepo = $ScratchDir
     } else {
-        $script:ScratchRepo = Join-Path $env:TEMP "tr-e2e-test"
+        $script:ScratchRepo = Join-Path $PSScriptRoot "scratch"
     }
 
     if (-not (Test-Path $script:outputDir)) {
@@ -52,6 +55,9 @@ function Initialize-E2E {
     Write-Host "  Binary:  $script:TrBin" -ForegroundColor DarkGray
     Write-Host "  Scratch: $script:ScratchRepo" -ForegroundColor DarkGray
     Write-Host "  Output:  $script:outputDir" -ForegroundColor DarkGray
+    if ($script:CleanAfter) {
+        Write-Host "  Clean:   yes (scratch repo will be removed after tests)" -ForegroundColor DarkGray
+    }
     Write-Host ""
 }
 
@@ -85,16 +91,47 @@ function Write-Skip {
 }
 
 function Write-Manual {
-    param([string]$Id, [string]$Description, [string]$Expected)
+    param(
+        [string]$Id,
+        [string]$Description,
+        [string]$Command,
+        [string]$Expected,
+        [scriptblock]$Verify
+    )
     Write-Host ""
     Write-Host "  [MANUAL] $Id — $Description" -ForegroundColor Cyan
+    if ($Command) {
+        Write-Host ""
+        Write-Host "  Run this command:" -ForegroundColor DarkCyan
+        foreach ($line in $Command -split "`n") {
+            Write-Host "    $line" -ForegroundColor White
+        }
+    }
     if ($Expected) {
+        Write-Host ""
         Write-Host "  Expected: $Expected" -ForegroundColor DarkCyan
     }
+    if ($Verify) {
+        Write-Host ""
+        Write-Host "  Auto-verification will check config files and hook installation" -ForegroundColor DarkCyan
+    }
     Write-Host ""
-    $response = Read-Host "  Press Enter when verified (or 's' to skip)"
+    $response = Read-Host "  Press Enter when done (or 's' to skip)"
     if ($response -eq 's' -or $response -eq 'S') {
         Write-Skip $Id "Skipped by user"
+        return
+    }
+    if ($Verify) {
+        Write-Host ""
+        Write-Host "  [VERIFY] Running auto-verification..." -ForegroundColor Yellow
+        $verifyResult = & $Verify
+        if ($verifyResult.Passed) {
+            $script:manual++
+            $script:results += @{ Id = $Id; Status = "MANUAL"; Description = $Description; Timestamp = (Get-Date).ToUniversalTime().ToString("o"); Verified = $true }
+            Write-Host "  [PASS] $Id — Manually verified + auto-verified" -ForegroundColor Green
+        } else {
+            Write-Fail $Id "Auto-verification failed" $verifyResult.Detail
+        }
     } else {
         $script:manual++
         $script:results += @{ Id = $Id; Status = "MANUAL"; Description = $Description; Timestamp = (Get-Date).ToUniversalTime().ToString("o") }
@@ -270,6 +307,13 @@ function Remove-ScratchRepo {
             $_.Attributes = 'Normal'
         }
         Remove-Item -Path $script:ScratchRepo -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Cleanup-ScratchRepo {
+    if ($script:CleanAfter) {
+        Remove-ScratchRepo
+        Write-Host "  [clean] Removed scratch repo" -ForegroundColor DarkGray
     }
 }
 
@@ -461,6 +505,7 @@ function Write-Summary {
     Write-Host ""
 
     Write-JsonReport $PhaseName
+    Cleanup-ScratchRepo
 
     if ($script:failed -gt 0) {
         Write-Host "  FAILURES:" -ForegroundColor Red

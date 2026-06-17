@@ -1,10 +1,11 @@
 param(
     [string]$BinaryPath,
-    [string]$ScratchDir
+    [string]$ScratchDir,
+    [switch]$Clean
 )
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
-Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
+Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir -Clean:$Clean
 Set-PhaseId "01"
 
 Write-Host "  Phase 01 — Config Architecture" -ForegroundColor White
@@ -65,8 +66,26 @@ if ($quietText -and $quietText.Contains("created")) {
 
 Restore-TrConfig | Out-Null
 
-Write-Manual "1.3" "tr init prompts for opt-in (conversation analysis + hooks)" `
-    "Run 'tr init' in a git repo. Expect TUI prompts for conversation analysis and hook selection."
+New-ScratchRepo
+
+Write-Manual -Id "1.3" `
+    -Description "tr init prompts for opt-in" `
+    -Command "cd $script:ScratchRepo; & $script:TrBin init" `
+    -Expected "TUI prompts for conversation analysis (Y/n) and hook selection" `
+    -Verify {
+        $configPath = Join-Path $env:USERPROFILE ".tr\config.yaml"
+        if (-not (Test-Path $configPath)) {
+            return @{ Passed = $false; Detail = "Config not created: $configPath" }
+        }
+        $config = Get-Content $configPath -Raw
+        $missing = @()
+        if (-not ($config -match "provider:")) { $missing += "provider" }
+        if (-not ($config -match "model:")) { $missing += "model" }
+        if ($missing.Count -gt 0) {
+            return @{ Passed = $false; Detail = "Config missing fields: $($missing -join ', ')" }
+        }
+        return @{ Passed = $true; Detail = "" }
+    }
 
 $showOutput = & $script:TrBin config --show 2>&1
 $showText = $showOutput -join "`n"
