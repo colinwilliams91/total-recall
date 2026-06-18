@@ -32,8 +32,5 @@ tidy:
 release-dry-run:
 	goreleaser release --snapshot --clean --skip=publish
 
-LAST_TAG := $(shell git describe --tags --abbrev=0 2>nul || git rev-list --max-parents=0 HEAD)
-
 changelog:
-	@echo ## Unreleased
-	@git log $(LAST_TAG)..HEAD --pretty=format:"- %%s (%%h)" --no-merges
+	git-cliff --output CHANGELOG.md

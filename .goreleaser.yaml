@@ -34,26 +34,4 @@ checksum:
   name_template: "checksums.txt"
 
 changelog:
-  use: git
-  sort: asc
-  abbrev: 7
-  groups:
-    - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: "Bug fixes"
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: "Refactoring"
-      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
-      order: 2
-    - title: "Testing"
-      regexp: '^.*?test(\([[:word:]]+\))??!?:.+$'
-      order: 3
-    - title: Others
-      order: 999
-  filters:
-    exclude:
-      - "^Merge "
-      - "^chore:"
-      - "^style:"
+  disable: true
