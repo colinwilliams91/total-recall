@@ -9,7 +9,7 @@ else
     CLEAN_CMD = rm -rf $(BIN_DIR)
 endif
 
-.PHONY: build install test lint clean tidy
+.PHONY: build install test lint clean tidy release-dry-run changelog
 
 build:
 	go build -o $(BINARY) ./cmd/total-recall
@@ -28,3 +28,9 @@ clean:
 
 tidy:
 	go mod tidy
+
+release-dry-run:
+	goreleaser release --snapshot --clean --skip=publish
+
+changelog:
+	git-cliff --output CHANGELOG.md
