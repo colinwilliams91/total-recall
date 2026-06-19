@@ -40,7 +40,7 @@ if (Test-Path $configPath) {
 if ($serveText -and $serveText.Contains("created")) {
     Write-Pass "1.1b" "Advisory message printed on config creation"
 } else {
-    Write-Skip "1.1b" "Advisory check (config may already exist or message format changed)"
+    Write-Skip "1.1b" "Advisory not captured (expected when config already exists from prior run)"
 }
 
 if (Test-Path $configPath) {

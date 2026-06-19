@@ -261,9 +261,9 @@ func retryWithBackoff(attempt int) {
 
     Stop-TrDaemon
 
-    $cachePath = Join-Path $env:USERPROFILE ".tr\concepts.db"
+    $cachePath = Join-Path $env:USERPROFILE ".tr\memory.db"
     if (Test-Path $cachePath) {
-        Write-Pass "3.11" "Concept cache database exists at $cachePath"
+        Write-Pass "3.11" "Concept cache table exists at $cachePath"
 
         $sqliteOutput = & sqlite3 $cachePath "SELECT COUNT(*) FROM concepts;" 2>&1
         $sqliteExit = $LASTEXITCODE
@@ -287,7 +287,7 @@ func retryWithBackoff(attempt int) {
             Write-Skip "3.12b" "Depends on 3.12a"
         }
     } else {
-        Write-Fail "3.11" "Concept cache database exists" "File not found: $cachePath"
+        Write-Fail "3.11" "Concept cache table exists" "File not found: $cachePath"
         Write-Skip "3.12a" "Depends on 3.11"
         Write-Skip "3.12b" "Depends on 3.11"
     }

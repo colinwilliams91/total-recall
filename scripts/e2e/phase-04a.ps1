@@ -272,11 +272,11 @@ Assert-StatusCode "4.16a" "Regression: POST hook still returns 202" 202 $regress
 $regressionHealth = Invoke-TrGet "/health"
 Assert-StatusCode "4.16b" "Regression: GET /health still returns 200" 200 $regressionHealth.StatusCode
 
-$cachePath = Join-Path $env:USERPROFILE ".tr\concepts.db"
+$cachePath = Join-Path $env:USERPROFILE ".tr\memory.db"
 if (Test-Path $cachePath) {
-    Write-Pass "4.16c" "Regression: concepts.db still exists"
+    Write-Pass "4.16c" "Regression: memory.db still exists"
 } else {
-    Write-Skip "4.16c" "concepts.db not found (may not have been created yet)"
+    Write-Skip "4.16c" "memory.db not found (may not have been created yet)"
 }
 
 Stop-TrDaemon
