@@ -63,6 +63,14 @@
 - Polls `GET /recall/next`; uses VS Code Notifications API (`window.showInformationMessage`)
 - Daemon autostart: `tr init` will offer launchd/systemd/Task Scheduler entry so `tr serve` starts on reboot
 
+### Phase 4D — Extended AI Providers (Planned)
+
+- **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen-max`
+- **MiniMax** — OpenAI-compatible; default model `MiniMax-M3`
+- **DeepSeek** — OpenAI-compatible; default model `deepseek-v4-pro`
+- All three route through existing `openai.New()` adapter — no new adapter packages required
+- `tr init` TUI updated with new provider options and API key placeholders
+
 ---
 
 - ### Phase 1 - MVP

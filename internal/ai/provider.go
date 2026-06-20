@@ -41,6 +41,9 @@ type Provider interface {
 //	ollama    → internal/ai/openai    (OpenAI-compatible)
 //	groq      → internal/ai/openai    (OpenAI-compatible)
 //	lm-studio → internal/ai/openai    (OpenAI-compatible)
+//	qwen      → internal/ai/openai    (OpenAI-compatible, Alibaba Cloud Model Studio)
+//	minimax   → internal/ai/openai    (OpenAI-compatible)
+//	deepseek  → internal/ai/openai    (OpenAI-compatible)
 //	custom    → internal/ai/openai    (requires BaseURL)
 var ProviderRegistry = map[string]string{
 	"anthropic": "https://api.anthropic.com",
@@ -48,6 +51,9 @@ var ProviderRegistry = map[string]string{
 	"ollama":    "http://localhost:11434/v1",
 	"groq":      "https://api.groq.com/openai/v1",
 	"lm-studio": "http://localhost:1234/v1",
+	"qwen":      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+	"minimax":   "https://api.minimaxi.com/v1",
+	"deepseek":  "https://api.deepseek.com",
 	"custom":    "", // user must supply BaseURL via AIConfig.BaseURL
 }
 

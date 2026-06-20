@@ -279,6 +279,9 @@ var providerModelDefaults = map[string]string{
 	"groq":      "llama-3.1-70b-versatile",
 	"ollama":    "llama3.2",
 	"lm-studio": "local-model",
+	"qwen":      "qwen-max",
+	"minimax":   "MiniMax-M3",
+	"deepseek":  "deepseek-v4-pro",
 	"custom":    "",
 }
 
@@ -287,6 +290,9 @@ var providerAPIKeyPlaceholders = map[string]string{
 	"anthropic": "env:ANTHROPIC_API_KEY",
 	"openai":    "env:OPENAI_API_KEY",
 	"groq":      "env:GROQ_API_KEY",
+	"qwen":      "env:QWEN_API_KEY",
+	"minimax":   "env:MINIMAX_API_KEY",
+	"deepseek":  "env:DEEPSEEK_API_KEY",
 }
 
 // runInitAI prompts the user to configure an AI provider for recall questions.
@@ -310,6 +316,9 @@ func runInitAI(cfg *config.UserConfig) error {
 					huh.NewOption("Anthropic (Claude) — recommended", "anthropic"),
 					huh.NewOption("OpenAI (e.g. gpt-4o)", "openai"),
 					huh.NewOption("Groq  (cloud · fast · free tier)", "groq"),
+					huh.NewOption("Qwen  (Alibaba Cloud Model Studio)", "qwen"),
+					huh.NewOption("MiniMax  (e.g. MiniMax-M3)", "minimax"),
+					huh.NewOption("DeepSeek  (e.g. deepseek-v4-pro)", "deepseek"),
 					huh.NewOption("Ollama  (local)", "ollama"),
 					huh.NewOption("LM Studio  (local)", "lm-studio"),
 					huh.NewOption("Custom  (advanced — any OpenAI-compatible endpoint)", "custom"),
@@ -331,7 +340,7 @@ func runInitAI(cfg *config.UserConfig) error {
 	baseURL := cfg.AI.BaseURL
 
 	switch selectedProvider {
-	case "anthropic", "openai", "groq":
+	case "anthropic", "openai", "groq", "qwen", "minimax", "deepseek":
 		// Cloud providers: prompt for API key (env: pattern) and model name.
 		if apiKey == "" {
 			apiKey = providerAPIKeyPlaceholders[selectedProvider]
