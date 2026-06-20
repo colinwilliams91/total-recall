@@ -35,6 +35,9 @@ type AIConfig struct {
 //	openai    → internal/ai/openai    (OpenAI Chat Completions API)
 //	ollama    → internal/ai/openai    (OpenAI-compatible)
 //	groq      → internal/ai/openai    (OpenAI-compatible)
+//  qwen      → internal/ai/openai    (OpenAI-compatible)
+//  minimax   → internal/ai/openai    (OpenAI-compatible)
+//  deepseek  → internal/ai/openai    (OpenAI-compatible)
 //	lm-studio → internal/ai/openai    (OpenAI-compatible)
 //	custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
 //
@@ -45,6 +48,9 @@ var KnownProviders = map[string]string{
 	"openai":    "https://api.openai.com/v1",
 	"ollama":    "http://localhost:11434/v1",
 	"groq":      "https://api.groq.com/openai/v1",
+	"qwen":      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+	"minimax":   "https://api.minimaxi.com/v1",
+	"deepseek":  "https://api.deepseek.com/v1",
 	"lm-studio": "http://localhost:1234/v1",
 	"custom":    "", // user must supply BaseURL
 }
