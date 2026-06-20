@@ -25,7 +25,7 @@ func newProvider(cfg config.AIConfig) (ai.Provider, error) {
 
 	baseURL, ok := ai.ProviderRegistry[cfg.Provider]
 	if !ok {
-		return nil, fmt.Errorf("%w: unknown provider %q (known: anthropic, openai, ollama, groq, lm-studio, custom)", ai.ErrNoProvider, cfg.Provider)
+		return nil, fmt.Errorf("%w: unknown provider %q (known: anthropic, openai, ollama, groq, lm-studio, qwen, minimax, deepseek, openrouter, custom)", ai.ErrNoProvider, cfg.Provider)
 	}
 
 	if cfg.Provider == "custom" {
