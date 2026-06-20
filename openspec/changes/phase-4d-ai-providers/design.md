@@ -33,7 +33,7 @@ All verified against official provider documentation.
 
 | Provider | Default Model | Rationale |
 |----------|--------------|-----------|
-| `qwen` | `qwen-max` | Flagship model; users can override to `qwen-plus`, `qwen-turbo`, `qwen3.7-max`, etc. |
+| `qwen` | `qwen3.7-max` | Flagship model; users can override to `qwen-plus`, `qwen-flash`, `qwen3.7-pro`, etc. |
 | `minimax` | `MiniMax-M3` | Latest flagship; users can override to `MiniMax-M2.7`, etc. |
 | `deepseek` | `deepseek-v4-pro` | Latest flagship; users can override to `deepseek-v4-flash` |
 

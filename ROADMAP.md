@@ -65,7 +65,7 @@
 
 ### Phase 4D — Extended AI Providers (Planned)
 
-- **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen-max`
+- **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen3.7-max`
 - **MiniMax** — OpenAI-compatible; default model `MiniMax-M3`
 - **DeepSeek** — OpenAI-compatible; default model `deepseek-v4-pro`
 - All three route through existing `openai.New()` adapter — no new adapter packages required
@@ -188,7 +188,7 @@ This commit involved:
 	- Terminal UI/UX (TUI)
 		- can this use the same API the MCP server exposes?
 - Phase 3:
-	- VS Code extension 
+	- VS Code extension
 		- manages:
 			- UX
 			- rendering
