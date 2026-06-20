@@ -274,25 +274,27 @@ func runInit() error {
 
 // providerModelDefaults maps each known provider to a sensible starting model.
 var providerModelDefaults = map[string]string{
-	"anthropic": "claude-sonnet-4-5",
-	"openai":    "gpt-4o",
-	"groq":      "llama-3.1-70b-versatile",
-	"ollama":    "llama3.2",
-	"lm-studio": "local-model",
-	"qwen":      "qwen3.7-max",
-	"minimax":   "MiniMax-M3",
-	"deepseek":  "deepseek-v4-pro",
-	"custom":    "",
+	"anthropic":  "claude-sonnet-4-5",
+	"openai":     "gpt-4o",
+	"groq":       "llama-3.1-70b-versatile",
+	"ollama":     "llama3.2",
+	"lm-studio":  "local-model",
+	"qwen":       "qwen3.7-max",
+	"minimax":    "MiniMax-M3",
+	"deepseek":   "deepseek-v4-pro",
+	"openrouter": "deepseek/deepseek-v4-flash:free",
+	"custom":     "",
 }
 
 // providerAPIKeyPlaceholders maps cloud providers to an env: placeholder shown in the TUI.
 var providerAPIKeyPlaceholders = map[string]string{
-	"anthropic": "env:ANTHROPIC_API_KEY",
-	"openai":    "env:OPENAI_API_KEY",
-	"groq":      "env:GROQ_API_KEY",
-	"qwen":      "env:QWEN_API_KEY",
-	"minimax":   "env:MINIMAX_API_KEY",
-	"deepseek":  "env:DEEPSEEK_API_KEY",
+	"anthropic":  "env:ANTHROPIC_API_KEY",
+	"openai":     "env:OPENAI_API_KEY",
+	"groq":       "env:GROQ_API_KEY",
+	"qwen":       "env:QWEN_API_KEY",
+	"minimax":    "env:MINIMAX_API_KEY",
+	"deepseek":   "env:DEEPSEEK_API_KEY",
+	"openrouter": "env:OPENROUTER_API_KEY",
 }
 
 // runInitAI prompts the user to configure an AI provider for recall questions.
@@ -319,6 +321,7 @@ func runInitAI(cfg *config.UserConfig) error {
 					huh.NewOption("Qwen  (e.g. qwen3.7-max)", "qwen"),
 					huh.NewOption("MiniMax  (e.g. MiniMax-M3)", "minimax"),
 					huh.NewOption("DeepSeek  (e.g. deepseek-v4-pro)", "deepseek"),
+					huh.NewOption("OpenRouter  (catalog · deepseek-v4-flash:free)", "openrouter"),
 					huh.NewOption("Ollama  (local)", "ollama"),
 					huh.NewOption("LM Studio  (local)", "lm-studio"),
 					huh.NewOption("Custom  (advanced — any OpenAI-compatible endpoint)", "custom"),
@@ -340,7 +343,7 @@ func runInitAI(cfg *config.UserConfig) error {
 	baseURL := cfg.AI.BaseURL
 
 	switch selectedProvider {
-	case "anthropic", "openai", "groq", "qwen", "minimax", "deepseek":
+	case "anthropic", "openai", "groq", "qwen", "minimax", "deepseek", "openrouter":
 		// Cloud providers: prompt for API key (env: pattern) and model name.
 		if apiKey == "" {
 			apiKey = providerAPIKeyPlaceholders[selectedProvider]

@@ -68,7 +68,8 @@
 - **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen3.7-max`
 - **MiniMax** — OpenAI-compatible; default model `MiniMax-M3`
 - **DeepSeek** — OpenAI-compatible; default model `deepseek-v4-pro`
-- All three route through existing `openai.New()` adapter — no new adapter packages required
+- **OpenRouter** — OpenAI-compatible unified model catalog; default model `deepseek/deepseek-v4-flash:free` (free tier)
+- All four route through existing `openai.New()` adapter — no new adapter packages required
 - `tr init` TUI updated with new provider options and API key placeholders
 
 ---
