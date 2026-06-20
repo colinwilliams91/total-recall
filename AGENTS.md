@@ -19,7 +19,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Provider factory**: `cmd/total-recall/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
 - **Daemon**: `total-recall serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only
-- **Cache**: SQLite at `~/.tr/concepts.db` via `modernc.org/sqlite` (pure Go, no CGo)
+- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`
 - **MCP server**: mounted at `/mcp/` inside the daemon
 
 ### Key packages

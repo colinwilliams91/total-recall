@@ -44,8 +44,25 @@ if (-not $hasApiKey -and $effectiveProvider -ne "ollama" -and $effectiveProvider
 Write-Host "  Section A — AI Provider TUI" -ForegroundColor DarkGray
 Write-Host ""
 
-Write-Manual "3.1" "tr init shows AI provider selection TUI" `
-    "Run 'tr init'. Expect: conversation analysis confirm, AI Provider select menu (6 options), API key/model inputs, hook selection."
+Write-Manual -Id "3.1" `
+    -Description "tr init shows AI provider selection TUI" `
+    -Command "cd $script:ScratchRepo; & $script:TrBin init" `
+    -Expected "TUI prompts: conversation analysis (Y/n), AI Provider select menu (6 options), API key/model inputs, hook selection" `
+    -Verify {
+        $configPath = Join-Path $env:USERPROFILE ".tr\config.yaml"
+        if (-not (Test-Path $configPath)) {
+            return @{ Passed = $false; Detail = "Config not created: $configPath" }
+        }
+        $config = Get-Content $configPath -Raw
+        $missing = @()
+        if (-not ($config -match "provider:")) { $missing += "provider" }
+        if (-not ($config -match "model:")) { $missing += "model" }
+        if (-not ($config -match "api-key:")) { $missing += "api-key" }
+        if ($missing.Count -gt 0) {
+            return @{ Passed = $false; Detail = "Config missing fields: $($missing -join ', ')" }
+        }
+        return @{ Passed = $true; Detail = "" }
+    }
 
 $configPath = Join-Path $env:USERPROFILE ".tr\config.yaml"
 if (Test-Path $configPath) {
@@ -85,8 +102,25 @@ if (Test-Path $configPath) {
     Write-Skip "3.3" "Config file not found"
 }
 
-Write-Manual "3.4" "tr init pre-populates existing AI values" `
-    "Re-run 'tr init'. Verify API key, model, and provider fields are pre-filled with current config values."
+Write-Manual -Id "3.4" `
+    -Description "tr init pre-populates existing AI values" `
+    -Command "cd $script:ScratchRepo; & $script:TrBin init" `
+    -Expected "TUI prompts pre-filled with current config values (provider, model, api-key); confirm all prompts" `
+    -Verify {
+        $configPath = Join-Path $env:USERPROFILE ".tr\config.yaml"
+        if (-not (Test-Path $configPath)) {
+            return @{ Passed = $false; Detail = "Config not found: $configPath" }
+        }
+        $config = Get-Content $configPath -Raw
+        $missing = @()
+        if (-not ($config -match "provider:")) { $missing += "provider" }
+        if (-not ($config -match "model:")) { $missing += "model" }
+        if (-not ($config -match "api-key:")) { $missing += "api-key" }
+        if ($missing.Count -gt 0) {
+            return @{ Passed = $false; Detail = "Config missing fields after re-init: $($missing -join ', ')" }
+        }
+        return @{ Passed = $true; Detail = "" }
+    }
 
 $showOutput = & $script:TrBin config --show 2>&1
 $showText = $showOutput -join "`n"

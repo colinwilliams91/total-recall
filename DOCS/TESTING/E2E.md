@@ -518,8 +518,8 @@ git commit --allow-empty -m "chore: empty commit"
 
 ```sh
 # 3.11  Cache database created after first commit
-ls -la ~/.tr/concepts.db # POSIX
-Get-Item "$env:USERPROFILE\.tr\concepts.db" # WINDOWS
+ls -la ~/.tr/memory.db # POSIX
+Get-Item "$env:USERPROFILE\.tr\memory.db" # WINDOWS
 # Expected: file exists (created on first successful Save)
 ```
 
@@ -527,11 +527,11 @@ Get-Item "$env:USERPROFILE\.tr\concepts.db" # WINDOWS
 # 3.12  Inspect cached concepts directly
 
 # (POSIX)
-sqlite3 ~/.tr/concepts.db \
+sqlite3 ~/.tr/memory.db \
   "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
 
 # (WINDOWS)
-sqlite3 "$env:USERPROFILE\.tr\concepts.db" `
+sqlite3 "$env:USERPROFILE\.tr\memory.db" `
     "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
 
 # Expected: rows with concept names like "exponential backoff", "retry semantics";

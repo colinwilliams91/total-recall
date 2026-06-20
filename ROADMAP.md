@@ -38,7 +38,7 @@
 - Named provider registry: Anthropic, OpenAI, Groq, Ollama, LM Studio, Custom
 - `tr init` AI provider setup TUI — provider select, API key (env: pattern), model name, base URL for custom
 - Concept extraction from staged diffs (`internal/pipeline/`) with 8 KB diff guard
-- SQLite concept cache (`~/.tr/concepts.db`, `modernc.org/sqlite`) — no CGo required
+- SQLite concept cache (`~/.tr/memory.db`, `modernc.org/sqlite`) — no CGo required
 - Recall Engine: question synthesis from recent cached concepts (`internal/recall/`)
 - Async pipeline in `handleHook` — hook responds 202 immediately; AI work runs in background goroutine; graceful drain on shutdown via `sync.WaitGroup`
 - `Dispatcher` interface + terminal adapter (`internal/presentation/terminal/`) — v1 delivers to daemon stdout
