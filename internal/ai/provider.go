@@ -36,18 +36,25 @@ type Provider interface {
 // ProviderRegistry maps user-facing provider names to their default base URLs.
 // The adapter to use for each preset is determined at the factory layer (cmd).
 //
-//	anthropic → internal/ai/anthropic (native Messages API)
-//	openai    → internal/ai/openai    (Chat Completions API)
-//	ollama    → internal/ai/openai    (OpenAI-compatible)
-//	groq      → internal/ai/openai    (OpenAI-compatible)
-//	lm-studio → internal/ai/openai    (OpenAI-compatible)
-//	custom    → internal/ai/openai    (requires BaseURL)
+//	anthropic  → internal/ai/anthropic (native Messages API)
+//	openai     → internal/ai/openai    (Chat Completions API)
+//	ollama     → internal/ai/openai    (OpenAI-compatible)
+//	groq       → internal/ai/openai    (OpenAI-compatible)
+//	lm-studio  → internal/ai/openai    (OpenAI-compatible)
+//	qwen       → internal/ai/openai    (OpenAI-compatible, Alibaba Cloud Model Studio)
+//	minimax    → internal/ai/openai    (OpenAI-compatible)
+//	deepseek   → internal/ai/openai    (OpenAI-compatible)
+//	openrouter → internal/ai/openai   (OpenAI-compatible, unified model catalog)
+//	custom     → internal/ai/openai    (requires BaseURL)
 var ProviderRegistry = map[string]string{
-	"anthropic": "https://api.anthropic.com",
-	"openai":    "https://api.openai.com/v1",
-	"ollama":    "http://localhost:11434/v1",
-	"groq":      "https://api.groq.com/openai/v1",
-	"lm-studio": "http://localhost:1234/v1",
-	"custom":    "", // user must supply BaseURL via AIConfig.BaseURL
+	"anthropic":  "https://api.anthropic.com",
+	"openai":     "https://api.openai.com/v1",
+	"ollama":     "http://localhost:11434/v1",
+	"groq":       "https://api.groq.com/openai/v1",
+	"lm-studio":  "http://localhost:1234/v1",
+	"qwen":       "https://dashscope.aliyuncs.com/compatible-mode/v1",
+	"minimax":    "https://api.minimaxi.com/v1",
+	"deepseek":   "https://api.deepseek.com/v1",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"custom":     "", // user must supply BaseURL via AIConfig.BaseURL
 }
-

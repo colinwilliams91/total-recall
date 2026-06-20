@@ -63,6 +63,15 @@
 - Polls `GET /recall/next`; uses VS Code Notifications API (`window.showInformationMessage`)
 - Daemon autostart: `tr init` will offer launchd/systemd/Task Scheduler entry so `tr serve` starts on reboot
 
+### Phase 4D — Extended AI Providers (Planned)
+
+- **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen3.7-max`
+- **MiniMax** — OpenAI-compatible; default model `MiniMax-M3`
+- **DeepSeek** — OpenAI-compatible; default model `deepseek-v4-pro`
+- **OpenRouter** — OpenAI-compatible unified model catalog; default model `deepseek/deepseek-v4-flash:free` (free tier)
+- All four route through existing `openai.New()` adapter — no new adapter packages required
+- `tr init` TUI updated with new provider options and API key placeholders
+
 ---
 
 - ### Phase 1 - MVP
@@ -180,7 +189,7 @@ This commit involved:
 	- Terminal UI/UX (TUI)
 		- can this use the same API the MCP server exposes?
 - Phase 3:
-	- VS Code extension 
+	- VS Code extension
 		- manages:
 			- UX
 			- rendering
