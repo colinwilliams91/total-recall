@@ -30,7 +30,9 @@
 - [ ] 1.8 Add `(*Store).SkipQuestion(ctx context.Context, id int64) error` — `UPDATE questions SET answer = 'skip', answered_at = datetime('now') WHERE id = ?`; leaves `answer_index`, `correct`, `feedback` NULL
 - [ ] 1.9 Update `(*Store).RecentAnswered` to SELECT and scan `correct_index`, `answer_index`, `correct`, `feedback` in addition to existing fields; use nullable scan types (`*int`, `*bool`, `*string`) for nullable columns
 - [ ] 1.10 Update `runPipeline` in `internal/engine/server.go`: change `s.store.SaveQuestion(ctx, q.Question, q.Choices)` to `s.store.SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex)`
-- [ ] 1.11 Run `go build ./...` and `go vet ./...` — verify clean
+- [ ] 1.11 Update `(*Store).NextQuestion` in `internal/cache/store.go`: add `correct_index` to the RETURNING clause; populate `sq.CorrectIndex` from the scanned value. Required so the MCP `recall_next` tool (task 4.1) can return the real `correct_index` to AI agents — without this, `q.CorrectIndex` is always 0 on the dequeue path
+- [ ] 1.12 Update `(*Store).PeekNextQuestion` in `internal/cache/store.go`: add `correct_index` to the SELECT list; populate `sq.CorrectIndex`. Keeps `StoredQuestion.CorrectIndex` consistent across all read paths (used by the `recall://queue` resource)
+- [ ] 1.13 Run `go build ./...` and `go vet ./...` — verify clean
 
 ## 2. Feedback Generation (feedback-generation)
 
@@ -58,7 +60,7 @@
 
 - [ ] 3.1 Add `stateFeedback` to the `askState` enum in `cmd/total-recall/ask.go`
 - [ ] 3.2 Add message types: `feedbackMsg{correct bool; correctText string; feedback string}` and `skipMsg{}`
-- [ ] 3.3 Update `postAnswer(id int64, answerIndex int) tea.Cmd` — change signature to accept `answerIndex int` (not choice text); POST body `{"id": N, "answer_index": N}`; URL `POST /recall/answer?feedback=true`; parse response into `feedbackMsg{correct, correctText, feedback}`; on connection error return `feedbackMsg{}` with zero values
+- [ ] 3.3 Update `postAnswer(id int64, answerIndex int) tea.Cmd` — change signature to accept `answerIndex int` (not choice text); POST body `{"id": N, "answer_index": N}`; URL `POST /recall/answer?feedback=true`; parse response into `feedbackMsg{correct, correctText, feedback}`; on connection error return `feedbackMsg{}` with zero values. Also delete the unused `postAnswerCmd` method (dead code in current `ask.go:244-249`, never invoked)
 - [ ] 3.4 Add `postSkip(id int64) tea.Cmd` — POST body `{"id": N, "skip": true}` to `/recall/answer`; return `skipMsg{}`; on connection error return `skipMsg{}` (best-effort)
 - [ ] 3.5 Update `updateQuestion` keypress handler:
   - `[1-3]` press: compute `answerIndex = int(key[0] - '1')`; transition to `stateFeedback`; return `postAnswer(id, answerIndex)` as `tea.Cmd`
@@ -70,13 +72,18 @@
   - All other messages: return `m, nil`
 - [ ] 3.7 Update `View()` for `stateFeedback`: return `"Evaluating..."` (static, no animation frame)
 - [ ] 3.8 Wire `updateFeedback` into the `Update()` dispatch switch
-- [ ] 3.9 Update `askModel` struct: replace `feedback string` with `feedbackResult feedbackMsg`; add `skipped bool`
-- [ ] 3.10 Update post-alt-screen rendering in `askCmd.RunE`: inspect `am.feedbackResult` and `am.skipped`:
-  - Correct: print `"✓ Correct.\n\n  <feedback>"` (omit feedback paragraph if empty)
-  - Incorrect: print `"✗ The answer was: <correct_text>\n\n  <feedback>"` (omit feedback paragraph if empty)
-  - Skip (`am.skipped`): print `"→ Question saved for later."`
+- [ ] 3.9 Update `askModel` struct: add `feedbackResult feedbackMsg` (correct/incorrect result with `correctText` and `feedback`); add `skipped bool`; rename the existing `feedback string` field to `advisory string` (it holds caught-up and daemon-unreachable terminal messages — not quiz feedback)
+- [ ] 3.10 Update post-alt-screen rendering in `askCmd.RunE`: inspect `am.skipped`, `am.feedbackResult`, and `am.advisory` in this order (mutually exclusive — exactly one is set per run):
+  - `am.skipped`: print `"→ Question saved for later."`
+  - `am.feedbackResult` populated — Correct: print `"✓ Correct.\n\n  <feedback>"` (omit feedback paragraph if empty)
+  - `am.feedbackResult` populated — Incorrect: print `"✗ The answer was: <correct_text>\n\n  <feedback>"` (omit feedback paragraph if empty)
+  - `am.advisory != ""` (caught up / daemon unreachable): print `am.advisory` as-is
   - q/Esc exit: print nothing
-- [ ] 3.11 Run `go build ./...` and `go vet ./...` — verify clean; manually test all four exit paths (correct, incorrect, skip, q-exit) with a running daemon and a queued question
+- [ ] 3.11 Update `cmd/total-recall/ask_test.go` existing tests that read the renamed `feedback` field:
+  - `TestAskTimeoutSetsCaughtUpFeedback` — change `got.feedback` to `got.advisory`
+  - `TestAskDaemonUnreachableShowsAdvisory` — change `got.feedback` to `got.advisory`
+  - `TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout` — change `got.feedback` to `got.advisory` (and the comparison value)
+- [ ] 3.12 Run `go build ./...` and `go vet ./...` — verify clean; manually test all five exit paths (correct, incorrect, skip, q-exit, caught-up) with a running daemon and a queued question
 
 ## 4. MCP Tool Updates (mcp-answer-updates)
 
