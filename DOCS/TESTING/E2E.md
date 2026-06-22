@@ -901,6 +901,244 @@ $r.StatusCode
 
 ---
 
+## Phase 04C — Answer Feedback Loop
+
+**Goal:** Answering a recall question is a complete cognitive event — the server evaluates correctness, persists the verdict, and (for terminal users) generates an AI explanation. MCP clients self-explain using their own knowledge.
+
+### Prerequisites
+
+- Binary built from current source.
+- Daemon running (`total-recall serve`) with AI configured (see Phase 03 prereqs).
+- Scratch Git repo with at least one concept-generating commit.
+- `curl` and `sqlite3` available (PowerShell `Invoke-RestMethod` on Windows).
+
+### Section A — Schema Migration
+
+```sh
+# 4C.1  Verify questions table now has the 4 new columns (POSIX)
+sqlite3 ~/.tr/memory.db "PRAGMA table_info(questions);"
+# Expected: columns include correct_index, answer_index, correct, feedback
+#           (in addition to id, question, choices, queued_at, delivered_at,
+#           claimed_by, answer, answered_at from Phase 4A)
+
+# 4C.1 (WINDOWS)
+sqlite3 "$env:USERPROFILE\.tr\memory.db" "PRAGMA table_info(questions);"
+```
+
+```sh
+# 4C.2  Idempotent re-run: stop and restart the daemon, then re-check
+#       (POSIX: kill the daemon with Ctrl-C, then `./tr serve` again)
+sqlite3 ~/.tr/memory.db "PRAGMA table_info(questions);"
+# Expected: same column set; no "duplicate column" error in daemon logs
+```
+
+### Section B — REST Feedback Path (`?feedback=true`)
+
+> Queue a question first: post a hook payload to `POST /hooks/pre-commit` and wait ~10s, or reuse an existing queued question.
+
+```sh
+# 4C.3  POST /recall/answer with answer_index and ?feedback=true (POSIX)
+# Replace 1 with the actual id, 0 with the correct answer index
+curl -s -X POST 'http://localhost:7331/recall/answer?feedback=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":1,"answer_index":0}'
+# Expected JSON:
+#   {"ok":true,"correct":<bool>,"correct_text":"<text>","feedback":"<text>"|null}
+# - "correct" reflects whether answer_index matched the stored correct_index
+# - "correct_text" is the choice text at the correct index
+# - "feedback" is the AI's plain-prose explanation (or null if AI call failed
+#   or feedback was not requested)
+```
+
+```powershell
+# 4C.3 (WINDOWS)
+$body = @{ id = 1; answer_index = 0 } | ConvertTo-Json
+Invoke-RestMethod `
+  -Uri 'http://localhost:7331/recall/answer?feedback=true' `
+  -Method POST `
+  -ContentType 'application/json' `
+  -Body $body
+# Expected: ok=True, correct=<bool>, correct_text=<text>, feedback=<text-or-null>
+```
+
+```sh
+# 4C.4  Without ?feedback=true — no AI call, feedback=null
+curl -s -X POST 'http://localhost:7331/recall/answer' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":2,"answer_index":1}'
+# Expected: {"ok":true,"correct":<bool>,"correct_text":"...","feedback":null}
+#           (feedback is always null when ?feedback=true is absent)
+```
+
+```sh
+# 4C.5  Skip path
+curl -s -X POST 'http://localhost:7331/recall/answer' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":3,"skip":true}'
+# Expected: {"ok":true}
+#           (no correct, no correct_text, no feedback)
+```
+
+```sh
+# 4C.6  Invalid answer_index — 400
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  'http://localhost:7331/recall/answer?feedback=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":1,"answer_index":99}'
+# Expected: 400
+#           {"error":"answer_index out of range"}
+```
+
+```sh
+# 4C.7  Unknown question ID — 404
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  'http://localhost:7331/recall/answer?feedback=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":99999,"answer_index":0}'
+# Expected: 404
+```
+
+```sh
+# 4C.8  Inspect the persisted row after 4C.3 (POSIX)
+sqlite3 ~/.tr/memory.db \
+  "SELECT id, answer, answer_index, correct, substr(feedback, 1, 60)
+     FROM questions WHERE id = 1;"
+# Expected: row shows the choice text, the 0-based index, 0 or 1 for correct,
+#           and the start of the AI feedback string (or NULL if AI failed)
+
+# 4C.8 (WINDOWS)
+sqlite3 "$env:USERPROFILE\.tr\memory.db" `
+  "SELECT id, answer, answer_index, correct, substr(feedback, 1, 60)
+     FROM questions WHERE id = 1;"
+```
+
+### Section C — `tr ask` Feedback Render
+
+```sh
+# 4C.9  Correct answer — verdict + feedback paragraph
+#       Queue a question, then run tr ask and press the correct key
+./tr ask          # POSIX
+.\tr.exe ask      # Windows
+# Expected TUI flow:
+#   "Thinking." → question displayed → [1-N] press →
+#   "Evaluating..." (alt-screen) → alt-screen closes →
+#   "✓ Correct."
+#   ""
+#   "   <one to three sentences of feedback>"
+```
+
+```sh
+# 4C.10  Incorrect answer — correct_text named, feedback paragraph follows
+#        Queue a question, run tr ask, press a wrong key
+./tr ask
+# Expected after alt-screen closes:
+#   "✗ The answer was: <correct choice text>"
+#   ""
+#   "   <feedback explaining why correct is right and why chosen doesn't fit>"
+```
+
+```sh
+# 4C.11  Skip — gentle acknowledgement, no feedback
+#        Queue a question, run tr ask, press Enter
+./tr ask
+# Expected after alt-screen closes:
+#   "→ Question saved for later."
+```
+
+```sh
+# 4C.12  q / Esc — silent exit, no POST
+./tr ask
+# Expected: alt-screen closes, nothing printed to stdout
+#           question remains unclaimed in the queue (re-deliverable)
+```
+
+```sh
+# 4C.13  Feedback AI failure — verdict still printed, no paragraph
+#        With AI provider returning errors (e.g. invalid key), answer a
+#        question via tr ask with ?feedback=true
+# Expected after alt-screen closes:
+#   "✓ Correct." OR "✗ The answer was: ..."
+#   (no feedback paragraph — graceful degradation)
+```
+
+```sh
+# 4C.14  Daemon unreachable during postAnswer — silent exit
+#        Stop the daemon, then run tr ask and press a key
+# Expected: no output after alt-screen closes; exit code 0
+#           (same behaviour as the TTY-guard / connection-error path)
+```
+
+### Section D — MCP Self-Explanation Path
+
+```sh
+# 4C.15  recall_next returns correct_index (POSIX)
+#        Use any MCP-aware client (Claude Code, Copilot CLI) connected to
+#        http://localhost:7331/mcp/ and call recall_next
+# Expected response shape:
+#   {"id":1,"question":"...","choices":[...],"correct_index":<0-based index>}
+```
+
+```sh
+# 4C.16  recall_answer — no AI feedback call, correctness returned
+#        After 4C.15, call recall_answer with the user's answer
+# Expected response:
+#   {"ok":true,"correct":<bool>,"correct_index":<int>,"correct_text":"..."}
+# Verify in the daemon logs: no "[recall] feedback AI call failed" line
+# (the MCP path never triggers feedback generation)
+```
+
+```sh
+# 4C.17  recall_answer — skip
+#        Call recall_answer with {"id": <N>, "skip": true}
+# Expected: {"ok":true}
+```
+
+```sh
+# 4C.18  recall_workflow prompt instructs self-explanation
+#        Retrieve the recall_workflow prompt
+# Expected prompt text mentions:
+#   - "tell the user whether they were correct"
+#   - "brief, direct explanation"
+#   - "Do NOT call a separate AI tool for the explanation"
+```
+
+### Section E — Enriched `recall://recent`
+
+```sh
+# 4C.19  recall://recent includes the new fields
+#        After at least one answered question, read the resource
+# Expected each row includes: id, question, choices, correct_index,
+#                              answer_index, correct, feedback
+# Skipped rows: answer_index=null, correct=null, feedback=null
+# MCP rows: feedback=null (no AI feedback generated server-side)
+# Terminal rows: feedback=non-null string (AI prose)
+```
+
+### Section F — Graceful Degradation (regression check)
+
+```sh
+# 4C.20  AI feedback failure — answer still recorded
+#        With a bad API key in the env, answer a question via curl
+# Expected:
+#   - Response is 200 OK with correct/incorrect verdict
+#   - feedback is null in the response
+#   - DB row has answer_index, correct set; feedback is NULL
+#   - Daemon log shows: "[recall] feedback AI call failed: ..."
+#   - No panic, no error
+```
+
+```sh
+# 4C.21  All Phase 4A regression checks still pass
+#        Re-run checks 4.5 (POST /recall/answer), 4.6 (skip), 4.7 (memory.db
+#        inspection), 4.8 (tr ask caught-up), 4.9 (tr ask with question),
+#        4.10 (TTY guard), 4.11 (daemon-unreachable advisory)
+# Expected: all pass unchanged — Phase 4C is additive
+```
+
+**Not yet testable in this phase:** Spaced repetition / difficulty progression (future); scoring dashboards / `tr review` subcommand (future); VS Code extension delivery (Phase 4B).
+
+---
+
 ## Adding a New Phase
 
 When a new phase is archived, append a section following this template:
