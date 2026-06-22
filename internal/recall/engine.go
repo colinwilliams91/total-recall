@@ -94,12 +94,12 @@ func (e *Engine) Synthesize(ctx context.Context, difficulty, model string) (*Que
 // caller is expected to continue with empty feedback rather than fail the
 // answer record — feedback failure must never block the answer from being
 // stored.
-func (e *Engine) GenerateFeedback(ctx context.Context, question string, choices []string, correctIndex, answerIndex int, model string) (string, error) {
+func (e *Engine) GenerateFeedback(ctx context.Context, question string, choices []string, correctIndex, answerIndex int, model string) string {
 	req := FeedbackRequest(question, choices, correctIndex, answerIndex, model)
 	raw, err := e.provider.Complete(ctx, req)
 	if err != nil {
 		log.Printf("[recall] feedback AI call failed: %v", err)
-		return "", nil
+		return ""
 	}
-	return raw, nil
+	return raw
 }

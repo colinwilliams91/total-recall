@@ -59,8 +59,8 @@ type HealthResponse struct {
 // Server is the Total Recall daemon HTTP server.
 type Server struct {
 	cfg          *config.Config
-	provider     ai.Provider   // nil when AI is not configured
-	store        *cache.Store  // nil when AI is not configured
+	provider     ai.Provider  // nil when AI is not configured
+	store        *cache.Store // nil when AI is not configured
 	recallEngine *recall.Engine
 	dispatcher   Dispatcher
 	mcpServer    *mcp.Server
@@ -211,9 +211,9 @@ func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID          int64  `json:"id"`
-		AnswerIndex *int   `json:"answer_index"`
-		Skip        bool   `json:"skip"`
+		ID          int64 `json:"id"`
+		AnswerIndex *int  `json:"answer_index"`
+		Skip        bool  `json:"skip"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -250,11 +250,7 @@ func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 
 	feedback := ""
 	if r.URL.Query().Get("feedback") == "true" && s.recallEngine != nil {
-		fb, fbErr := s.recallEngine.GenerateFeedback(r.Context(), q.Question, q.Choices, q.CorrectIndex, *body.AnswerIndex, s.cfg.AI.Model)
-		if fbErr != nil {
-			log.Printf("[recall] feedback generation error: %v", fbErr)
-		}
-		feedback = fb
+		feedback = s.recallEngine.GenerateFeedback(r.Context(), q.Question, q.Choices, q.CorrectIndex, *body.AnswerIndex, s.cfg.AI.Model)
 	}
 
 	if err := s.store.AnswerQuestion(r.Context(), body.ID, *body.AnswerIndex, answerText, correct, feedback); err != nil {

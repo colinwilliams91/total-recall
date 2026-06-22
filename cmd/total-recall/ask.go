@@ -35,39 +35,39 @@ func askCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ask",
 		Short: "Surface the next recall question in your terminal",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !term.IsTerminal(int(os.Stdout.Fd())) {
-			return nil
-		}
-		m := newAskModel(time.Duration(timeout) * time.Second)
-		p := tea.NewProgram(m)
-		finalModel, err := p.Run()
-		if err != nil {
-			return err
-		}
-		am, ok := finalModel.(askModel)
-		if !ok {
-			return nil
-		}
-		switch {
-		case am.advisory != "":
-			fmt.Println(am.advisory)
-		case am.skipped:
-			fmt.Println("→ Question saved for later.")
-		case am.feedbackResult.correctText != "":
-			fr := am.feedbackResult
-			if fr.correct {
-				fmt.Println("✓ Correct.")
-			} else {
-				fmt.Printf("✗ The answer was: %s\n", fr.correctText)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !term.IsTerminal(int(os.Stdout.Fd())) {
+				return nil
 			}
-			if fr.feedback != "" {
-				fmt.Println()
-				fmt.Printf("  %s\n", fr.feedback)
+			m := newAskModel(time.Duration(timeout) * time.Second)
+			p := tea.NewProgram(m)
+			finalModel, err := p.Run()
+			if err != nil {
+				return err
 			}
-		}
-		return nil
-	},
+			am, ok := finalModel.(askModel)
+			if !ok {
+				return nil
+			}
+			switch {
+			case am.advisory != "":
+				fmt.Println(am.advisory)
+			case am.skipped:
+				fmt.Println("→ Question saved for later.")
+			case am.feedbackResult.correctText != "":
+				fr := am.feedbackResult
+				if fr.correct {
+					fmt.Println("✓ Correct.")
+				} else {
+					fmt.Printf("✗ The answer was: %s\n", fr.correctText)
+				}
+				if fr.feedback != "" {
+					fmt.Println()
+					fmt.Printf("  %s\n", fr.feedback)
+				}
+			}
+			return nil
+		},
 	}
 
 	cmd.Flags().IntVar(&timeout, "timeout", 15, "Seconds to wait for a question before exiting")
@@ -247,10 +247,9 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case feedbackMsg:
 		m.feedbackResult = msg
-		m.state = stateDone
-		return m, tea.Quit
-	case skipMsg:
-		m.skipped = true
+		if msg.correctText == "" {
+			m.advisory = "[total-recall] Could not reach daemon — answer not recorded."
+		}
 		m.state = stateDone
 		return m, tea.Quit
 	case tea.KeyMsg:
