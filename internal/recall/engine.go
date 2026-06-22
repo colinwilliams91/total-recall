@@ -85,3 +85,21 @@ func (e *Engine) Synthesize(ctx context.Context, difficulty, model string) (*Que
 
 	return &q, nil
 }
+
+// GenerateFeedback calls the configured AI provider to produce a short prose
+// explanation of whether the developer answered correctly, why the correct
+// answer is right, and (if applicable) why the chosen answer doesn't fit.
+//
+// On AI error, the failure is logged and an empty string is returned. The
+// caller is expected to continue with empty feedback rather than fail the
+// answer record — feedback failure must never block the answer from being
+// stored.
+func (e *Engine) GenerateFeedback(ctx context.Context, question string, choices []string, correctIndex, answerIndex int, model string) string {
+	req := FeedbackRequest(question, choices, correctIndex, answerIndex, model)
+	raw, err := e.provider.Complete(ctx, req)
+	if err != nil {
+		log.Printf("[recall] feedback AI call failed: %v", err)
+		return ""
+	}
+	return raw
+}
