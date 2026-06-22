@@ -237,60 +237,56 @@ if (-not $hasApiKey -and $effectiveProvider -ne "ollama" -and $effectiveProvider
     }
 
     New-ScratchRepo
-    Push-Location $script:ScratchRepo
 
-    @"
-package main
+    try {
+        Push-Location $script:ScratchRepo
+        New-MockStagedChange
+        git commit -m "feat: add exponential backoff helper" 2>&1 | Out-Null
+        $realCommitExit = $LASTEXITCODE
+        Pop-Location
 
-import (
-    "math"
-    "time"
-)
+        if ($realCommitExit -eq 0) {
+            Write-Pass "3.9a" "Real commit completes (hook is non-blocking)"
+        } else {
+            Write-Fail "3.9a" "Real commit completes" "Exit code: $realCommitExit"
+        }
 
-func retryWithBackoff(attempt int) {
-    delay := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-    time.Sleep(delay)
-}
-"@ | Set-Content "retry.go"
+        Write-Host "  [wait] Polling daemon for commit pipeline output (~15s)..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 15
+        $commitLogs = Get-DaemonOutput
 
-    git add . | Out-Null
-    git commit -m "feat: add exponential backoff helper" 2>&1 | Out-Null
-    $realCommitExit = $LASTEXITCODE
-    Pop-Location
-
-    if ($realCommitExit -eq 0) {
-        Write-Pass "3.9a" "Real commit completes (hook is non-blocking)"
-    } else {
-        Write-Fail "3.9a" "Real commit completes" "Exit code: $realCommitExit"
+        if ($commitLogs -match "Recall|question|🧠|\[pipeline\]") {
+            Write-Pass "3.9b" "Daemon processes commit through AI pipeline"
+        } else {
+            Write-Fail "3.9b" "Daemon processes commit through AI pipeline" "No pipeline output found. Daemon output: $commitLogs"
+        }
+    } finally {
+        Push-Location $script:ScratchRepo
+        Remove-MockCommit
+        Pop-Location
     }
 
-    Write-Host "  [wait] Polling daemon for commit pipeline output (~15s)..." -ForegroundColor DarkGray
-    Start-Sleep -Seconds 15
-    $commitLogs = Get-DaemonOutput
+    try {
+        Push-Location $script:ScratchRepo
+        git commit --allow-empty -m "chore: empty commit" 2>&1 | Out-Null
+        $emptyExit = $LASTEXITCODE
+        Pop-Location
 
-    if ($commitLogs -match "Recall|question|🧠|\[pipeline\]") {
-        Write-Pass "3.9b" "Daemon processes commit through AI pipeline"
-    } else {
-        Write-Skip "3.9b" "Pipeline output not captured (AI may be slow)"
-    }
+        if ($emptyExit -eq 0) {
+            Write-Pass "3.10a" "Empty commit succeeds"
+        } else {
+            Write-Fail "3.10a" "Empty commit succeeds" "Exit code: $emptyExit"
+        }
 
-    Push-Location $script:ScratchRepo
-    git commit --allow-empty -m "chore: empty commit" 2>&1 | Out-Null
-    $emptyExit = $LASTEXITCODE
-    Pop-Location
-
-    if ($emptyExit -eq 0) {
-        Write-Pass "3.10a" "Empty commit succeeds"
-    } else {
-        Write-Fail "3.10a" "Empty commit succeeds" "Exit code: $emptyExit"
-    }
-
-    Start-Sleep -Seconds 3
-    $emptyLogs = Get-DaemonOutput
-    if ($emptyLogs -match "no diff|skipping|skip") {
-        Write-Pass "3.10b" "Daemon logs skip for empty diff"
-    } else {
-        Write-Skip "3.10b" "Skip log not found (may use different wording)"
+        Start-Sleep -Seconds 3
+        $emptyLogs = Get-DaemonOutput
+        if ($emptyLogs -match "no diff|skipping|skip") {
+            Write-Pass "3.10b" "Daemon logs skip for empty diff"
+        } else {
+            Write-Fail "3.10b" "Daemon logs skip for empty diff" "No skip log found. Daemon output: $emptyLogs"
+        }
+    } finally {
+        # No mock commit to remove for --allow-empty
     }
 
     Stop-TrDaemon
@@ -357,33 +353,38 @@ if ($hasApiKey) {
     New-ScratchRepo
     Start-TrDaemon
 
-    Push-Location $script:ScratchRepo
-    "test" | Set-Content "test.txt"
-    git add . | Out-Null
-    git commit -m "test: bad api key" 2>&1 | Out-Null
-    $badKeyCommitExit = $LASTEXITCODE
-    Pop-Location
+    try {
+        Push-Location $script:ScratchRepo
+        New-MockStagedChange
+        git commit -m "test: bad api key" 2>&1 | Out-Null
+        $badKeyCommitExit = $LASTEXITCODE
+        Pop-Location
 
-    if ($badKeyCommitExit -eq 0) {
-        Write-Pass "3.16a" "Commit succeeds with bad API key (non-blocking)"
-    } else {
-        Write-Fail "3.16a" "Commit succeeds with bad API key" "Exit code: $badKeyCommitExit"
-    }
+        if ($badKeyCommitExit -eq 0) {
+            Write-Pass "3.16a" "Commit succeeds with bad API key (non-blocking)"
+        } else {
+            Write-Fail "3.16a" "Commit succeeds with bad API key" "Exit code: $badKeyCommitExit"
+        }
 
-    Start-Sleep -Seconds 5
-    $badKeyLogs = Get-DaemonOutput
+        Start-Sleep -Seconds 5
+        $badKeyLogs = Get-DaemonOutput
 
-    if ($badKeyLogs -match "failed|error|AI call") {
-        Write-Pass "3.16b" "Daemon logs AI failure (no crash)"
-    } else {
-        Write-Skip "3.16b" "AI failure log not captured"
-    }
+        if ($badKeyLogs -match "failed|error|AI call") {
+            Write-Pass "3.16b" "Daemon logs AI failure (no crash)"
+        } else {
+            Write-Fail "3.16b" "Daemon logs AI failure (no crash)" "No failure log found. Daemon output: $badKeyLogs"
+        }
 
-    $healthAfterFail = Test-DaemonRunning
-    if ($healthAfterFail) {
-        Write-Pass "3.16c" "Daemon continues running after AI failure"
-    } else {
-        Write-Fail "3.16c" "Daemon continues running after AI failure" "Health check failed"
+        $healthAfterFail = Test-DaemonRunning
+        if ($healthAfterFail) {
+            Write-Pass "3.16c" "Daemon continues running after AI failure"
+        } else {
+            Write-Fail "3.16c" "Daemon continues running after AI failure" "Health check failed"
+        }
+    } finally {
+        Push-Location $script:ScratchRepo
+        Remove-MockCommit
+        Pop-Location
     }
 
     Stop-TrDaemon

@@ -81,7 +81,11 @@ if ($recallNext.StatusCode -eq 200) {
         Write-Skip "4.3d" "Choices not found (question may not have choices)"
     }
 } elseif ($recallNext.StatusCode -eq 204) {
-    Write-Skip "4.3a" "No question queued yet (AI may be slow or failed)"
+    if (-not $hasApiKey) {
+        Write-Skip "4.3a" "No API key configured — AI pipeline cannot queue questions"
+    } else {
+        Write-Skip "4.3a" "No question queued yet (AI may be slow or failed)"
+    }
     Write-Skip "4.3b" "Depends on 4.3a"
     Write-Skip "4.3c" "Depends on 4.3a"
     Write-Skip "4.3d" "Depends on 4.3a"

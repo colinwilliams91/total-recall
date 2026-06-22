@@ -9,14 +9,16 @@ $script:skipped = 0
 $script:manual  = 0
 $script:results = @()
 
-$script:TrBin       = $null
-$script:ScratchRepo = $null
-$script:DaemonProc  = $null
-$script:DaemonOutput = @()
-$script:startTime   = $null
-$script:phaseId     = "unknown"
-$script:outputDir   = Join-Path $PSScriptRoot "output"
-$script:CleanAfter  = $false
+$script:TrBin          = $null
+$script:ScratchRepo    = $null
+$script:DaemonProc     = $null
+$script:DaemonLogOut   = $null
+$script:DaemonLogErr   = $null
+$script:DaemonOutput   = @()
+$script:startTime      = $null
+$script:phaseId        = "unknown"
+$script:outputDir      = Join-Path $PSScriptRoot "output"
+$script:CleanAfter     = $false
 
 function Initialize-E2E {
     param(
@@ -193,18 +195,27 @@ function Start-TrDaemon {
         Stop-TrDaemon
     }
 
+    $script:DaemonLogOut = Join-Path $env:TEMP "tr-daemon-stdout-$([guid]::NewGuid()).log"
+    $script:DaemonLogErr = Join-Path $env:TEMP "tr-daemon-stderr-$([guid]::NewGuid()).log"
+
     $script:DaemonProc = Start-Process -FilePath $script:TrBin `
         -ArgumentList "serve" `
         -WorkingDirectory (Split-Path $script:TrBin -Parent) `
+        -RedirectStandardOutput $script:DaemonLogOut `
+        -RedirectStandardError $script:DaemonLogErr `
         -PassThru `
-        -WindowStyle Hidden
+        -NoNewWindow
 
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 500
 
         if ($script:DaemonProc.HasExited) {
-            Write-Fail "DAEMON" "Daemon process exited prematurely" "Exit code: $($script:DaemonProc.ExitCode)"
+            $stderr = ""
+            if (Test-Path $script:DaemonLogErr) {
+                $stderr = Get-Content $script:DaemonLogErr -Raw -ErrorAction SilentlyContinue
+            }
+            Write-Fail "DAEMON" "Daemon process exited prematurely" "Exit code: $($script:DaemonProc.ExitCode). Stderr: $stderr"
             $script:DaemonProc = $null
             return
         }
@@ -224,6 +235,19 @@ function Start-TrDaemon {
 }
 
 function Stop-TrDaemon {
+    if ($script:DaemonLogOut -and (Test-Path $script:DaemonLogOut)) {
+        $content = Get-Content $script:DaemonLogOut -Raw -ErrorAction SilentlyContinue
+        if ($content -and -not $script:DaemonOutput.Contains($content)) {
+            $script:DaemonOutput += $content
+        }
+    }
+    if ($script:DaemonLogErr -and (Test-Path $script:DaemonLogErr)) {
+        $content = Get-Content $script:DaemonLogErr -Raw -ErrorAction SilentlyContinue
+        if ($content -and -not $script:DaemonOutput.Contains($content)) {
+            $script:DaemonOutput += $content
+        }
+    }
+
     if ($script:DaemonProc -and -not $script:DaemonProc.HasExited) {
         $script:DaemonProc.Kill()
         $script:DaemonProc.WaitForExit(5000)
@@ -237,9 +261,28 @@ function Stop-TrDaemon {
         $procs | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
     }
+
+    if ($script:DaemonLogOut -and (Test-Path $script:DaemonLogOut)) {
+        Remove-Item $script:DaemonLogOut -Force -ErrorAction SilentlyContinue
+    }
+    if ($script:DaemonLogErr -and (Test-Path $script:DaemonLogErr)) {
+        Remove-Item $script:DaemonLogErr -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-DaemonOutput {
+    if ($script:DaemonLogOut -and (Test-Path $script:DaemonLogOut)) {
+        $content = Get-Content $script:DaemonLogOut -Raw -ErrorAction SilentlyContinue
+        if ($content -and -not $script:DaemonOutput.Contains($content)) {
+            $script:DaemonOutput += $content
+        }
+    }
+    if ($script:DaemonLogErr -and (Test-Path $script:DaemonLogErr)) {
+        $content = Get-Content $script:DaemonLogErr -Raw -ErrorAction SilentlyContinue
+        if ($content -and -not $script:DaemonOutput.Contains($content)) {
+            $script:DaemonOutput += $content
+        }
+    }
     return ($script:DaemonOutput -join "`n")
 }
 
@@ -319,8 +362,12 @@ function New-ScratchRepo {
 
 function Remove-ScratchRepo {
     if (Test-Path $script:ScratchRepo) {
-        Get-ChildItem -Path $script:ScratchRepo -Recurse -Force | ForEach-Object {
-            $_.Attributes = 'Normal'
+        Get-ChildItem -Path $script:ScratchRepo -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $_.Attributes = 'Normal'
+            } catch {
+                # Ignore files we can't modify (e.g., locked hook files)
+            }
         }
         Remove-Item -Path $script:ScratchRepo -Recurse -Force -ErrorAction SilentlyContinue
     }

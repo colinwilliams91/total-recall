@@ -155,26 +155,31 @@ if ($hookResult.Body -match '"status"\s*:\s*"received"') {
     Write-Fail "2.8b" "Hook response contains status:received" "Body: $($hookResult.Body)"
 }
 
-Push-Location $script:ScratchRepo
-"hello world" | Set-Content "foo.txt"
-git add . | Out-Null
-git commit -m "test: trigger TR hook" 2>&1 | Out-Null
-$commitExit = $LASTEXITCODE
-Pop-Location
+try {
+    Push-Location $script:ScratchRepo
+    New-MockStagedChange
+    git commit -m "test: trigger TR hook" 2>&1 | Out-Null
+    $commitExit = $LASTEXITCODE
+    Pop-Location
 
-Start-Sleep -Seconds 2
-$daemonLogs = Get-DaemonOutput
+    Start-Sleep -Seconds 2
+    $daemonLogs = Get-DaemonOutput
 
-if ($commitExit -eq 0) {
-    Write-Pass "2.9a" "Real commit succeeds (hook is non-blocking)"
-} else {
-    Write-Fail "2.9a" "Real commit succeeds" "Commit exited with code $commitExit"
-}
+    if ($commitExit -eq 0) {
+        Write-Pass "2.9a" "Real commit succeeds (hook is non-blocking)"
+    } else {
+        Write-Fail "2.9a" "Real commit succeeds" "Commit exited with code $commitExit"
+    }
 
-if ($daemonLogs -match '\[hook\]') {
-    Write-Pass "2.9b" "Daemon logs hook dispatch"
-} else {
-    Write-Skip "2.9b" "Daemon hook log not captured (may need longer wait)"
+    if ($daemonLogs -match '\[hook\]') {
+        Write-Pass "2.9b" "Daemon logs hook dispatch"
+    } else {
+        Write-Fail "2.9b" "Daemon logs hook dispatch" "No [hook] log found. Daemon output: $daemonLogs"
+    }
+} finally {
+    Push-Location $script:ScratchRepo
+    Remove-MockCommit
+    Pop-Location
 }
 
 Write-Host ""
@@ -240,24 +245,29 @@ Write-Host "  [setup] Stopping daemon for graceful degradation test..." -Foregro
 Stop-TrDaemon
 Start-Sleep -Seconds 1
 
-Push-Location $script:ScratchRepo
-"test content" | Add-Content "foo.txt"
-git add . | Out-Null
-$graceOutput = git commit -m "test: no daemon" 2>&1
-$graceExit = $LASTEXITCODE
-$graceText = $graceOutput -join "`n"
-Pop-Location
+try {
+    Push-Location $script:ScratchRepo
+    New-MockStagedChange
+    $graceOutput = git commit -m "test: no daemon" 2>&1
+    $graceExit = $LASTEXITCODE
+    $graceText = $graceOutput -join "`n"
+    Pop-Location
 
-if ($graceExit -eq 0) {
-    Write-Pass "2.11a" "Commit succeeds when daemon is down (non-blocking)"
-} else {
-    Write-Fail "2.11a" "Commit succeeds when daemon is down" "Exit code: $graceExit"
-}
+    if ($graceExit -eq 0) {
+        Write-Pass "2.11a" "Commit succeeds when daemon is down (non-blocking)"
+    } else {
+        Write-Fail "2.11a" "Commit succeeds when daemon is down" "Exit code: $graceExit"
+    }
 
-if ($graceText -match "Daemon not running|daemon|total-recall") {
-    Write-Pass "2.11b" "Advisory message printed when daemon is unreachable"
-} else {
-    Write-Skip "2.11b" "Advisory message (may not print if hooks not installed)"
+    if ($graceText -match "Daemon not running|daemon|total-recall") {
+        Write-Pass "2.11b" "Advisory message printed when daemon is unreachable"
+    } else {
+        Write-Skip "2.11b" "Advisory message (may not print if hooks not installed)"
+    }
+} finally {
+    Push-Location $script:ScratchRepo
+    Remove-MockCommit
+    Pop-Location
 }
 
 Remove-ScratchRepo
