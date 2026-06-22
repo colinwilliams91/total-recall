@@ -125,7 +125,9 @@ function Write-Manual {
         Write-Host ""
         Write-Host "  [VERIFY] Running auto-verification..." -ForegroundColor Yellow
         $verifyResult = & $Verify
-        if ($verifyResult.Passed) {
+        if ($verifyResult.Skipped) {
+            Write-Skip $Id $verifyResult.Detail
+        } elseif ($verifyResult.Passed) {
             $script:manual++
             $script:results += @{ Id = $Id; Status = "MANUAL"; Description = $Description; Timestamp = (Get-Date).ToUniversalTime().ToString("o"); Verified = $true }
             Write-Host "  [PASS] $Id — Manually verified + auto-verified" -ForegroundColor Green
@@ -247,6 +249,20 @@ function Test-DaemonRunning {
         return ($r.StatusCode -eq 200)
     } catch {
         return $false
+    }
+}
+
+function Clear-RecallQueue {
+    while ($true) {
+        $result = Invoke-TrGet "/recall/next"
+        if ($result.StatusCode -ne 200) { break }
+        if ($result.Body -match '"id"\s*:\s*(\d+)') {
+            $qid = $Matches[1]
+            $skipBody = "{`"id`":$qid,`"answer`":`"skip`"}"
+            $null = Invoke-TrPost "/recall/answer" $skipBody
+        } else {
+            break
+        }
     }
 }
 
@@ -522,4 +538,30 @@ function Write-Summary {
     }
 
     exit 0
+}
+
+function New-MockStagedChange {
+    param([string]$RepoPath = $script:ScratchRepo)
+
+    Push-Location $RepoPath
+    try {
+        New-Item -ItemType File -Path "dummy.txt" -Value "testing post-commit hook after git payload" -Force | Out-Null
+        git add dummy.txt | Out-Null
+    } finally {
+        Pop-Location
+    }
+}
+
+function Remove-MockCommit {
+    param([string]$RepoPath = $script:ScratchRepo)
+
+    Push-Location $RepoPath
+    try {
+        git reset --hard HEAD | Out-Null
+        if (Test-Path "dummy.txt") {
+            Remove-Item -Path "dummy.txt" -Force
+        }
+    } finally {
+        Pop-Location
+    }
 }
