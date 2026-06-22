@@ -35,25 +35,39 @@ func askCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ask",
 		Short: "Surface the next recall question in your terminal",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if !term.IsTerminal(int(os.Stdout.Fd())) {
-				return nil
-			}
-			m := newAskModel(time.Duration(timeout) * time.Second)
-			p := tea.NewProgram(m)
-			finalModel, err := p.Run()
-			if err != nil {
-				return err
-			}
-			// Print feedback after the Bubble Tea program exits.
-			if am, ok := finalModel.(askModel); ok && am.feedback != "" {
-				fmt.Println(am.feedback)
-			}
-			// else {
-			// 	p.Println("\nPress any key to continue...")
-			// }
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if !term.IsTerminal(int(os.Stdout.Fd())) {
 			return nil
-		},
+		}
+		m := newAskModel(time.Duration(timeout) * time.Second)
+		p := tea.NewProgram(m)
+		finalModel, err := p.Run()
+		if err != nil {
+			return err
+		}
+		am, ok := finalModel.(askModel)
+		if !ok {
+			return nil
+		}
+		switch {
+		case am.advisory != "":
+			fmt.Println(am.advisory)
+		case am.skipped:
+			fmt.Println("→ Question saved for later.")
+		case am.feedbackResult.correctText != "":
+			fr := am.feedbackResult
+			if fr.correct {
+				fmt.Println("✓ Correct.")
+			} else {
+				fmt.Printf("✗ The answer was: %s\n", fr.correctText)
+			}
+			if fr.feedback != "" {
+				fmt.Println()
+				fmt.Printf("  %s\n", fr.feedback)
+			}
+		}
+		return nil
+	},
 	}
 
 	cmd.Flags().IntVar(&timeout, "timeout", 15, "Seconds to wait for a question before exiting")
@@ -67,6 +81,7 @@ type askState int
 const (
 	stateThinking askState = iota
 	stateQuestion
+	stateFeedback
 	stateDone
 )
 
@@ -81,18 +96,26 @@ type questionMsg struct {
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
 type answerPostedMsg struct{}
+type feedbackMsg struct {
+	correct     bool
+	correctText string
+	feedback    string
+}
+type skipMsg struct{}
 
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type askModel struct {
-	state      askState
-	frame      int
-	started    time.Time
-	timeout    time.Duration
-	polling    bool // true while an HTTP poll is in flight
-	question   questionMsg
-	feedback   string
-	httpClient *http.Client
+	state          askState
+	frame          int
+	started        time.Time
+	timeout        time.Duration
+	polling        bool // true while an HTTP poll is in flight
+	question       questionMsg
+	feedbackResult feedbackMsg
+	skipped        bool
+	advisory       string
+	httpClient     *http.Client
 }
 
 func newAskModel(timeout time.Duration) askModel {
@@ -144,6 +167,8 @@ func (m askModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateThinking(msg)
 	case stateQuestion:
 		return m.updateQuestion(msg)
+	case stateFeedback:
+		return m.updateFeedback(msg)
 	}
 	return m, tea.Quit
 }
@@ -154,7 +179,7 @@ func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame = (m.frame + 1) % len(animFrames)
 		if time.Since(m.started) >= m.timeout {
 			m.state = stateDone
-			m.feedback = caughtUpMessage
+			m.advisory = caughtUpMessage
 			return m, tea.Quit
 		}
 		var cmds []tea.Cmd
@@ -177,7 +202,7 @@ func (m askModel) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case daemonUnreachableMsg:
 		m.state = stateDone
-		m.feedback = daemonUnavailableMessage
+		m.advisory = daemonUnavailableMessage
 		return m, tea.Quit
 
 	case tea.KeyMsg:
@@ -195,56 +220,82 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	answer := ""
-	feedback := ""
-
 	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
-			answer = m.question.choices[idx]
-			feedback = "🧠🤖 ✓ recorded"
+			m.state = stateFeedback
+			return m, postAnswer(m.question.id, idx, m.httpClient)
 		}
-	} else {
-		switch k.String() {
-		case "enter":
-			answer = "skip"
-			feedback = "🧠🤖 → skipped"
-		case "q", "esc":
-			m.state = stateDone
-			return m, tea.Quit
-		case "ctrl+c":
-			m.state = stateDone
-			return m, tea.Quit
-		default:
-			return m, nil
-		}
+		return m, nil
 	}
 
-	if answer != "" {
-		m.feedback = feedback
+	switch k.String() {
+	case "enter":
 		m.state = stateDone
-		go func() {
-			_ = m.postAnswer(m.question.id, answer)
-		}()
+		m.skipped = true
+		return m, postSkip(m.question.id, m.httpClient)
+	case "q", "esc":
+		m.state = stateDone
+		return m, tea.Quit
+	case "ctrl+c":
+		m.state = stateDone
 		return m, tea.Quit
 	}
-	m.state = stateDone
-	return m, tea.Quit
+	return m, nil
 }
 
-func (m askModel) postAnswer(id int64, answer string) error {
-	body, _ := json.Marshal(map[string]any{"id": id, "answer": answer})
-	resp, err := m.httpClient.Post(daemonBaseURL+"/recall/answer", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
+func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case feedbackMsg:
+		m.feedbackResult = msg
+		m.state = stateDone
+		return m, tea.Quit
+	case skipMsg:
+		m.skipped = true
+		m.state = stateDone
+		return m, tea.Quit
+	case tea.KeyMsg:
+		if msg.Type == tea.KeyCtrlC {
+			m.state = stateDone
+			return m, tea.Quit
+		}
 	}
-	defer resp.Body.Close()
-	return nil
+	return m, nil
 }
 
-func (m askModel) postAnswerCmd(id int64, answer string) tea.Cmd {
+func postAnswer(id int64, answerIndex int, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
-		_ = m.postAnswer(id, answer)
-		return answerPostedMsg{}
+		body, _ := json.Marshal(map[string]any{"id": id, "answer_index": answerIndex})
+		resp, err := client.Post(daemonBaseURL+"/recall/answer?feedback=true", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return feedbackMsg{}
+		}
+		defer resp.Body.Close()
+		var out struct {
+			OK          bool   `json:"ok"`
+			Correct     bool   `json:"correct"`
+			CorrectText string `json:"correct_text"`
+			Feedback    string `json:"feedback"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return feedbackMsg{}
+		}
+		return feedbackMsg{
+			correct:     out.Correct,
+			correctText: out.CorrectText,
+			feedback:    out.Feedback,
+		}
+	}
+}
+
+func postSkip(id int64, client *http.Client) tea.Cmd {
+	return func() tea.Msg {
+		body, _ := json.Marshal(map[string]any{"id": id, "skip": true})
+		resp, err := client.Post(daemonBaseURL+"/recall/answer", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return skipMsg{}
+		}
+		defer resp.Body.Close()
+		return skipMsg{}
 	}
 }
 
@@ -257,6 +308,8 @@ func (m askModel) View() string {
 		return "\r" + "🤖🧠" + " " + animFrames[m.frame] + "   "
 	case stateQuestion:
 		return renderQuestion(m.question)
+	case stateFeedback:
+		return "\rEvaluating...   "
 	case stateDone:
 		return "\n\nPress any key to continue...\n"
 	}

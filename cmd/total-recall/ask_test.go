@@ -29,8 +29,8 @@ func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone, got %v", got.state)
 	}
-	if got.feedback != caughtUpMessage {
-		t.Fatalf("expected feedback %q, got %q", caughtUpMessage, got.feedback)
+	if got.advisory != caughtUpMessage {
+		t.Fatalf("expected advisory %q, got %q", caughtUpMessage, got.advisory)
 	}
 }
 
@@ -67,8 +67,8 @@ func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone, got %v", got.state)
 	}
-	if got.feedback != daemonUnavailableMessage {
-		t.Fatalf("expected feedback %q, got %q", daemonUnavailableMessage, got.feedback)
+	if got.advisory != daemonUnavailableMessage {
+		t.Fatalf("expected advisory %q, got %q", daemonUnavailableMessage, got.advisory)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected askModel, got %T", finalModel)
 	}
-	if got.feedback != caughtUpMessage {
-		t.Fatalf("expected feedback %q, got %q", caughtUpMessage, got.feedback)
+	if got.advisory != caughtUpMessage {
+		t.Fatalf("expected advisory %q, got %q", caughtUpMessage, got.advisory)
 	}
 }
