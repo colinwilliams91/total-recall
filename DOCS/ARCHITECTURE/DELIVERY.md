@@ -91,3 +91,71 @@ When `presentation.terminal: false` (the default), the dispatcher is nil and que
 
 See: `internal/engine/dispatcher.go` for the Phase 4B stub comment.
 
+## Phase 4C — Answer Feedback Loop (Current)
+
+Phase 4A delivered questions to developers but stopped at `"✓ recorded"`. Phase 4C closes the loop: when a developer answers, the server evaluates correctness, persists the result, and (for terminal users) generates an AI explanation. The dormant `recall.Question.CorrectIndex` — computed and shuffled at synthesis time — is now stored at enqueue and used at answer time.
+
+### Terminal path: `POST /recall/answer?feedback=true`
+
+```
+POST /recall/answer?feedback=true
+Body: {"id": 1, "answer_index": 0}
+
+Server:
+  1. GetQuestion(id) → StoredQuestion (with correct_index, choices)
+  2. correct = (answer_index == question.correct_index)
+  3. correct_text = question.choices[question.correct_index]
+  4. recallEngine.GenerateFeedback(...) → feedback string (max 150 tokens)
+  5. AnswerQuestion(id, answer_index, answer_text, correct, feedback)
+  6. Respond 200: {ok, correct, correct_text, feedback}
+```
+
+`?feedback=true` triggers the AI feedback call. Without it, the handler still evaluates correctness and persists the answer, but `feedback` is `null` in the response and the DB column is left NULL. Skip path (`{"id": 1, "skip": true}`) is identical to the old behaviour — `answer = "skip"`, no evaluation, no AI call.
+
+### MCP path: self-explanation
+
+```
+recall_next tool response: {id, question, choices, correct_index}
+recall_answer tool:
+  Input:  {"id": 1, "answer_index": 0}
+  Output: {ok, correct, correct_index, correct_text}
+```
+
+The MCP `recall_next` tool returns `correct_index` upfront so the AI agent can evaluate locally. `recall_answer` does the same evaluation server-side (for atomic DB write) but does NOT call the AI for feedback — the agent is expected to explain using its own knowledge, per the updated `recall_workflow` prompt.
+
+### Information boundary
+
+- `GET /recall/next` (terminal REST) — does NOT return `correct_index`. The terminal client cannot pre-evaluate; it submits an index and receives the verdict. This preserves the integrity of the quiz for terminal users.
+- `recall_next` tool (MCP) — DOES return `correct_index`. An AI agent seeing the answer doesn't invalidate the quiz (it still drives human reflection).
+- `recall://recent` (MCP resource) — includes `correct_index` for completed rows. There is no integrity concern in exposing the answer after the fact.
+
+### `tr ask` state machine
+
+```
+stateThinking  ──[question]──▶  stateQuestion
+                                      │
+                       ┌──────────────┼──────────────┐
+                       │              │              │
+                  [1-N] press    Enter (skip)   q / Esc
+                       │              │              │
+                       ▼              ▼              ▼
+                stateFeedback    stateDone      stateDone
+                "Evaluating..."     │              │
+                       │       (skip msg)     (silent)
+                       ▼
+                stateDone  ────▶  exit alt-screen ────▶  print verdict + feedback
+```
+
+After the alt-screen closes, `askCmd.RunE` prints one of:
+- `→ Question saved for later.` (skip)
+- `✓ Correct.` + indented feedback paragraph (correct)
+- `✗ The answer was: <correct_text>` + indented feedback paragraph (incorrect)
+- advisory (caught up / daemon unreachable) — printed verbatim
+- nothing (q/Esc clean exit)
+
+If the AI feedback call fails, the verdict still prints — `feedback` is empty and the indented paragraph is omitted. The answer is always recorded.
+
+### Schema migration
+
+The `questions` table gains four columns: `correct_index`, `answer_index`, `correct`, `feedback`. Migration is idempotent (`addColumnIfMissing` swallows `duplicate column name` errors). Legacy rows have `correct_index = 0` (which is meaningless for them but never read), and the new answer-related columns are NULL until those rows are answered.
+

@@ -57,6 +57,16 @@
 - **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); one-time migration guard from `concepts.db`
 - **`terminal.Adapter` opt-in** — `presentation.terminal: true` retains daemon-pane delivery for users who prefer it; off by default
 
+### Phase 4C — Answer Feedback Loop (Shipped)
+
+- **Schema extension** — `questions` table gains `correct_index`, `answer_index`, `correct`, `feedback` columns via idempotent `ALTER TABLE ADD COLUMN` migrations
+- **Correctness evaluation** — server-side arithmetic (`answer_index == correct_index`); persisted at answer time; `recall.Question.CorrectIndex` (computed at synthesis) is now stored at enqueue, not dropped
+- **AI feedback for terminal users** — `POST /recall/answer?feedback=true` triggers a `recall.Engine.GenerateFeedback` call (≤ 150 tokens, plain prose); verdict and feedback render after the alt-screen closes
+- **MCP self-explanation** — `recall_next` returns `correct_index` to AI agents; `recall_answer` evaluates and returns `correct`/`correct_index`/`correct_text` but skips the AI call; agents explain using their own knowledge per the updated `recall_workflow` prompt
+- **Skip path** — `POST /recall/answer` with `{"skip": true}` records `answer = "skip"`, no evaluation, no AI call; tr ask renders `→ Question saved for later.`
+- **Enriched `recall://recent`** — MCP resource includes `correct_index`, `answer_index`, `correct`, `feedback` for each row (NULL for skipped/MCP rows)
+- **Foundation for spaced repetition** — `memory.db` now carries the answer history needed for future difficulty progression and recall debt
+
 ### Phase 4B — VS Code Extension (Next)
 
 - VS Code extension surfaces questions as workspace notifications with clickable answer choices

@@ -29,8 +29,8 @@ func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone, got %v", got.state)
 	}
-	if got.feedback != caughtUpMessage {
-		t.Fatalf("expected feedback %q, got %q", caughtUpMessage, got.feedback)
+	if got.advisory != caughtUpMessage {
+		t.Fatalf("expected advisory %q, got %q", caughtUpMessage, got.advisory)
 	}
 }
 
@@ -67,8 +67,8 @@ func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone, got %v", got.state)
 	}
-	if got.feedback != daemonUnavailableMessage {
-		t.Fatalf("expected feedback %q, got %q", daemonUnavailableMessage, got.feedback)
+	if got.advisory != daemonUnavailableMessage {
+		t.Fatalf("expected advisory %q, got %q", daemonUnavailableMessage, got.advisory)
 	}
 }
 
@@ -87,8 +87,8 @@ func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected askModel, got %T", finalModel)
 	}
-	if got.feedback != caughtUpMessage {
-		t.Fatalf("expected feedback %q, got %q", caughtUpMessage, got.feedback)
+	if got.advisory != caughtUpMessage {
+		t.Fatalf("expected advisory %q, got %q", caughtUpMessage, got.advisory)
 	}
 }
 
@@ -109,14 +109,11 @@ func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
 	final, cmd := m2.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'1'}}))
 	got := final.(askModel)
 
-	if got.state != stateDone {
-		t.Fatalf("expected stateDone after selecting choice, got %v", got.state)
-	}
-	if !strings.Contains(got.feedback, "recorded") {
-		t.Fatalf("expected feedback containing 'recorded', got %q", got.feedback)
+	if got.state != stateFeedback {
+		t.Fatalf("expected stateFeedback after selecting choice, got %v", got.state)
 	}
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd (Quit)")
+		t.Fatal("expected non-nil cmd (postAnswer)")
 	}
 }
 
@@ -154,11 +151,11 @@ func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
 	if got.state != stateDone {
 		t.Fatalf("expected stateDone after Enter, got %v", got.state)
 	}
-	if !strings.Contains(got.feedback, "skipped") {
-		t.Fatalf("expected feedback containing 'skipped', got %q", got.feedback)
+	if !got.skipped {
+		t.Fatal("expected skipped to be true after Enter")
 	}
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd (Quit)")
+		t.Fatal("expected non-nil cmd (postSkip)")
 	}
 }
 

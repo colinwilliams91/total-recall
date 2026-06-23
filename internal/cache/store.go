@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -32,14 +33,18 @@ CREATE INDEX IF NOT EXISTS idx_concepts_seen_at ON concepts(seen_at DESC);
 
 	createQuestionsTableSQL = `
 CREATE TABLE IF NOT EXISTS questions (
-    id           INTEGER  PRIMARY KEY AUTOINCREMENT,
-    question     TEXT     NOT NULL,
-    choices      TEXT     NOT NULL,
-    queued_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-    delivered_at DATETIME,
-    claimed_by   TEXT,
-    answer       TEXT,
-    answered_at  DATETIME
+    id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+    question      TEXT     NOT NULL,
+    choices       TEXT     NOT NULL,
+    correct_index INTEGER  NOT NULL DEFAULT 0,
+    queued_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    delivered_at  DATETIME,
+    claimed_by    TEXT,
+    answer        TEXT,
+    answer_index  INTEGER,
+    correct       INTEGER,
+    feedback      TEXT,
+    answered_at   DATETIME
 );
 `
 )
@@ -55,10 +60,14 @@ type ConceptRow struct {
 
 // StoredQuestion is a recall question retrieved from the questions table.
 type StoredQuestion struct {
-	ID       int64
-	Question string
-	Choices  []string
-	QueuedAt time.Time
+	ID           int64
+	Question     string
+	Choices      []string
+	CorrectIndex int
+	QueuedAt     time.Time
+	AnswerIndex  *int
+	Correct      *bool
+	Feedback     *string
 }
 
 // Store wraps the SQLite database used as the memory store.
@@ -102,6 +111,19 @@ func Open() (*Store, error) {
 		return nil, fmt.Errorf("initializing questions schema: %w", err)
 	}
 
+	migrations := []struct{ table, column, def string }{
+		{"questions", "correct_index", "INTEGER NOT NULL DEFAULT 0"},
+		{"questions", "answer_index", "INTEGER"},
+		{"questions", "correct", "INTEGER"},
+		{"questions", "feedback", "TEXT"},
+	}
+	for _, m := range migrations {
+		if err := addColumnIfMissing(bg, db, m.table, m.column, m.def); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrating %s.%s: %w", m.table, m.column, err)
+		}
+	}
+
 	return &Store{db: db}, nil
 }
 
@@ -120,6 +142,20 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(out, in)
 	return err
+}
+
+// addColumnIfMissing executes `ALTER TABLE <table> ADD COLUMN <column> <definition>`.
+// If the column already exists (SQLite returns a "duplicate column name" error),
+// it returns nil so the call is idempotent. All other errors propagate.
+func addColumnIfMissing(ctx context.Context, db *sql.DB, table, column, definition string) error {
+	_, err := db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate column name") {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // Save persists a batch of concept fingerprints to the cache.
@@ -180,14 +216,14 @@ func (s *Store) Recent(ctx context.Context, n int) ([]ConceptRow, error) {
 
 // SaveQuestion inserts a synthesized question into the questions table.
 // Choices are JSON-marshalled into a TEXT column.
-func (s *Store) SaveQuestion(ctx context.Context, question string, choices []string) error {
+func (s *Store) SaveQuestion(ctx context.Context, question string, choices []string, correctIndex int) error {
 	choicesJSON, err := json.Marshal(choices)
 	if err != nil {
 		return fmt.Errorf("marshalling choices: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO questions (question, choices) VALUES (?, ?)`,
-		question, string(choicesJSON),
+		`INSERT INTO questions (question, choices, correct_index) VALUES (?, ?, ?)`,
+		question, string(choicesJSON), correctIndex,
 	)
 	return err
 }
@@ -205,12 +241,12 @@ WHERE id = (
   ORDER BY queued_at ASC
   LIMIT 1
 )
-RETURNING id, question, choices, queued_at`, claimedBy)
+RETURNING id, question, choices, correct_index, queued_at`, claimedBy)
 
 	var sq StoredQuestion
 	var choicesJSON string
 	var queuedAt string
-	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &sq.CorrectIndex, &queuedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -225,12 +261,56 @@ RETURNING id, question, choices, queued_at`, claimedBy)
 }
 
 // AnswerQuestion records the user's answer for the question with the given ID.
-func (s *Store) AnswerQuestion(ctx context.Context, id int64, answer string) error {
+func (s *Store) AnswerQuestion(ctx context.Context, id int64, answerIndex int, answerText string, correct bool, feedback string) error {
+	var feedbackArg any
+	if feedback == "" {
+		feedbackArg = nil
+	} else {
+		feedbackArg = feedback
+	}
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE questions SET answer = ?, answered_at = datetime('now') WHERE id = ?`,
-		answer, id,
+		`UPDATE questions SET answer = ?, answer_index = ?, correct = ?, feedback = ?, answered_at = datetime('now') WHERE id = ?`,
+		answerText, answerIndex, boolToInt(correct), feedbackArg, id,
 	)
 	return err
+}
+
+// GetQuestion fetches a single question by ID for answer evaluation.
+// Returns (nil, nil) when the row does not exist.
+func (s *Store) GetQuestion(ctx context.Context, id int64) (*StoredQuestion, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, question, choices, correct_index, queued_at FROM questions WHERE id = ?`, id)
+	var sq StoredQuestion
+	var choicesJSON, queuedAt string
+	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &sq.CorrectIndex, &queuedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("fetching question %d: %w", id, err)
+	}
+	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
+		return nil, fmt.Errorf("unmarshalling choices: %w", err)
+	}
+	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
+	sq.QueuedAt = t
+	return &sq, nil
+}
+
+// SkipQuestion records that the user skipped the question. It sets answer="skip"
+// and answered_at but leaves answer_index, correct, and feedback NULL.
+func (s *Store) SkipQuestion(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE questions SET answer = 'skip', answered_at = datetime('now') WHERE id = ?`,
+		id,
+	)
+	return err
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // QueueDepth returns the number of unclaimed (undelivered) questions.
@@ -244,7 +324,11 @@ func (s *Store) QueueDepth(ctx context.Context) (int, error) {
 // RecentAnswered returns up to limit answered questions ordered by most recently answered.
 func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, question, choices, queued_at FROM questions WHERE answered_at IS NOT NULL ORDER BY answered_at DESC LIMIT ?`,
+		`SELECT id, question, choices, correct_index, queued_at, answer_index, correct, feedback
+		   FROM questions
+		  WHERE answered_at IS NOT NULL
+		  ORDER BY answered_at DESC
+		  LIMIT ?`,
 		limit)
 	if err != nil {
 		return nil, fmt.Errorf("querying recent answered: %w", err)
@@ -255,7 +339,10 @@ func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion
 	for rows.Next() {
 		var sq StoredQuestion
 		var choicesJSON, queuedAt string
-		if err := rows.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+		var answerIndex sql.NullInt64
+		var correct sql.NullInt64
+		var feedback sql.NullString
+		if err := rows.Scan(&sq.ID, &sq.Question, &choicesJSON, &sq.CorrectIndex, &queuedAt, &answerIndex, &correct, &feedback); err != nil {
 			return nil, fmt.Errorf("scanning question row: %w", err)
 		}
 		if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
@@ -263,6 +350,18 @@ func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion
 		}
 		t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
 		sq.QueuedAt = t
+		if answerIndex.Valid {
+			v := int(answerIndex.Int64)
+			sq.AnswerIndex = &v
+		}
+		if correct.Valid {
+			v := correct.Int64 != 0
+			sq.Correct = &v
+		}
+		if feedback.Valid {
+			v := feedback.String
+			sq.Feedback = &v
+		}
 		result = append(result, sq)
 	}
 	return result, rows.Err()
@@ -272,11 +371,11 @@ func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion
 // Used by the recall://queue resource handler.
 func (s *Store) PeekNextQuestion(ctx context.Context) (*StoredQuestion, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, question, choices, queued_at FROM questions WHERE delivered_at IS NULL ORDER BY queued_at ASC LIMIT 1`)
+		`SELECT id, question, choices, correct_index, queued_at FROM questions WHERE delivered_at IS NULL ORDER BY queued_at ASC LIMIT 1`)
 
 	var sq StoredQuestion
 	var choicesJSON, queuedAt string
-	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &queuedAt); err != nil {
+	if err := row.Scan(&sq.ID, &sq.Question, &choicesJSON, &sq.CorrectIndex, &queuedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

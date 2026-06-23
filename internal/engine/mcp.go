@@ -12,7 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. If a question is returned, present it to the user and record their answer with recall_answer. If the queue is empty, continue normally.`
+const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. If a question is returned, present it to the user and record their answer with recall_answer. After recording an answer, tell the user whether they were correct (the response includes "correct": true/false and "correct_text"). If incorrect, provide a brief, direct explanation using your own knowledge — especially why the correct answer is right and why the chosen one doesn't fit. Do NOT call a separate AI tool for the explanation; the recall_answer response gives you everything you need. If the queue is empty, continue normally.`
 
 // buildMCPServer constructs and configures the MCP server with all tools,
 // resources, and prompts for Total Recall. The returned *mcp.Server is
@@ -45,17 +45,19 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 			return textResult(`{"question":null}`), nil, nil
 		}
 		b, _ := json.Marshal(map[string]any{
-			"id":       q.ID,
-			"question": q.Question,
-			"choices":  q.Choices,
+			"id":            q.ID,
+			"question":      q.Question,
+			"choices":       q.Choices,
+			"correct_index": q.CorrectIndex,
 		})
 		return textResult(string(b)), nil, nil
 	})
 
 	// recall_answer — records the user's answer.
 	type recallAnswerIn struct {
-		ID     int64  `json:"id"`
-		Answer string `json:"answer"`
+		ID          int64  `json:"id"`
+		AnswerIndex *int   `json:"answer_index"`
+		Skip        bool   `json:"skip"`
 	}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_answer",
@@ -64,11 +66,41 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		if store == nil {
 			return textResult(`{"ok":true}`), nil, nil
 		}
-		if err := store.AnswerQuestion(ctx, in.ID, in.Answer); err != nil {
+		if in.Skip {
+			if err := store.SkipQuestion(ctx, in.ID); err != nil {
+				log.Printf("[mcp] recall_answer skip error: %v", err)
+				return nil, nil, err
+			}
+			return textResult(`{"ok":true}`), nil, nil
+		}
+		if in.AnswerIndex == nil {
+			return nil, nil, fmt.Errorf("answer_index is required")
+		}
+		q, err := store.GetQuestion(ctx, in.ID)
+		if err != nil {
+			log.Printf("[mcp] recall_answer get error: %v", err)
+			return nil, nil, err
+		}
+		if q == nil {
+			return nil, nil, fmt.Errorf("question %d not found", in.ID)
+		}
+		if *in.AnswerIndex < 0 || *in.AnswerIndex >= len(q.Choices) {
+			return nil, nil, fmt.Errorf("answer_index out of range")
+		}
+		correct := *in.AnswerIndex == q.CorrectIndex
+		answerText := q.Choices[*in.AnswerIndex]
+		correctText := q.Choices[q.CorrectIndex]
+		if err := store.AnswerQuestion(ctx, in.ID, *in.AnswerIndex, answerText, correct, ""); err != nil {
 			log.Printf("[mcp] recall_answer error: %v", err)
 			return nil, nil, err
 		}
-		return textResult(`{"ok":true}`), nil, nil
+		b, _ := json.Marshal(map[string]any{
+			"ok":            true,
+			"correct":       correct,
+			"correct_index": q.CorrectIndex,
+			"correct_text":  correctText,
+		})
+		return textResult(string(b)), nil, nil
 	})
 
 	// recall_status — daemon health and queue depth.
@@ -150,11 +182,16 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		}
 		items := make([]map[string]any, 0, len(answered))
 		for _, q := range answered {
-			items = append(items, map[string]any{
-				"id":       q.ID,
-				"question": q.Question,
-				"choices":  q.Choices,
-			})
+			item := map[string]any{
+				"id":            q.ID,
+				"question":      q.Question,
+				"choices":       q.Choices,
+				"correct_index": q.CorrectIndex,
+				"answer_index":  q.AnswerIndex,
+				"correct":       q.Correct,
+				"feedback":      q.Feedback,
+			}
+			items = append(items, item)
 		}
 		b, _ := json.Marshal(items)
 		return &mcp.ReadResourceResult{

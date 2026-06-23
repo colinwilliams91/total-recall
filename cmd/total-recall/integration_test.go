@@ -154,7 +154,7 @@ func TestRecallNextWithQuestion(t *testing.T) {
 		"Don't Run Yaks",
 		"Digital Repository YAML",
 		"Deferred Runtime Yielding",
-	}); err != nil {
+	}, 0); err != nil {
 		t.Fatalf("seed question: %v", err)
 	}
 
@@ -187,7 +187,7 @@ func TestRecallNextIdempotent(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "single question", []string{"a", "b"}); err != nil {
+	if err := store.SaveQuestion(ctx, "single question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -209,7 +209,7 @@ func TestRecallAnswer(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "answerable question", []string{"choice a", "choice b"}); err != nil {
+	if err := store.SaveQuestion(ctx, "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -225,7 +225,7 @@ func TestRecallAnswer(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	answerBody := fmt.Sprintf(`{"id":%d,"answer":"choice a"}`, question.ID)
+	answerBody := fmt.Sprintf(`{"id":%d,"answer_index":0}`, question.ID)
 	r2 := mustPOST(t, baseURL, "/recall/answer", []byte(answerBody))
 	defer r2.Body.Close()
 
@@ -247,7 +247,7 @@ func TestRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "skippable question", []string{"x", "y"}); err != nil {
+	if err := store.SaveQuestion(ctx, "skippable question", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -263,7 +263,7 @@ func TestRecallAnswerSkip(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	skipBody := fmt.Sprintf(`{"id":%d,"answer":"skip"}`, q.ID)
+	skipBody := fmt.Sprintf(`{"id":%d,"skip":true}`, q.ID)
 	r2 := mustPOST(t, baseURL, "/recall/answer", []byte(skipBody))
 	defer r2.Body.Close()
 

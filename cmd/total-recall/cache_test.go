@@ -96,7 +96,7 @@ func TestSaveQuestionAndClaim(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "What is a goroutine?", []string{"a", "b", "c"}); err != nil {
+	if err := s.SaveQuestion(ctx, "What is a goroutine?", []string{"a", "b", "c"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -132,7 +132,7 @@ func TestNextQuestionIdempotent(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "single question", []string{"x", "y"}); err != nil {
+	if err := s.SaveQuestion(ctx, "single question", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -157,7 +157,7 @@ func TestAnswerQuestion(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "test question", []string{"a", "b"}); err != nil {
+	if err := s.SaveQuestion(ctx, "test question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestAnswerQuestion(t *testing.T) {
 		t.Fatal("expected non-nil question")
 	}
 
-	if err := s.AnswerQuestion(ctx, q.ID, "a"); err != nil {
+	if err := s.AnswerQuestion(ctx, q.ID, 0, "a", true, ""); err != nil {
 		t.Fatalf("AnswerQuestion failed: %v", err)
 	}
 }
@@ -199,7 +199,7 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 		t.Fatalf("expected initial depth 0, got %d", n)
 	}
 
-	if err := s.SaveQuestion(ctx, "q1", []string{"a", "b"}); err != nil {
+	if err := s.SaveQuestion(ctx, "q1", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	n, err = s.QueueDepth(ctx)

@@ -59,8 +59,8 @@ type HealthResponse struct {
 // Server is the Total Recall daemon HTTP server.
 type Server struct {
 	cfg          *config.Config
-	provider     ai.Provider   // nil when AI is not configured
-	store        *cache.Store  // nil when AI is not configured
+	provider     ai.Provider  // nil when AI is not configured
+	store        *cache.Store // nil when AI is not configured
 	recallEngine *recall.Engine
 	dispatcher   Dispatcher
 	mcpServer    *mcp.Server
@@ -173,7 +173,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
-	if err := s.store.SaveQuestion(ctx, q.Question, q.Choices); err != nil {
+	if err := s.store.SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -211,18 +211,63 @@ func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID     int64  `json:"id"`
-		Answer string `json:"answer"`
+		ID          int64 `json:"id"`
+		AnswerIndex *int  `json:"answer_index"`
+		Skip        bool  `json:"skip"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if err := s.store.AnswerQuestion(r.Context(), body.ID, body.Answer); err != nil {
+	if body.Skip {
+		if err := s.store.SkipQuestion(r.Context(), body.ID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	if body.AnswerIndex == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answer_index is required"})
+		return
+	}
+	q, err := s.store.GetQuestion(r.Context(), body.ID)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	if q == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "question not found"})
+		return
+	}
+	if *body.AnswerIndex < 0 || *body.AnswerIndex >= len(q.Choices) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answer_index out of range"})
+		return
+	}
+	correct := *body.AnswerIndex == q.CorrectIndex
+	answerText := q.Choices[*body.AnswerIndex]
+	correctText := q.Choices[q.CorrectIndex]
+
+	feedback := ""
+	if r.URL.Query().Get("feedback") == "true" && s.recallEngine != nil {
+		feedback = s.recallEngine.GenerateFeedback(r.Context(), q.Question, q.Choices, q.CorrectIndex, *body.AnswerIndex, s.cfg.AI.Model)
+	}
+
+	if err := s.store.AnswerQuestion(r.Context(), body.ID, *body.AnswerIndex, answerText, correct, feedback); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var feedbackOut any = nil
+	if feedback != "" {
+		feedbackOut = feedback
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":           true,
+		"correct":      correct,
+		"correct_text": correctText,
+		"feedback":     feedbackOut,
+	})
 }
 
 // Shutdown gracefully stops the HTTP server without interrupting active connections.
