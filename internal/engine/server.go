@@ -225,6 +225,18 @@ func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// Shutdown gracefully stops the HTTP server without interrupting active connections.
+// After Shutdown returns, Start() will return http.ErrServerClosed.
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.httpSrv.Shutdown(ctx)
+}
+
+// Serve starts the HTTP server on the given listener without signal handling.
+// Useful for testing. For production use, call Start() instead.
+func (s *Server) Serve(l net.Listener) error {
+	return s.httpSrv.Serve(l)
+}
+
 // writeJSON sets Content-Type and encodes v as JSON.
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")

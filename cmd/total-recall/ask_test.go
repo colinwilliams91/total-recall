@@ -91,3 +91,98 @@ func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
 		t.Fatalf("expected feedback %q, got %q", caughtUpMessage, got.feedback)
 	}
 }
+
+func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
+	m := newAskModel(10 * time.Second)
+
+	updated, _ := m.updateThinking(questionMsg{
+		id:       1,
+		question: "What is the meaning of life?",
+		choices:  []string{"42", "To crush your enemies", "To learn Go", "All of the above"},
+	})
+	m2 := updated.(askModel)
+
+	if m2.state != stateQuestion {
+		t.Fatalf("expected stateQuestion, got %v", m2.state)
+	}
+
+	final, cmd := m2.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'1'}}))
+	got := final.(askModel)
+
+	if got.state != stateDone {
+		t.Fatalf("expected stateDone after selecting choice, got %v", got.state)
+	}
+	if !strings.Contains(got.feedback, "recorded") {
+		t.Fatalf("expected feedback containing 'recorded', got %q", got.feedback)
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (Quit)")
+	}
+}
+
+func TestAskModelExitsOnCtrlC(t *testing.T) {
+	m := newAskModel(10 * time.Second)
+
+	final, cmd := m.updateThinking(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
+	got := final.(askModel)
+
+	if got.state != stateDone {
+		t.Fatalf("expected stateDone after Ctrl+C, got %v", got.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (Quit)")
+	}
+}
+
+func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
+	m := newAskModel(10 * time.Second)
+
+	updated, _ := m.updateThinking(questionMsg{
+		id:       1,
+		question: "Skip me?",
+		choices:  []string{"yes", "no"},
+	})
+	m2 := updated.(askModel)
+
+	if m2.state != stateQuestion {
+		t.Fatalf("expected stateQuestion, got %v", m2.state)
+	}
+
+	final, cmd := m2.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+	got := final.(askModel)
+
+	if got.state != stateDone {
+		t.Fatalf("expected stateDone after Enter, got %v", got.state)
+	}
+	if !strings.Contains(got.feedback, "skipped") {
+		t.Fatalf("expected feedback containing 'skipped', got %q", got.feedback)
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (Quit)")
+	}
+}
+
+func TestAskModelIgnoresOutOfRangeChoice(t *testing.T) {
+	m := newAskModel(10 * time.Second)
+
+	updated, _ := m.updateThinking(questionMsg{
+		id:       1,
+		question: "Pick one?",
+		choices:  []string{"a", "b", "c", "d"},
+	})
+	m2 := updated.(askModel)
+
+	if m2.state != stateQuestion {
+		t.Fatalf("expected stateQuestion, got %v", m2.state)
+	}
+
+	final, cmd := m2.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'9'}}))
+	got := final.(askModel)
+
+	if got.state != stateQuestion {
+		t.Fatalf("expected stateQuestion for out-of-range choice, got %v", got.state)
+	}
+	if cmd != nil {
+		t.Fatal("expected nil cmd for unrecognized key")
+	}
+}
