@@ -23,3 +23,19 @@ func TestBuildPostCommitHookScriptEscapesPowerShellQuotes(t *testing.T) {
 		t.Fatalf("expected PowerShell-safe path escaping, got %q", script)
 	}
 }
+
+func TestPostCommitHookTemplateIncludesSentinel(t *testing.T) {
+	script := buildPostCommitHookScript("/usr/local/bin/total-recall")
+
+	if !strings.Contains(script, "# total-recall managed") {
+		t.Fatalf("expected sentinel comment in script, got:\n%s", script)
+	}
+}
+
+func TestBuildPostCommitHookScriptHandlesUnixPath(t *testing.T) {
+	script := buildPostCommitHookScript("/usr/local/bin/tr")
+
+	if !strings.Contains(script, `/usr/local/bin/tr" ask`) {
+		t.Fatalf("expected Unix path in exec fallback, got:\n%s", script)
+	}
+}

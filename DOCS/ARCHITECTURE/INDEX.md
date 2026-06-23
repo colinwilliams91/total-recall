@@ -278,7 +278,7 @@ See [CONFIG.md](CONFIG.md) for full schema, merge rules, and `total-recall confi
 ### Concept Cache (`internal/cache/`)
 
 - SQLite via `modernc.org/sqlite` (pure Go, no CGo)
-- Database at `~/.tr/concepts.db`; schema: `concepts(id, concept, source, weight, seen_at)`
+- Database at `~/.tr/memory.db`; schema: `concepts(id, concept, source, weight, seen_at)`, `questions(id, question, choices, queued_at, claimed_by, answer)`
 - `Save(ctx, []Fingerprint)` — batch INSERT in a single transaction
 - `Recent(ctx, n)` — SELECT ordered by `seen_at DESC`
 

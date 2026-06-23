@@ -19,7 +19,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Provider factory**: `cmd/total-recall/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
 - **Daemon**: `total-recall serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only
-- **Cache**: SQLite at `~/.tr/concepts.db` via `modernc.org/sqlite` (pure Go, no CGo)
+- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`
 - **MCP server**: mounted at `/mcp/` inside the daemon
 
 ### Key packages
@@ -47,6 +47,66 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ## Testing
 
-- Tests are sparse (3 files). Most packages have only `doc.go` stubs
-- `go test ./...` passes with "no test files" for most packages — this is expected, not a failure
-- Test files: `cmd/total-recall/main_test.go`, `cmd/total-recall/ask_test.go`, `internal/presentation/terminal/adapter_test.go`
+### Framework
+
+All automated tests are Go-native, collocated in `cmd/total-recall/*_test.go`. No external test runners or Node.js dependencies. The test suite uses three strategies from the Bubble Tea testing model:
+
+| Strategy | What it tests | Key tools |
+|----------|--------------|-----------|
+| **Model isolation** | State transitions, pure logic, data layer | Direct `Update(msg)` / `View()` calls, `bytes.Buffer` for IO |
+| **Headless integration** | Daemon HTTP lifecycle, endpoints | `tea.NewProgram` with `WithInput`/`WithOutput`, `net.Listen` + `engine.Serve()` |
+| **Golden file** | Visual regression of TUI views | `testdata/*.golden` compared byte-for-byte |
+
+### Test files
+
+| File | Strategy | Covers |
+|------|----------|--------|
+| `config_test.go` | Model isolation | Config defaults, merge logic, API key resolution, Show output, auto-create |
+| `cache_test.go` | Model isolation | SQLite store: concepts, questions, queue depth, claim/answer |
+| `provider_test.go` | Model isolation | `newProvider()` factory routing (anthropic, openai fallback, custom) |
+| `ask_test.go` | Model isolation | `askModel` state machine: thinking, question, done, key press, ctrl+c, skip |
+| `main_test.go` | Model isolation | Post-commit hook script generation (sentinel, shebang, escaping) |
+| `integration_test.go` | Headless integration | Daemon health, hooks (all 3 types), recall next/answer, MCP endpoint |
+| `golden_test.go` | Golden file | `askModel.View()` snapshots (thinking, caught-up, question, done) |
+| `helpers_test.go` | Shared helper | `captureStderr()` for stderr assertion tests |
+
+### Manual e2e
+
+`scripts/e2e/manual-init.ps1` — the only manual test. Covers `tr init` TUI flow (huh forms require a real TTY; accessible mode has a `bufio.Scanner` buffering bug). See `scripts/e2e/README.md` for details.
+
+### When adding or extending features
+
+Follow these steps to maintain test coverage:
+
+1. **New Bubble Tea model or state machine** → Add model isolation tests in the relevant `*_test.go` file. Call `Update(msg)` directly, type-assert the result, assert on state/fields. See `ask_test.go` for the pattern.
+
+2. **New HTTP endpoint on the daemon** → Add a headless integration test in `integration_test.go`. Use `startTestDaemon(t)` to spin up the server on a random port, then `mustGET`/`mustPOST` helpers. Seed data via the `*cache.Store` returned by `startTestDaemon`.
+
+3. **New config field or merge rule** → Add a test in `config_test.go`. Call `config.DefaultUserConfig()`, `config.Merge()`, or `config.Show()` with a `bytes.Buffer` and assert on the output.
+
+4. **New cache operation** → Add a test in `cache_test.go`. Use `setupCache(t)` which redirects `~/.tr` to a temp dir via `t.Setenv("HOME", ...)`.
+
+5. **New AI provider** → Add a case to `TestNewProviderRoutesOpenAIFallback` (or `TestNewProviderRoutesAnthropic` if it uses the Anthropic adapter) in `provider_test.go`.
+
+6. **New TUI view or visual change** → Add a golden file test in `golden_test.go`. Run `$env:UPDATE_GOLDEN=1; go test -run TestGolden... ./cmd/total-recall/...` to generate the snapshot, then re-run without the flag to verify.
+
+7. **New hook script content** → Add a test in `main_test.go` asserting on `buildPostCommitHookScript()` output.
+
+### Golden file workflow
+
+```powershell
+# Generate or update golden files
+$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/total-recall/...
+
+# Verify (normal CI run)
+go test -run TestGolden ./cmd/total-recall/...
+```
+
+Golden files live in `cmd/total-recall/testdata/*.golden` and are marked `-text` in `.gitattributes` to prevent CRLF corruption on Windows.
+
+### Key patterns
+
+- **Env isolation**: Use `t.Setenv("HOME", t.TempDir())` and `t.Setenv("USERPROFILE", t.TempDir())` for tests that touch `~/.tr/`
+- **Stderr capture**: Use `captureStderr(&buf)` from `helpers_test.go` — call `restore()` before reading the buffer
+- **Daemon lifecycle**: `startTestDaemon(t)` returns `(*engine.Server, *cache.Store, baseURL)` — cleanup is automatic via `t.Cleanup`
+- **Keyboard simulation**: Use `tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'1'}})` for character keys, `tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC})` for Ctrl+C, `tea.KeyMsg(tea.Key{Type: tea.KeyEnter})` for Enter
