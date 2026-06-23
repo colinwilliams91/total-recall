@@ -30,14 +30,52 @@ The system prompt in `SynthesisRequest` SHALL instruct the AI to return JSON `{"
 If the AI call fails or the response cannot be parsed as a `Question`, `Synthesize` SHALL return `nil, nil` and log the failure. No error is propagated to the caller; the pipeline continues.
 
 #### Scenario: Provider timeout during synthesis
-- **WHEN** the synthesis AI call exceeds the 10-second context timeout
+- **WHEN** the synthesis AI call exceeds the context timeout
 - **THEN** `Synthesize` logs the timeout and returns `nil, nil`
 
 ---
 
-### Requirement: Question struct is the shared output type
-`recall.Question` (`Question string`, `Choices []string`) is the output type consumed by the `Dispatcher`. It maps directly to `engine.RecallPrompt` on the wire format — `Synthesize` output populates `HookResponse.Recall` when non-nil.
+### Requirement: Question struct carries CorrectIndex through the lifecycle
+`recall.Question` (`Question string`, `Choices []string`, `CorrectIndex int`) is the output type consumed by the `Dispatcher` and persisted by `SaveQuestion`. `CorrectIndex` is computed during shuffle in `Synthesize` and SHALL be persisted at enqueue time so it is available for server-side evaluation at answer time.
 
-#### Scenario: Question dispatched via Dispatcher
-- **WHEN** `Synthesize` returns a non-nil `*Question`
-- **THEN** `runPipeline` calls `dispatcher.Dispatch(*question)` and the question appears in the v1 delivery channel (daemon stdout)
+#### Scenario: CorrectIndex persisted at enqueue
+- **WHEN** `Synthesize` returns a `*Question` with `CorrectIndex = 2`
+- **THEN** `runPipeline` calls `SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex)` and the row has `correct_index = 2`
+
+---
+
+### Requirement: GenerateFeedback produces a post-answer explanation
+`(*Engine).GenerateFeedback(ctx, question string, choices []string, correctIndex, answerIndex int, model string) (string, error)` SHALL call `FeedbackRequest(...)` to build the prompt, then call `e.provider.Complete(ctx, req)`. It SHALL return the raw response string (plain prose, not JSON).
+
+#### Scenario: Successful feedback generation
+- **WHEN** `GenerateFeedback` is called with a question, choices, correct index, and answer index
+- **THEN** it calls `FeedbackRequest` to build the prompt, calls the provider, and returns the prose explanation
+
+#### Scenario: Feedback AI call failure — degraded, not fatal
+- **WHEN** the AI provider returns an error (timeout, bad key, rate limit)
+- **THEN** `GenerateFeedback` logs `[recall] feedback AI call failed: <err>` and returns `"", nil`
+- **AND** the caller continues with empty feedback rather than failing the answer record
+
+---
+
+### Requirement: FeedbackRequest builds the feedback prompt with choice annotations
+`FeedbackRequest(question string, choices []string, correctIndex, answerIndex int, model string) ai.CompletionRequest` SHALL build a `CompletionRequest` with a fixed system prompt and a user turn that lists all choices with annotations. The system prompt SHALL instruct: direct, plain prose, no markdown, max 3 sentences. For correct answers: briefly confirm and explain why right. For incorrect answers: name the correct answer explicitly, explain why it is right, briefly note why the chosen answer doesn't fit, do not apologize.
+
+#### Scenario: Correct answer — user turn annotations
+- **WHEN** `FeedbackRequest` is built for a correct answer (`correctIndex == answerIndex`)
+- **THEN** the user turn lists all choices with `← correct, chosen` annotating the correct choice
+- **AND** ends with `"The developer answered correctly."`
+
+#### Scenario: Incorrect answer — user turn annotations
+- **WHEN** `FeedbackRequest` is built for an incorrect answer
+- **THEN** the user turn annotates the correct choice with `← correct` and the chosen choice with `← chosen (incorrect)`
+- **AND** ends with `"The developer chose option N and was incorrect."`
+
+---
+
+### Requirement: Feedback token budget enforced
+`FeedbackRequest` SHALL set `MaxTokens` to `feedbackMaxTokens` (150) and `JSON` to `false` (plain prose, not JSON).
+
+#### Scenario: Token budget on feedback request
+- **WHEN** `FeedbackRequest` is built
+- **THEN** `MaxTokens` is 150 and `JSON` is false
