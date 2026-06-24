@@ -6,13 +6,33 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. If a question is returned, present it to the user and record their answer with recall_answer. After recording an answer, tell the user whether they were correct (the response includes "correct": true/false and "correct_text"). If incorrect, provide a brief, direct explanation using your own knowledge — especially why the correct answer is right and why the chosen one doesn't fit. Do NOT call a separate AI tool for the explanation; the recall_answer response gives you everything you need. If the queue is empty, continue normally.`
+const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. Pass the current repository path as "repo" when you know it (the absolute path from git rev-parse --show-toplevel) so questions are scoped to this project. If a question is returned, present it to the user and record their answer with recall_answer. After recording an answer, tell the user whether they were correct (the response includes "correct": true/false and "correct_text"). If incorrect, provide a brief, direct explanation using your own knowledge — especially why the correct answer is right and why the chosen one doesn't fit. Do NOT call a separate AI tool for the explanation; the recall_answer response gives you everything you need. If the queue is empty, continue normally.`
+
+// repoFromToolInput dereferences an optional repo pointer, returning "" when
+// absent (the global pool). MCP clients that omit repo get global dequeue.
+func repoFromToolInput(r *string) string {
+	if r != nil {
+		return *r
+	}
+	return ""
+}
+
+// repoFromResourceURI extracts the repo query parameter from a resource URI
+// like "recall://queue?repo=/path/to/repo". Returns "" when absent.
+func repoFromResourceURI(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("repo")
+}
 
 // buildMCPServer constructs and configures the MCP server with all tools,
 // resources, and prompts for Total Recall. The returned *mcp.Server is
@@ -27,16 +47,19 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		},
 	})
 
-	// recall_next — atomically dequeues the next pending question.
-	type recallNextIn struct{}
+	// recall_next — atomically dequeues the next pending question for repo.
+	type recallNextIn struct {
+		Repo *string `json:"repo,omitempty"`
+	}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_next",
-		Description: "Dequeue the next pending recall question. Returns null if the queue is empty.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ recallNextIn) (*mcp.CallToolResult, any, error) {
+		Description: "Dequeue the next pending recall question. Pass \"repo\" (absolute repo path) to scope to the current repository; omit for the global queue. Returns null if the queue is empty.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallNextIn) (*mcp.CallToolResult, any, error) {
 		if store == nil {
 			return textResult(`{"question":null}`), nil, nil
 		}
-		q, err := store.NextQuestion(ctx, "mcp")
+		repo := repoFromToolInput(in.Repo)
+		q, err := store.NextQuestion(ctx, repo, "mcp")
 		if err != nil {
 			log.Printf("[mcp] recall_next error: %v", err)
 			return nil, nil, err
@@ -55,13 +78,14 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 
 	// recall_answer — records the user's answer.
 	type recallAnswerIn struct {
-		ID          int64  `json:"id"`
-		AnswerIndex *int   `json:"answer_index"`
-		Skip        bool   `json:"skip"`
+		ID          int64   `json:"id"`
+		AnswerIndex *int    `json:"answer_index"`
+		Skip        bool    `json:"skip"`
+		Repo        *string `json:"repo,omitempty"`
 	}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_answer",
-		Description: `Record the user's answer (or "skip") for a recall question.`,
+		Description: `Record the user's answer (or "skip") for a recall question. The optional "repo" is accepted for symmetry but the operation is ID-keyed.`,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallAnswerIn) (*mcp.CallToolResult, any, error) {
 		if store == nil {
 			return textResult(`{"ok":true}`), nil, nil
@@ -104,16 +128,18 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 	})
 
 	// recall_status — daemon health and queue depth.
-	type recallStatusIn struct{}
+	type recallStatusIn struct {
+		Repo *string `json:"repo,omitempty"`
+	}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_status",
-		Description: "Return daemon health, AI configuration status, and pending question queue depth.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ recallStatusIn) (*mcp.CallToolResult, any, error) {
+		Description: "Return daemon health, AI configuration status, and pending question queue depth. Pass \"repo\" to scope queue_depth to a repository; omit for the global queue.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallStatusIn) (*mcp.CallToolResult, any, error) {
 		aiConfigured := cfg.AI.Provider != ""
 		depth := 0
 		if store != nil {
 			var err error
-			depth, err = store.QueueDepth(ctx)
+			depth, err = store.QueueDepth(ctx, repoFromToolInput(in.Repo))
 			if err != nil {
 				log.Printf("[mcp] recall_status queueDepth error: %v", err)
 			}
@@ -133,15 +159,16 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		Description: "Current pending question queue depth and next question preview.",
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		repo := repoFromResourceURI(req.Params.URI)
 		depth := 0
 		var nextPayload any = nil
 		if store != nil {
 			var err error
-			depth, err = store.QueueDepth(ctx)
+			depth, err = store.QueueDepth(ctx, repo)
 			if err != nil {
 				return nil, fmt.Errorf("queue depth: %w", err)
 			}
-			q, err := store.PeekNextQuestion(ctx)
+			q, err := store.PeekNextQuestion(ctx, repo)
 			if err != nil {
 				return nil, fmt.Errorf("peek question: %w", err)
 			}
@@ -172,10 +199,11 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		Description: "Last 10 answered recall questions.",
 		MIMEType:    "application/json",
 	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		repo := repoFromResourceURI(req.Params.URI)
 		var answered []cache.StoredQuestion
 		if store != nil {
 			var err error
-			answered, err = store.RecentAnswered(ctx, 10)
+			answered, err = store.RecentAnswered(ctx, repo, 10)
 			if err != nil {
 				return nil, fmt.Errorf("recent answered: %w", err)
 			}

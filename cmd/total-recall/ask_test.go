@@ -13,7 +13,7 @@ import (
 )
 
 func TestAskViewShowsCaughtUpMessageInFinalWindow(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 	m.started = time.Now().Add(-7 * time.Second)
 
 	view := m.View()
@@ -23,7 +23,7 @@ func TestAskViewShowsCaughtUpMessageInFinalWindow(t *testing.T) {
 }
 
 func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
-	m := newAskModel(2 * time.Second)
+	m := newAskModel(2*time.Second, "")
 	m.started = time.Now().Add(-3 * time.Second)
 
 	updated, _ := m.updateThinking(tickMsg{})
@@ -62,7 +62,7 @@ func TestParseChoiceSelectionSupportsFourthChoice(t *testing.T) {
 }
 
 func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(daemonUnreachableMsg{})
 	got := updated.(askModel)
@@ -76,7 +76,7 @@ func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 }
 
 func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
-	m := newAskModel(200 * time.Millisecond)
+	m := newAskModel(200*time.Millisecond, "")
 	m.httpClient.Timeout = 50 * time.Millisecond
 	m.started = time.Now().Add(-250 * time.Millisecond)
 
@@ -96,7 +96,7 @@ func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
 }
 
 func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -121,7 +121,7 @@ func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
 }
 
 func TestAskModelExitsOnCtrlC(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	final, cmd := m.updateThinking(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
 	got := final.(askModel)
@@ -135,7 +135,7 @@ func TestAskModelExitsOnCtrlC(t *testing.T) {
 }
 
 func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -163,7 +163,7 @@ func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
 }
 
 func TestAskModelIgnoresOutOfRangeChoice(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,

@@ -54,7 +54,7 @@
 - **REST endpoints**: `GET /recall/next` (atomic dequeue) and `POST /recall/answer` (answer/skip recording)
 - **`tr ask` subcommand** — Bubbletea TUI with "Thinking." animation, multiple-choice keypress handler, 30-second timeout; TTY-aware (silent in CI/CD)
 - **Post-commit hook** — `tr init` writes `.git/hooks/post-commit` that calls `total-recall ask` after each successful commit
-- **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); one-time migration guard from `concepts.db`
+- **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); both `concepts` and `questions` tables tagged with a `repo` column for repo-scoped recall; `TR_HOME` env var redirects the data directory for test/CI isolation
 - **`terminal.Adapter` opt-in** — `presentation.terminal: true` retains daemon-pane delivery for users who prefer it; off by default
 
 ### Phase 4C — Answer Feedback Loop (Shipped)

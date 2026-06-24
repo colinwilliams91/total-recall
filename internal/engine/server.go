@@ -157,14 +157,14 @@ func (s *Server) runPipeline(env HookEnvelope) {
 			Weight:  c.Weight,
 		}
 	}
-	if err := s.store.Save(ctx, fingerprints); err != nil {
+	if err := s.store.Save(ctx, env.Repo, fingerprints); err != nil {
 		log.Printf("[pipeline] cache save error: %v", err)
 	}
 
 	if s.recallEngine == nil {
 		return
 	}
-	q, err := s.recallEngine.Synthesize(ctx, "", s.cfg.AI.Model)
+	q, err := s.recallEngine.Synthesize(ctx, env.Repo, "", s.cfg.AI.Model)
 	if err != nil {
 		log.Printf("[recall] synthesize error: %v", err)
 		return
@@ -173,7 +173,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
-	if err := s.store.SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex); err != nil {
+	if err := s.store.SaveQuestion(ctx, env.Repo, q.Question, q.Choices, q.CorrectIndex); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -193,12 +193,16 @@ func (s *Server) runPipeline(env HookEnvelope) {
 }
 
 func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
-	q, err := s.store.NextQuestion(r.Context(), "shell")
+	repo := r.URL.Query().Get("repo")
+	q, err := s.store.NextQuestion(r.Context(), repo, "shell")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	if q == nil {
+		if repo != "" {
+			log.Printf("[recall] no pending questions for repo=%q — if you recently moved this repo, its key has changed", repo)
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

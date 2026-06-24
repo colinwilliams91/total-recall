@@ -150,17 +150,24 @@ func DefaultUserConfig() UserConfig {
 	}
 }
 
-// UserConfigPath returns the absolute path to ~/.tr/config.yaml.
+// UserConfigPath returns the absolute path to the config.yaml in the Total
+// Recall data directory. When TR_HOME is set, it resolves to $TR_HOME/config.yaml;
+// otherwise ~/.tr/config.yaml.
 func UserConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".tr", "config.yaml"), nil
+	return filepath.Join(dir, "config.yaml"), nil
 }
 
-// UserConfigDir returns the absolute path to ~/.tr/.
+// UserConfigDir returns the absolute path to the Total Recall data directory.
+// When the TR_HOME environment variable is set to a non-empty path, it is used
+// (enabling test/CI isolation). Otherwise the default ~/.tr is used.
 func UserConfigDir() (string, error) {
+	if env := os.Getenv("TR_HOME"); env != "" {
+		return env, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

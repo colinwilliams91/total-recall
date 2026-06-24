@@ -1,116 +1,80 @@
 ## Requirements
 
-### Requirement: DB path migrates from concepts.db to memory.db
-`store.Open()` SHALL check for `~/.tr/memory.db`. If it does not exist but `~/.tr/concepts.db` does, it SHALL copy `concepts.db` → `memory.db` before opening, logging a one-time advisory. If neither exists, `Open()` creates `memory.db` from scratch.
+### Requirement: DB path is ~/.tr/memory.db (no legacy migration)
+`store.Open()` SHALL open `~/.tr/memory.db` (or `$TR_HOME/memory.db` when `TR_HOME` is set). The legacy `concepts.db` → `memory.db` migration guard is removed — only `memory.db` is supported. If `memory.db` does not exist, `Open()` creates it with the full schema.
 
-#### Scenario: Fresh install (no legacy file)
-- **WHEN** neither `memory.db` nor `concepts.db` exist in `~/.tr/`
-- **THEN** `Open()` creates `~/.tr/memory.db` with the full schema and returns without error
+#### Scenario: Fresh install
+- **WHEN** neither `memory.db` nor `concepts.db` exist in the data directory
+- **THEN** `Open()` creates `memory.db` with the full schema and returns without error
 
-#### Scenario: Existing Phase 3 install
-- **WHEN** `~/.tr/concepts.db` exists and `~/.tr/memory.db` does not
-- **THEN** `Open()` copies `concepts.db` → `memory.db`, logs `[store] migrated concepts.db → memory.db`, and opens the new file
-
-#### Scenario: Already migrated
-- **WHEN** `~/.tr/memory.db` already exists (regardless of `concepts.db`)
-- **THEN** `Open()` opens `memory.db` directly without attempting migration
+#### Scenario: Existing memory.db
+- **WHEN** `memory.db` already exists
+- **THEN** `Open()` opens it directly without attempting any migration
 
 ---
 
-### Requirement: questions table schema is created idempotently
-`store.Open()` SHALL run `CREATE TABLE IF NOT EXISTS questions (...)` on every open. The full schema includes: `id`, `question`, `choices`, `correct_index` (INTEGER NOT NULL DEFAULT 0), `queued_at`, `delivered_at`, `claimed_by`, `answer`, `answer_index` (INTEGER, nullable), `correct` (INTEGER, nullable), `feedback` (TEXT, nullable), `answered_at`.
-
-#### Scenario: Fresh install — full schema
-- **WHEN** `memory.db` does not exist
-- **THEN** `Open()` creates the `questions` table with all columns including `correct_index`, `answer_index`, `correct`, `feedback`
+### Requirement: questions table schema is created idempotently with repo column
+`store.Open()` SHALL run `CREATE TABLE IF NOT EXISTS questions (...)` including a `repo TEXT NOT NULL DEFAULT ''` column on every open. A covering partial index `idx_questions_repo_q ON questions(repo, queued_at ASC) WHERE delivered_at IS NULL` SHALL be created idempotently to support repo-scoped atomic dequeue.
 
 ---
 
-### Requirement: addColumnIfMissing migrates existing installs idempotently
-After running `CREATE TABLE IF NOT EXISTS`, `store.Open()` SHALL call `addColumnIfMissing` for each Phase 4C column (`correct_index`, `answer_index`, `correct`, `feedback`). The helper executes `ALTER TABLE ADD COLUMN` and ignores "duplicate column name" errors, propagating all other errors.
+### Requirement: SaveQuestion persists a synthesized question with repo tag
+`(*Store).SaveQuestion(ctx, repo, question, choices, correctIndex)` SHALL insert one row into `questions` with the `repo` column set to the provided repository path. `delivered_at`, `answer`, and `answered_at` SHALL be NULL.
 
-#### Scenario: Existing Phase 4A install — columns added
-- **WHEN** `memory.db` exists with the Phase 4A questions table (no `correct_index`, `answer_index`, `correct`, `feedback` columns)
-- **THEN** each missing column is added via `ALTER TABLE ADD COLUMN`
-- **AND** existing rows remain intact with `correct_index = 0`, `answer_index = NULL`, `correct = NULL`, `feedback = NULL`
-
-#### Scenario: Idempotent re-run
-- **WHEN** `store.Open()` is called on a database that already has all columns
-- **THEN** no error is returned (duplicate column errors are silently ignored)
+#### Scenario: Valid question saved for a repo
+- **WHEN** `SaveQuestion` is called with `repo = "/path/to/repo"` and a non-nil question
+- **THEN** a row appears in `questions` with `repo = "/path/to/repo"`, `delivered_at IS NULL`, and `queued_at` set to the current time
 
 ---
 
-### Requirement: SaveQuestion persists a synthesized question with correct_index
-`(*Store).SaveQuestion(ctx, question string, choices []string, correctIndex int) error` SHALL insert one row into `questions` with the question text, JSON-marshalled choices, and `correct_index`. `delivered_at`, `answer`, `answer_index`, `correct`, `feedback`, and `answered_at` SHALL be NULL.
+### Requirement: NextQuestion atomically claims one question scoped to repo
+`(*Store).NextQuestion(ctx, repo, claimedBy)` SHALL use a single SQL `UPDATE ... RETURNING` statement to atomically select and mark the oldest unclaimed question where `delivered_at IS NULL AND repo = ?`, ordered by `queued_at ASC`. It SHALL set `delivered_at = datetime('now')` and `claimed_by` to the provided caller identifier. When `repo = ""`, it SHALL dequeue from the global pool.
 
-#### Scenario: Valid question saved with correct_index
-- **WHEN** `SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex)` is called with `CorrectIndex = 2`
-- **THEN** a row appears in `questions` with `correct_index = 2`, `delivered_at IS NULL`, and `queued_at` set to the current time
+#### Scenario: Question available for the repo
+- **WHEN** at least one question with `repo = "/path/X"` has `delivered_at IS NULL`
+- **THEN** exactly one caller receives that question; concurrent callers receive `nil, nil`
 
----
-
-### Requirement: NextQuestion atomically claims one question and returns correct_index
-`(*Store).NextQuestion` SHALL use a single SQL `UPDATE ... RETURNING` statement to atomically select and mark the oldest unclaimed question (`delivered_at IS NULL`, ordered by `queued_at ASC`). It SHALL set `delivered_at = datetime('now')` and `claimed_by` to the provided caller identifier. The RETURNING clause SHALL include `correct_index` so the caller (REST or MCP) has access to it.
-
-#### Scenario: Question available
-- **WHEN** at least one question has `delivered_at IS NULL`
-- **THEN** exactly one caller receives the question (including `CorrectIndex`); concurrent callers receive `nil, nil`
-
-#### Scenario: Queue empty
-- **WHEN** no questions have `delivered_at IS NULL`
+#### Scenario: Queue empty for the repo
+- **WHEN** no questions with `repo = "/path/X"` have `delivered_at IS NULL`
 - **THEN** `NextQuestion` returns `nil, nil` without error
 
----
-
-### Requirement: GetQuestion fetches a single question by ID
-`(*Store).GetQuestion(ctx, id int64) (*StoredQuestion, error)` SHALL `SELECT id, question, choices, correct_index, queued_at FROM questions WHERE id = ?`. It SHALL return `nil, nil` when no row with the given ID exists.
-
-#### Scenario: Question exists
-- **WHEN** `GetQuestion(ctx, 1)` is called and question 1 exists
-- **THEN** a `*StoredQuestion` is returned with `ID`, `Question`, `Choices`, `CorrectIndex`, and `QueuedAt` populated
-
-#### Scenario: Question not found
-- **WHEN** `GetQuestion(ctx, 99999)` is called and no row with ID 99999 exists
-- **THEN** `nil, nil` is returned (not an error)
+#### Scenario: Repo isolation — X's question not served to Y
+- **WHEN** `NextQuestion(ctx, "/path/Y", "shell")` is called and only questions with `repo = "/path/X"` are pending
+- **THEN** `NextQuestion` returns `nil, nil` — repo Y does not receive repo X's questions
 
 ---
 
-### Requirement: AnswerQuestion records all answer fields
-`(*Store).AnswerQuestion(ctx, id int64, answerIndex int, answerText string, correct bool, feedback string) error` SHALL update the row with the given ID, setting `answer`, `answer_index`, `correct` (1 for true, 0 for false), `feedback` (NULL if empty string), and `answered_at = datetime('now')`.
-
-#### Scenario: Answer with feedback (terminal path)
-- **WHEN** `AnswerQuestion(ctx, 1, 1, "B", false, "A is correct because...")` is called
-- **THEN** the row has `answer = "B"`, `answer_index = 1`, `correct = 0`, `feedback = "A is correct because..."`, `answered_at = now()`
-
-#### Scenario: Answer with empty feedback (MCP path)
-- **WHEN** `AnswerQuestion(ctx, 1, 0, "A", true, "")` is called
-- **THEN** the row has `answer = "A"`, `answer_index = 0`, `correct = 1`, `feedback = NULL`, `answered_at = now()`
+### Requirement: QueueDepth returns unclaimed count scoped to repo
+`(*Store).QueueDepth(ctx, repo)` SHALL return `SELECT COUNT(*) FROM questions WHERE delivered_at IS NULL AND repo = ?`. When `repo = ""`, it SHALL count the global pool.
 
 ---
 
-### Requirement: SkipQuestion records a skip with no evaluation
-`(*Store).SkipQuestion(ctx, id int64) error` SHALL `UPDATE questions SET answer = 'skip', answered_at = datetime('now') WHERE id = ?`. It SHALL leave `answer_index`, `correct`, and `feedback` NULL.
+### Requirement: PeekNextQuestion returns the next unclaimed question scoped to repo
+`(*Store).PeekNextQuestion(ctx, repo)` SHALL return the oldest unclaimed question where `delivered_at IS NULL AND repo = ?` without claiming it. Used by the `recall://queue` resource handler.
+
+---
+
+### Requirement: RecentAnswered returns answered questions scoped to repo
+`(*Store).RecentAnswered(ctx, repo, limit)` SHALL return up to `limit` answered questions where `answered_at IS NOT NULL AND repo = ?`, ordered by `answered_at DESC`. When `repo = ""`, it SHALL return the global answered history.
+
+---
+
+### Requirement: AnswerQuestion and SkipQuestion remain ID-keyed
+`(*Store).AnswerQuestion` and `(*Store).SkipQuestion` SHALL act on the row with the given ID regardless of repo. The AUTOINCREMENT primary key is globally unique across repos, so no `repo` parameter is needed for these operations.
+
+#### Scenario: Answer recorded
+- **WHEN** `AnswerQuestion(ctx, id, answerIndex, answerText, correct, feedback)` is called
+- **THEN** the row with that ID is updated regardless of its `repo` value
 
 #### Scenario: Skip recorded
-- **WHEN** `SkipQuestion(ctx, 1)` is called
-- **THEN** the row has `answer = "skip"`, `answered_at = now()`
-- **AND** `answer_index`, `correct`, `feedback` remain NULL
+- **WHEN** `SkipQuestion(ctx, id)` is called
+- **THEN** the row with that ID has `answer = "skip"` and `answered_at` set, regardless of its `repo` value
 
 ---
 
-### Requirement: RecentAnswered returns enriched rows
-`(*Store).RecentAnswered` SHALL SELECT and scan `correct_index`, `answer_index`, `correct`, and `feedback` in addition to existing fields. Nullable columns SHALL use nullable scan types (`*int`, `*bool`, `*string`) so that pointer fields are nil when the DB column is NULL.
+### Requirement: Repo column migration purges un-tagged legacy questions
+When `store.Open()` adds the `repo` column to an existing `questions` table (idempotent `ALTER TABLE ADD COLUMN`), it SHALL subsequently `DELETE FROM questions` to purge rows that have no repo tag. This purge SHALL run exactly once — gated on the column-add. The purge SHALL be logged.
 
-#### Scenario: Mixed answer history
-- **WHEN** three questions have been answered (two correct, one skipped)
-- **THEN** all three rows are returned ordered by `answered_at DESC`
-- **AND** each row includes `CorrectIndex`, `AnswerIndex` (nil for skip), `Correct` (nil for skip), `Feedback` (nil for skip and MCP rows)
-
----
-
-### Requirement: StoredQuestion struct carries the full answer lifecycle
-`StoredQuestion` SHALL have fields: `ID int64`, `Question string`, `Choices []string`, `CorrectIndex int`, `QueuedAt time.Time`, `AnswerIndex *int`, `Correct *bool`, `Feedback *string`. Pointer fields SHALL be nil when the DB column is NULL.
-
-#### Scenario: Nullable fields on skipped question
-- **WHEN** a `StoredQuestion` is scanned from a skipped row
-- **THEN** `AnswerIndex`, `Correct`, and `Feedback` are nil
+#### Scenario: Existing database upgraded
+- **WHEN** `Open()` is called on a `memory.db` that has `questions` rows but no `repo` column
+- **THEN** the `repo TEXT NOT NULL DEFAULT ''` column is added, all existing question rows are deleted, and the purge is logged

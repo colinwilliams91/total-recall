@@ -20,9 +20,7 @@ import (
 func startTestDaemon(t *testing.T) (*engine.Server, *cache.Store, string) {
 	t.Helper()
 
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Setenv("USERPROFILE", tempDir)
+	t.Setenv("TR_HOME", t.TempDir())
 
 	store, err := cache.Open()
 	if err != nil {
@@ -150,7 +148,7 @@ func TestRecallNextWithQuestion(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "What does DRY stand for?", []string{
+	if err := store.SaveQuestion(ctx, "", "What does DRY stand for?", []string{
 		"Don't Repeat Yourself",
 		"Don't Run Yaks",
 		"Digital Repository YAML",
@@ -188,7 +186,7 @@ func TestRecallNextIdempotent(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "single question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "single question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -210,7 +208,7 @@ func TestRecallAnswer(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -248,7 +246,7 @@ func TestRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "skippable question", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "skippable question", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -339,6 +337,36 @@ func TestRecallAnswerInvalidBody(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRecallNextRepoScoped(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+
+	ctx := context.Background()
+	if err := store.SaveQuestion(ctx, "/repo/x", "X's question", []string{"a", "b"}, 0); err != nil {
+		t.Fatalf("seed for repo X: %v", err)
+	}
+
+	rY := mustGET(t, baseURL, "/recall/next?repo=/repo/y")
+	defer rY.Body.Close()
+	if rY.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 for repo Y (no questions), got %d", rY.StatusCode)
+	}
+
+	rX := mustGET(t, baseURL, "/recall/next?repo=/repo/x")
+	defer rX.Body.Close()
+	if rX.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for repo X, got %d", rX.StatusCode)
+	}
+	var result struct {
+		Question string `json:"question"`
+	}
+	if err := json.NewDecoder(rX.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Question != "X's question" {
+		t.Fatalf("expected X's question, got %q", result.Question)
 	}
 }
 
