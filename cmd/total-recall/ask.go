@@ -15,8 +15,9 @@ import (
 	"golang.org/x/term"
 )
 
+var daemonBaseURL = "http://localhost:7331"
+
 const (
-	daemonBaseURL  = "http://localhost:7331"
 	defaultTimeout = 15 * time.Second
 	animTick       = 400 * time.Millisecond
 	caughtUpWindow = 4 * time.Second
@@ -45,28 +46,14 @@ func askCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			am, ok := finalModel.(askModel)
-			if !ok {
-				return nil
-			}
-			switch {
-			case am.advisory != "":
-				fmt.Println(am.advisory)
-			case am.skipped:
-				fmt.Println("→ Question saved for later.")
-			case am.feedbackResult.correctText != "":
-				fr := am.feedbackResult
-				if fr.correct {
-					fmt.Println("✓ Correct.")
-				} else {
-					fmt.Printf("✗ The answer was: %s\n", fr.correctText)
-				}
-				if fr.feedback != "" {
-					fmt.Println()
-					fmt.Printf("  %s\n", fr.feedback)
-				}
-			}
+		am, ok := finalModel.(askModel)
+		if !ok {
 			return nil
+		}
+		if out := renderPostAltScreen(am); out != "" {
+			fmt.Print(out)
+		}
+		return nil
 		},
 	}
 
@@ -252,6 +239,10 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.state = stateDone
 		return m, tea.Quit
+	case skipMsg:
+		m.state = stateDone
+		m.skipped = true
+		return m, tea.Quit
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			m.state = stateDone
@@ -380,4 +371,29 @@ func wordWrap(s string, width int) string {
 		line += len(w)
 	}
 	return b.String()
+}
+
+// renderPostAltScreen produces the terminal output printed after the Bubble Tea
+// alt-screen closes. Returns "" when nothing should be printed (q/Esc exit).
+func renderPostAltScreen(am askModel) string {
+	switch {
+	case am.advisory != "":
+		return am.advisory + "\n"
+	case am.skipped:
+		return "→ Question saved for later.\n"
+	case am.feedbackResult.correctText != "":
+		var b strings.Builder
+		fr := am.feedbackResult
+		if fr.correct {
+			b.WriteString("✓ Correct.\n")
+		} else {
+			fmt.Fprintf(&b, "✗ The answer was: %s\n", fr.correctText)
+		}
+		if fr.feedback != "" {
+			b.WriteString("\n")
+			fmt.Fprintf(&b, "  %s\n", fr.feedback)
+		}
+		return b.String()
+	}
+	return ""
 }

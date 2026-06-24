@@ -255,8 +255,7 @@ RETURNING id, question, choices, correct_index, queued_at`, claimedBy)
 	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
 		return nil, fmt.Errorf("unmarshalling choices: %w", err)
 	}
-	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
-	sq.QueuedAt = t
+	sq.QueuedAt = parseSQLiteTime(queuedAt)
 	return &sq, nil
 }
 
@@ -291,8 +290,7 @@ func (s *Store) GetQuestion(ctx context.Context, id int64) (*StoredQuestion, err
 	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
 		return nil, fmt.Errorf("unmarshalling choices: %w", err)
 	}
-	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
-	sq.QueuedAt = t
+	sq.QueuedAt = parseSQLiteTime(queuedAt)
 	return &sq, nil
 }
 
@@ -311,6 +309,19 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// parseSQLiteTime parses a datetime string returned by the SQLite driver.
+// modernc.org/sqlite returns timestamps in RFC 3339 form (e.g.
+// "2026-06-24T06:51:03Z"); older space-separated "2006-01-02 15:04:05" values
+// are also accepted for backward compatibility. A zero time is returned for
+// unparseable input.
+func parseSQLiteTime(s string) time.Time {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	t, _ := time.Parse("2006-01-02 15:04:05", s)
+	return t
 }
 
 // QueueDepth returns the number of unclaimed (undelivered) questions.
@@ -348,8 +359,7 @@ func (s *Store) RecentAnswered(ctx context.Context, limit int) ([]StoredQuestion
 		if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
 			return nil, fmt.Errorf("unmarshalling choices: %w", err)
 		}
-		t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
-		sq.QueuedAt = t
+		sq.QueuedAt = parseSQLiteTime(queuedAt)
 		if answerIndex.Valid {
 			v := int(answerIndex.Int64)
 			sq.AnswerIndex = &v
@@ -384,8 +394,7 @@ func (s *Store) PeekNextQuestion(ctx context.Context) (*StoredQuestion, error) {
 	if err := json.Unmarshal([]byte(choicesJSON), &sq.Choices); err != nil {
 		return nil, fmt.Errorf("unmarshalling choices: %w", err)
 	}
-	t, _ := time.Parse("2006-01-02 15:04:05", queuedAt)
-	sq.QueuedAt = t
+	sq.QueuedAt = parseSQLiteTime(queuedAt)
 	return &sq, nil
 }
 
