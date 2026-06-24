@@ -354,11 +354,11 @@ func TestSaveQuestionPersistsCorrectIndex(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "correct-index question", []string{"a", "b", "c"}, 2); err != nil {
+	if err := s.SaveQuestion(ctx, "", "correct-index question", []string{"a", "b", "c"}, 2); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -385,10 +385,10 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "full row question", []string{"x", "y", "z"}, 1); err != nil {
+	if err := s.SaveQuestion(ctx, "", "full row question", []string{"x", "y", "z"}, 1); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -432,10 +432,10 @@ func TestSkipQuestionLeavesNulls(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "skip me", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "skip me", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -458,7 +458,7 @@ func TestSkipQuestionLeavesNulls(t *testing.T) {
 	}
 
 	// Verify nullable enriched fields via RecentAnswered.
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -481,10 +481,10 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "feedback question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 		t.Fatalf("AnswerQuestion failed: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -522,10 +522,10 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "empty feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "empty feedback question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 		t.Fatalf("AnswerQuestion failed: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -555,10 +555,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	ctx := context.Background()
 
 	// q1: correct with feedback (terminal-style)
-	if err := s.SaveQuestion(ctx, "terminal-style", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "terminal-style", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q1: %v", err)
 	}
-	q1, err := s.NextQuestion(ctx, "test")
+	q1, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q1: %v", err)
 	}
@@ -567,10 +567,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	}
 
 	// q2: incorrect without feedback (MCP-style)
-	if err := s.SaveQuestion(ctx, "mcp-style", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "mcp-style", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q2: %v", err)
 	}
-	q2, err := s.NextQuestion(ctx, "test")
+	q2, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q2: %v", err)
 	}
@@ -579,10 +579,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	}
 
 	// q3: skipped
-	if err := s.SaveQuestion(ctx, "skipped-one", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "skipped-one", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q3: %v", err)
 	}
-	q3, err := s.NextQuestion(ctx, "test")
+	q3, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q3: %v", err)
 	}
@@ -590,7 +590,7 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 		t.Fatalf("SkipQuestion q3: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -646,7 +646,8 @@ func TestAddColumnIfMissingMigration(t *testing.T) {
 	t.Setenv("USERPROFILE", tempDir)
 
 	// Pre-create the memory.db with the old Phase 4A schema (no correct_index,
-	// answer_index, correct, or feedback columns) and a surviving legacy row.
+	// answer_index, correct, feedback, or repo columns) and a legacy row that
+	// phase 05's repo-scoping migration will purge on first open.
 	trDir := filepath.Join(tempDir, ".tr")
 	if err := os.MkdirAll(trDir, 0o700); err != nil {
 		t.Fatalf("mkdir .tr: %v", err)
@@ -683,33 +684,38 @@ CREATE TABLE IF NOT EXISTS concepts (
 		t.Fatalf("close old db: %v", err)
 	}
 
-	// cache.Open() must add all 4 new columns via addColumnIfMissing.
+	// cache.Open() must add the 4 phase 4C columns plus the phase 05 repo
+	// column, and purge the un-tagged legacy row.
 	s, err := cache.Open()
 	if err != nil {
 		t.Fatalf("cache.Open migration failed: %v", err)
 	}
 
 	ctx := context.Background()
-	q, err := s.GetQuestion(ctx, 1)
+	legacy, err := s.GetQuestion(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetQuestion after migration: %v", err)
 	}
-	if q == nil {
-		t.Fatal("expected legacy row to survive migration, got nil")
-	}
-	if q.Question != "legacy q" {
-		t.Fatalf("expected legacy question text, got %q", q.Question)
-	}
-	if q.CorrectIndex != 0 {
-		t.Fatalf("expected default CorrectIndex 0, got %d", q.CorrectIndex)
+	if legacy != nil {
+		t.Fatalf("expected legacy row to be purged by repo-scoping migration, got %+v", legacy)
 	}
 
-	// Exercise all 4 new columns via RecentAnswered (which selects them) by
-	// answering the legacy row.
-	if err := s.AnswerQuestion(ctx, 1, 0, "a", true, ""); err != nil {
+	// Exercise all 5 new columns (4 phase 4C + 1 phase 05) by saving and
+	// answering a fresh question through the new schema.
+	if err := s.SaveQuestion(ctx, "", "post-migration q", []string{"a", "b"}, 0); err != nil {
+		t.Fatalf("SaveQuestion after migration: %v", err)
+	}
+	q, err := s.NextQuestion(ctx, "", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion after migration: %v", err)
+	}
+	if q == nil {
+		t.Fatal("expected non-nil question after migration")
+	}
+	if err := s.AnswerQuestion(ctx, q.ID, 0, "a", true, ""); err != nil {
 		t.Fatalf("AnswerQuestion after migration: %v", err)
 	}
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered after migration: %v", err)
 	}

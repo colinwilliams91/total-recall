@@ -197,7 +197,7 @@ func isQuitCmd(cmd tea.Cmd) bool {
 }
 
 func TestUpdateFeedbackReceivesFeedbackMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(feedbackMsg{correct: true, correctText: "X", feedback: "Y"})
@@ -221,7 +221,7 @@ func TestUpdateFeedbackReceivesFeedbackMsg(t *testing.T) {
 }
 
 func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(skipMsg{})
@@ -239,7 +239,7 @@ func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
 }
 
 func TestUpdateFeedbackCtrlC(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
@@ -254,7 +254,7 @@ func TestUpdateFeedbackCtrlC(t *testing.T) {
 }
 
 func TestStateFeedbackView(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	view := m.View()
@@ -273,7 +273,7 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "post-answer q", []string{"correct-a", "wrong-b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "post-answer q", []string{"correct-a", "wrong-b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -286,7 +286,7 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	cmd := postAnswer(q.ID, 0, &http.Client{Timeout: 3 * time.Second})
+	cmd := postAnswer(q.ID, 0, "", &http.Client{Timeout: 3 * time.Second})
 	msg := cmd()
 
 	fm, ok := msg.(feedbackMsg)
@@ -308,7 +308,7 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "post-skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "post-skip q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -321,7 +321,7 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	cmd := postSkip(q.ID, &http.Client{Timeout: 3 * time.Second})
+	cmd := postSkip(q.ID, "", &http.Client{Timeout: 3 * time.Second})
 	msg := cmd()
 
 	if _, ok := msg.(skipMsg); !ok {
@@ -372,7 +372,7 @@ func TestPostAltScreenRendering(t *testing.T) {
 }
 
 func TestAskModelQKeyExitsSilently(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,

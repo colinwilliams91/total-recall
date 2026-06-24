@@ -407,7 +407,7 @@ func toolText(t *testing.T, result *mcp.CallToolResult) string {
 func seedAndClaim(t *testing.T, store *cache.Store, baseURL, question string, choices []string, correctIndex int) int64 {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, question, choices, correctIndex); err != nil {
+	if err := store.SaveQuestion(ctx, "", question, choices, correctIndex); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	resp := mustGET(t, baseURL, "/recall/next")
@@ -530,7 +530,7 @@ func TestMCPRecallNextReturnsCorrectIndex(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "mcp next q", []string{"a", "b", "c"}, 2); err != nil {
+	if err := store.SaveQuestion(ctx, "", "mcp next q", []string{"a", "b", "c"}, 2); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -560,7 +560,7 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "mcp answer q", []string{"right", "wrong"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "mcp answer q", []string{"right", "wrong"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -603,7 +603,7 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "mcp skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "mcp skip q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -642,10 +642,10 @@ func TestRecallRecentEnriched(t *testing.T) {
 	ctx := context.Background()
 
 	// Answer one question correctly (terminal-style with feedback).
-	if err := store.SaveQuestion(ctx, "recent-correct", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "recent-correct", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed q1: %v", err)
 	}
-	q1, err := store.NextQuestion(ctx, "test")
+	q1, err := store.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("claim q1: %v", err)
 	}
@@ -654,10 +654,10 @@ func TestRecallRecentEnriched(t *testing.T) {
 	}
 
 	// Skip one question.
-	if err := store.SaveQuestion(ctx, "recent-skip", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "recent-skip", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("seed q2: %v", err)
 	}
-	q2, err := store.NextQuestion(ctx, "test")
+	q2, err := store.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("claim q2: %v", err)
 	}
