@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS concepts (
   seen_at   DATETIME NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_concepts_seen_at ON concepts(seen_at DESC);
-CREATE INDEX IF NOT EXISTS idx_concepts_repo_seen ON concepts(repo, seen_at DESC);
 `
 
 	createQuestionsTableSQL = `
@@ -47,7 +46,6 @@ CREATE TABLE IF NOT EXISTS questions (
     feedback      TEXT,
     answered_at   DATETIME
 );
-CREATE INDEX IF NOT EXISTS idx_questions_repo_q ON questions(repo, queued_at ASC) WHERE delivered_at IS NULL;
 `
 )
 
@@ -137,6 +135,18 @@ func Open() (*Store, error) {
 	}
 	if purged {
 		log.Printf("[store] purged un-tagged legacy rows during repo-scoping migration")
+	}
+
+	// Repo indexes must be created after the repo column migration — pre-phase-05
+	// databases don't have the column yet, and CREATE INDEX on a missing column
+	// is a hard error.
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_concepts_repo_seen ON concepts(repo, seen_at DESC)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("creating idx_concepts_repo_seen: %w", err)
+	}
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_questions_repo_q ON questions(repo, queued_at ASC) WHERE delivered_at IS NULL`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("creating idx_questions_repo_q: %w", err)
 	}
 
 	return &Store{db: db}, nil
