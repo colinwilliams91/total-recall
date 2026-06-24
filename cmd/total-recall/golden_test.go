@@ -70,3 +70,10 @@ func TestGoldenAskDoneView(t *testing.T) {
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
 }
+
+func TestGoldenAskFeedbackView(t *testing.T) {
+	m := newAskModel(10 * time.Second)
+	m.state = stateFeedback
+	view := m.View()
+	requireEqualGolden(t, []byte(view))
+}

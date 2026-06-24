@@ -67,13 +67,15 @@
 - **Enriched `recall://recent`** — MCP resource includes `correct_index`, `answer_index`, `correct`, `feedback` for each row (NULL for skipped/MCP rows)
 - **Foundation for spaced repetition** — `memory.db` now carries the answer history needed for future difficulty progression and recall debt
 
-### Phase 4B — VS Code Extension (Next)
+### Phase 4B — VS Code Extension (Deferred)
 
 - VS Code extension surfaces questions as workspace notifications with clickable answer choices
 - Polls `GET /recall/next`; uses VS Code Notifications API (`window.showInformationMessage`)
 - Daemon autostart: `tr init` will offer launchd/systemd/Task Scheduler entry so `tr serve` starts on reboot
 
-### Phase 4D — Extended AI Providers (Planned)
+> **Deferred out of Phase 4 scope.** The REST API and MCP server are stable delivery surfaces; the VS Code extension is a UX enhancement, not a capability gap. Moved to make room for higher-priority work.
+
+### Phase 4D — Extended AI Providers (Shipped)
 
 - **Qwen** (Alibaba Cloud Model Studio) — OpenAI-compatible via DashScope; default model `qwen3.7-max`
 - **MiniMax** — OpenAI-compatible; default model `MiniMax-M3`
