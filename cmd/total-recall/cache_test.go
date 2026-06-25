@@ -327,9 +327,14 @@ func TestQueueDepthScopedToRepo(t *testing.T) {
 	}
 }
 
-// rawDBPath resolves the memory.db path under the current test HOME.
+// rawDBPath resolves the memory.db path under the active test data directory.
+// Honors TR_HOME when set (matching cache.trDir); otherwise falls back to
+// ~/.tr/memory.db. Used by openRawDB for column-level assertions.
 func rawDBPath(t *testing.T) string {
 	t.Helper()
+	if env := os.Getenv("TR_HOME"); env != "" {
+		return filepath.Join(env, "memory.db")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("UserHomeDir: %v", err)
