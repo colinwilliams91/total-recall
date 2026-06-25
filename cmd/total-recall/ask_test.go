@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/colinwilliams91/total-recall/internal/hooks"
 )
 
 func TestAskViewShowsCaughtUpMessageInFinalWindow(t *testing.T) {
@@ -404,5 +409,114 @@ func TestAskModelQKeyExitsSilently(t *testing.T) {
 	}
 	if out := renderPostAltScreen(got); out != "" {
 		t.Fatalf("expected no post-alt-screen output for q exit, got %q", out)
+	}
+}
+
+// ── 10. ask.go URL encoding tests ────────────────────────────────────────────
+
+// captureRequestServer starts an httptest.Server that records the request URL
+// and returns the given status code with the optional JSON body.
+func captureRequestServer(t *testing.T, status int, body string) (*httptest.Server, *string) {
+	t.Helper()
+	var captured string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		if body != "" {
+			w.Write([]byte(body))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &captured
+}
+
+// withDaemonBaseURL temporarily sets the package-level daemonBaseURL for a test.
+func withDaemonBaseURL(t *testing.T, newURL string) {
+	t.Helper()
+	orig := daemonBaseURL
+	daemonBaseURL = newURL
+	t.Cleanup(func() { daemonBaseURL = orig })
+}
+
+// Task 10.10: pollCmd appends ?repo=<url-encoded> when repo is non-empty.
+func TestPollCmdAppendsRepoQueryParam(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusNoContent, "")
+	withDaemonBaseURL(t, srv.URL)
+
+	m := newAskModel(10*time.Second, "/path/to/repo")
+	cmd := m.pollCmd()
+	cmd()
+
+	expected := "?repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.11: pollCmd omits the repo query param when repo is "" (global fallback).
+func TestPollCmdOmitsRepoQueryParamWhenEmpty(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusNoContent, "")
+	withDaemonBaseURL(t, srv.URL)
+
+	m := newAskModel(10*time.Second, "")
+	cmd := m.pollCmd()
+	cmd()
+
+	if strings.Contains(*captured, "?repo=") {
+		t.Fatalf("expected no repo param in URL, got %q", *captured)
+	}
+}
+
+// Task 10.12: postAnswer appends &repo=<url-encoded> when repo is non-empty.
+func TestPostAnswerAppendsRepoQueryParam(t *testing.T) {
+	body := `{"ok":true,"correct":true,"correct_text":"a","feedback":""}`
+	srv, captured := captureRequestServer(t, http.StatusOK, body)
+	withDaemonBaseURL(t, srv.URL)
+
+	cmd := postAnswer(42, 0, "/path/to/repo", &http.Client{Timeout: 3 * time.Second})
+	cmd()
+
+	expected := "&repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.13: postSkip appends ?repo=<url-encoded> when repo is non-empty.
+func TestPostSkipAppendsRepoQueryParam(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusOK, `{"ok":true}`)
+	withDaemonBaseURL(t, srv.URL)
+
+	cmd := postSkip(42, "/path/to/repo", &http.Client{Timeout: 3 * time.Second})
+	cmd()
+
+	expected := "?repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.14: resolveAskRepo writes the stderr advisory when FindRepoRoot errors.
+func TestResolveAskRepoAdvisoryOnGitError(t *testing.T) {
+	origFindRepoRoot := hooks.FindRepoRoot
+	hooks.FindRepoRoot = func() (string, error) {
+		return "", fmt.Errorf("not a git repository")
+	}
+	t.Cleanup(func() { hooks.FindRepoRoot = origFindRepoRoot })
+
+	var buf bytes.Buffer
+	restore := captureStderr(&buf)
+	repo := resolveAskRepo()
+	restore()
+
+	if repo != "" {
+		t.Fatalf("expected empty repo on git error, got %q", repo)
+	}
+	if !strings.Contains(buf.String(), "[ask] not inside a git repo") {
+		t.Fatalf("expected advisory on stderr, got:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "falling back to global recall queue") {
+		t.Fatalf("expected fallback message on stderr, got:\n%s", buf.String())
 	}
 }

@@ -19,6 +19,18 @@ import (
 
 var daemonBaseURL = "http://localhost:7331"
 
+// resolveAskRepo resolves the current git repository root for repo-scoped recall.
+// On error (not inside a git repo, or git unavailable) it logs an advisory to
+// stderr and returns "" (the global fallback pool).
+func resolveAskRepo() string {
+	repo, err := hooks.FindRepoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[ask] not inside a git repo — falling back to global recall queue")
+		return ""
+	}
+	return repo
+}
+
 const (
 	defaultTimeout = 15 * time.Second
 	animTick       = 400 * time.Millisecond
@@ -42,11 +54,7 @@ func askCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return nil
 			}
-			repo, repoErr := hooks.FindRepoRoot()
-			if repoErr != nil {
-				repo = ""
-				fmt.Fprintln(os.Stderr, "[ask] not inside a git repo — falling back to global recall queue")
-			}
+			repo := resolveAskRepo()
 			m := newAskModel(time.Duration(timeout)*time.Second, repo)
 			p := tea.NewProgram(m)
 			finalModel, err := p.Run()

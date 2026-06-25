@@ -158,7 +158,69 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		Name:        "recall queue",
 		Description: "Current pending question queue depth and next question preview.",
 		MIMEType:    "application/json",
-	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	}, queueResourceHandler(store))
+
+	// Template matches recall://queue?repo=<path> so repo-scoped reads reach the
+	// handler. AddResource only matches exact URIs; the template handles the
+	// query-param variant. Both share the same handler which parses repo from the URI.
+	srv.AddResourceTemplate(&mcp.ResourceTemplate{
+		URITemplate: "recall://queue{?repo}",
+		Name:        "recall queue (repo-scoped)",
+		Description: "Current pending question queue depth and next question preview, scoped by repo.",
+		MIMEType:    "application/json",
+	}, queueResourceHandler(store))
+
+	// recall://recent — last 10 answered questions.
+	srv.AddResource(&mcp.Resource{
+		URI:         "recall://recent",
+		Name:        "recent answers",
+		Description: "Last 10 answered recall questions.",
+		MIMEType:    "application/json",
+	}, recentResourceHandler(store))
+
+	// Template for repo-scoped recent reads: recall://recent?repo=<path>
+	srv.AddResourceTemplate(&mcp.ResourceTemplate{
+		URITemplate: "recall://recent{?repo}",
+		Name:        "recent answers (repo-scoped)",
+		Description: "Last 10 answered recall questions, scoped by repo.",
+		MIMEType:    "application/json",
+	}, recentResourceHandler(store))
+
+	// recall_workflow — system prompt guiding the agent to use recall tools.
+	srv.AddPrompt(&mcp.Prompt{
+		Name:        "recall_workflow",
+		Description: "System prompt instructing the AI agent to surface recall questions after commits.",
+	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return &mcp.GetPromptResult{
+			Messages: []*mcp.PromptMessage{{
+				Role:    mcp.Role("user"),
+				Content: &mcp.TextContent{Text: recallWorkflowInstructions},
+			}},
+		}, nil
+	})
+
+	return srv
+}
+
+// mcpHandler returns an http.Handler that serves the MCP protocol at /mcp/.
+func mcpHandler(srv *mcp.Server) http.Handler {
+	return mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+		return srv
+	}, nil)
+}
+
+// textResult creates a CallToolResult with a single text content item.
+func textResult(text string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: text}},
+	}
+}
+
+// queueResourceHandler returns a ReadResource handler for the recall://queue
+// resource that scopes QueueDepth and PeekNextQuestion by the repo extracted
+// from the request URI. Shared by the plain resource and the URI template.
+func queueResourceHandler(store *cache.Store) func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	return func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		repo := repoFromResourceURI(req.Params.URI)
 		depth := 0
 		var nextPayload any = nil
@@ -190,15 +252,14 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 				Text:     string(b),
 			}},
 		}, nil
-	})
+	}
+}
 
-	// recall://recent — last 10 answered questions.
-	srv.AddResource(&mcp.Resource{
-		URI:         "recall://recent",
-		Name:        "recent answers",
-		Description: "Last 10 answered recall questions.",
-		MIMEType:    "application/json",
-	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+// recentResourceHandler returns a ReadResource handler for the recall://recent
+// resource that scopes RecentAnswered by the repo extracted from the request
+// URI. Shared by the plain resource and the URI template.
+func recentResourceHandler(store *cache.Store) func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	return func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		repo := repoFromResourceURI(req.Params.URI)
 		var answered []cache.StoredQuestion
 		if store != nil {
@@ -229,34 +290,5 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 				Text:     string(b),
 			}},
 		}, nil
-	})
-
-	// recall_workflow — system prompt guiding the agent to use recall tools.
-	srv.AddPrompt(&mcp.Prompt{
-		Name:        "recall_workflow",
-		Description: "System prompt instructing the AI agent to surface recall questions after commits.",
-	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		return &mcp.GetPromptResult{
-			Messages: []*mcp.PromptMessage{{
-				Role:    mcp.Role("user"),
-				Content: &mcp.TextContent{Text: recallWorkflowInstructions},
-			}},
-		}, nil
-	})
-
-	return srv
-}
-
-// mcpHandler returns an http.Handler that serves the MCP protocol at /mcp/.
-func mcpHandler(srv *mcp.Server) http.Handler {
-	return mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
-		return srv
-	}, nil)
-}
-
-// textResult creates a CallToolResult with a single text content item.
-func textResult(text string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: text}},
 	}
 }

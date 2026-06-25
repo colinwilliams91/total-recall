@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -240,5 +241,62 @@ func TestLoadReturnsMergedConfig(t *testing.T) {
 	}
 	if cfg.AI.Provider != "anthropic" {
 		t.Fatalf("expected default provider anthropic, got %q", cfg.AI.Provider)
+	}
+}
+
+// ── 10. Config TR_HOME tests ──────────────────────────────────────────────────
+
+// Task 10.15: UserConfigPath returns $TR_HOME/config.yaml when TR_HOME is set.
+func TestUserConfigPathHonorsTRHome(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+
+	path, err := config.UserConfigPath()
+	if err != nil {
+		t.Fatalf("UserConfigPath: %v", err)
+	}
+	expected := filepath.Join(tempDir, "config.yaml")
+	if path != expected {
+		t.Fatalf("expected %q, got %q", expected, path)
+	}
+}
+
+// Task 10.16: UserConfigDir returns $TR_HOME when TR_HOME is set.
+func TestUserConfigDirHonorsTRHome(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+
+	dir, err := config.UserConfigDir()
+	if err != nil {
+		t.Fatalf("UserConfigDir: %v", err)
+	}
+	if dir != tempDir {
+		t.Fatalf("expected %q, got %q", tempDir, dir)
+	}
+}
+
+// Task 10.17: Both methods fall back to ~/.tr when TR_HOME is unset.
+func TestUserConfigPathAndDirFallbackWhenTRHomeUnset(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	t.Setenv("TR_HOME", "")
+
+	dir, err := config.UserConfigDir()
+	if err != nil {
+		t.Fatalf("UserConfigDir: %v", err)
+	}
+	expectedDir := filepath.Join(tempDir, ".tr")
+	if dir != expectedDir {
+		t.Fatalf("expected dir %q, got %q", expectedDir, dir)
+	}
+
+	path, err := config.UserConfigPath()
+	if err != nil {
+		t.Fatalf("UserConfigPath: %v", err)
+	}
+	expectedPath := filepath.Join(expectedDir, "config.yaml")
+	if path != expectedPath {
+		t.Fatalf("expected path %q, got %q", expectedPath, path)
 	}
 }

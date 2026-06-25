@@ -76,3 +76,40 @@
 
 - [x] 9.1 Run `go build ./... && go vet ./... && go test ./...` — all clean
 - [x] 9.2 Manual smoke: set `TR_HOME` to a temp dir, start daemon, commit in two repos, confirm `tr ask` in each only surfaces that repo's questions
+
+## 10. Test Coverage Gaps (discovered in explore mode)
+
+The implementation verification gates above pass clean, but `go test ./...` only proves existing tests pass — it does not assert every repo-scoping invariant the change introduced. The store layer is well-covered; the async pipeline, MCP tools, CLI URL-encoding, and config `TR_HOME` paths are plumbed but their repo-tagging invariants are not asserted. A regression that dropped `env.Repo` to `""` in `runPipeline` would pass every test in the suite today.
+
+### Pipeline + HTTP Handlers (internal/engine/server.go)
+
+- [x] 10.1 Add an integration test asserting `runPipeline` persists concepts tagged with `env.Repo`: POST `/hooks/pre-commit` with `repo=/repo/test`, poll `store.Recent(ctx, "/repo/test", 1)` until non-empty; assert `Recent(ctx, "/wrong/repo", 1)` is empty for cross-repo isolation
+- [x] 10.2 Add an integration test asserting `runPipeline` synthesizes and saves questions tagged with `env.Repo`: after the hook POST above, poll the store for an undelivered question for `/repo/test`; assert no undelivered question exists for `/wrong/repo`
+- [x] 10.3 Add an integration test for the repo-move advisory: with `repo` non-empty and no matching question, the daemon emits the advisory log line (capture stderr or use a log buffer)
+- [x] 10.4 Add an integration test for `POST /recall/answer?repo=…` symmetry — verify the `repo` query param is accepted without error (behavior is ID-keyed, but the param plumbing should be asserted)
+
+### MCP Server (internal/engine/mcp.go)
+
+- [x] 10.5 Add a test asserting `recall_next` with `Repo: ptrString("/repo/x")` returns repo X's question and skips repo Y's (seed both, call with X, assert X's question and depth of Y unchanged)
+- [x] 10.6 Add a test asserting `recall_status` with `Repo` scopes `QueueDepth` (seed repos X and Y, call status with X, assert depth reflects only X)
+- [x] 10.7 Add a test asserting `recall_answer` accepts the optional `Repo` field (ID-keyed ops unchanged, but param plumbing should be asserted)
+- [x] 10.8 Add a test asserting `recall://queue?repo=/repo/x` scopes `QueueDepth` and `PeekNextQuestion` to repo X
+- [x] 10.9 Add a test asserting `recall://recent?repo=/repo/x` scopes `RecentAnswered` to repo X
+
+### tr ask (cmd/total-recall/ask.go)
+
+- [x] 10.10 Add a test asserting `pollCmd` appends `?repo=<url-encoded>` to `/recall/next` when `repo` is non-empty (construct `askModel` with a non-empty repo, invoke `pollCmd`, inspect the request URL)
+- [x] 10.11 Add a test asserting `pollCmd` omits the `repo` query param when `repo` is `""` (global fallback preserves the existing URL shape)
+- [x] 10.12 Add a test asserting `postAnswer` appends `&repo=<url-encoded>` to `/recall/answer?feedback=true` when `repo` is non-empty
+- [x] 10.13 Add a test asserting `postSkip` appends `?repo=<url-encoded>` to `/recall/answer` when `repo` is non-empty
+- [x] 10.14 Add a test asserting the `[ask] not inside a git repo — falling back to global recall queue` advisory is written to stderr when `hooks.FindRepoRoot()` errors (capture stderr via `captureStderr` from `helpers_test.go`, or stub `FindRepoRoot`)
+
+### Config TR_HOME (internal/config/config.go)
+
+- [x] 10.15 Add a test asserting `UserConfigPath()` returns `$TR_HOME/config.yaml` when `TR_HOME` is set (use `t.Setenv`, assert path)
+- [x] 10.16 Add a test asserting `UserConfigDir()` returns `$TR_HOME` when `TR_HOME` is set
+- [x] 10.17 Add a test asserting both methods fall back to `~/.tr` when `TR_HOME` is unset (preserve existing default behavior)
+
+### Schema coverage (internal/cache/store.go)
+
+- [x] 10.18 Add a test asserting the covering indexes `idx_concepts_repo_seen` and `idx_questions_repo_q` exist after `cache.Open()` (query `sqlite_master`); defends against a regression that drops the `CREATE INDEX` calls

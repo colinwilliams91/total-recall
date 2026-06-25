@@ -91,6 +91,13 @@ func Open() (*Store, error) {
 		return nil, fmt.Errorf("opening memory store at %s: %w", memoryPath, err)
 	}
 
+	// SQLite serializes writes internally, but the Go database/sql pool can open
+	// multiple connections. When the async pipeline goroutine writes concurrently
+	// with an HTTP handler read, the second connection gets SQLITE_BUSY. Limiting
+	// to a single connection serializes all access through one handle, which is
+	// the recommended pattern for SQLite in Go.
+	db.SetMaxOpenConns(1)
+
 	bg := context.Background()
 	if _, err := db.ExecContext(bg, createConceptsTableSQL); err != nil {
 		db.Close()

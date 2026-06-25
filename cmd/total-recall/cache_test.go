@@ -733,3 +733,38 @@ CREATE TABLE IF NOT EXISTS concepts (
 	}
 	defer s2.Close()
 }
+
+// Task 10.18: Cover the covering indexes idx_concepts_repo_seen and
+// idx_questions_repo_q exist after cache.Open(), defending against a regression
+// that drops the CREATE INDEX calls.
+func TestRepoIndexesExist(t *testing.T) {
+	s := setupCache(t)
+	_ = s // store is kept open; SQLite allows concurrent connections
+
+	trHome := os.Getenv("TR_HOME")
+	if trHome == "" {
+		t.Fatal("TR_HOME not set by setupCache")
+	}
+	dbPath := filepath.Join(trHome, "memory.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	for _, idx := range []string{"idx_concepts_repo_seen", "idx_questions_repo_q"} {
+		var name string
+		err := db.QueryRowContext(ctx,
+			`SELECT name FROM sqlite_master WHERE type='index' AND name = ?`, idx).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Fatalf("index %s not found in sqlite_master", idx)
+		}
+		if err != nil {
+			t.Fatalf("querying sqlite_master for %s: %v", idx, err)
+		}
+		if name != idx {
+			t.Fatalf("expected index %s, got %s", idx, name)
+		}
+	}
+}
