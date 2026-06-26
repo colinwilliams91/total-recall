@@ -13,9 +13,7 @@ import (
 
 func setupCache(t *testing.T) *cache.Store {
 	t.Helper()
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Setenv("USERPROFILE", tempDir)
+	t.Setenv("TR_HOME", t.TempDir())
 
 	s, err := cache.Open()
 	if err != nil {
@@ -29,6 +27,7 @@ func TestOpenCreatesDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("USERPROFILE", tempDir)
+	t.Setenv("TR_HOME", "")
 
 	s, err := cache.Open()
 	if err != nil {
@@ -42,6 +41,22 @@ func TestOpenCreatesDatabase(t *testing.T) {
 	}
 }
 
+func TestOpenUsesTRHomeWhenSet(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+
+	s, err := cache.Open()
+	if err != nil {
+		t.Fatalf("cache.Open failed: %v", err)
+	}
+	defer s.Close()
+
+	dbPath := filepath.Join(tempDir, "memory.db")
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		t.Fatalf("expected memory.db at %s (TR_HOME), but file not found", dbPath)
+	}
+}
+
 func TestSaveAndRetrieveConcepts(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
@@ -50,11 +65,11 @@ func TestSaveAndRetrieveConcepts(t *testing.T) {
 		{Concept: "exponential-backoff", Source: "code", Weight: 1.0},
 		{Concept: "circuit-breaker", Source: "code", Weight: 0.8},
 	}
-	if err := s.Save(ctx, concepts); err != nil {
+	if err := s.Save(ctx, "", concepts); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	recent, err := s.Recent(ctx, 10)
+	recent, err := s.Recent(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("Recent failed: %v", err)
 	}
@@ -70,19 +85,19 @@ func TestSaveMultipleConceptsAndOrderBySeenAt(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.Save(ctx, []cache.Fingerprint{
+	if err := s.Save(ctx, "", []cache.Fingerprint{
 		{Concept: "first", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
-	if err := s.Save(ctx, []cache.Fingerprint{
+	if err := s.Save(ctx, "", []cache.Fingerprint{
 		{Concept: "second", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("second Save failed: %v", err)
 	}
 
-	recent, err := s.Recent(ctx, 10)
+	recent, err := s.Recent(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("Recent failed: %v", err)
 	}
@@ -94,15 +109,47 @@ func TestSaveMultipleConceptsAndOrderBySeenAt(t *testing.T) {
 	}
 }
 
+func TestRecentConceptsScopedToRepo(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.Save(ctx, "/repo/x", []cache.Fingerprint{
+		{Concept: "x-concept", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("save for repo X failed: %v", err)
+	}
+	if err := s.Save(ctx, "/repo/y", []cache.Fingerprint{
+		{Concept: "y-concept", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("save for repo Y failed: %v", err)
+	}
+
+	xRecent, err := s.Recent(ctx, "/repo/x", 10)
+	if err != nil {
+		t.Fatalf("Recent for repo X failed: %v", err)
+	}
+	if len(xRecent) != 1 || xRecent[0].Concept != "x-concept" {
+		t.Fatalf("expected only x-concept for repo X, got %v", xRecent)
+	}
+
+	yRecent, err := s.Recent(ctx, "/repo/y", 10)
+	if err != nil {
+		t.Fatalf("Recent for repo Y failed: %v", err)
+	}
+	if len(yRecent) != 1 || yRecent[0].Concept != "y-concept" {
+		t.Fatalf("expected only y-concept for repo Y, got %v", yRecent)
+	}
+}
+
 func TestSaveQuestionAndClaim(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "What is a goroutine?", []string{"a", "b", "c"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "What is a goroutine?", []string{"a", "b", "c"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
-	q, err := s.NextQuestion(ctx, "test")
+	q, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -121,7 +168,7 @@ func TestNextQuestionReturnsNilWhenEmpty(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	q, err := s.NextQuestion(ctx, "test")
+	q, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -134,11 +181,11 @@ func TestNextQuestionIdempotent(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "single question", []string{"x", "y"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "single question", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
-	q1, err := s.NextQuestion(ctx, "claimer-1")
+	q1, err := s.NextQuestion(ctx, "", "claimer-1")
 	if err != nil {
 		t.Fatalf("first NextQuestion failed: %v", err)
 	}
@@ -146,7 +193,7 @@ func TestNextQuestionIdempotent(t *testing.T) {
 		t.Fatal("expected first question")
 	}
 
-	q2, err := s.NextQuestion(ctx, "claimer-2")
+	q2, err := s.NextQuestion(ctx, "", "claimer-2")
 	if err != nil {
 		t.Fatalf("second NextQuestion failed: %v", err)
 	}
@@ -155,15 +202,43 @@ func TestNextQuestionIdempotent(t *testing.T) {
 	}
 }
 
+func TestNextQuestionRepoIsolation(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/x", "X's question", []string{"a", "b"}, 0); err != nil {
+		t.Fatalf("SaveQuestion for repo X failed: %v", err)
+	}
+
+	q, err := s.NextQuestion(ctx, "/repo/y", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion for repo Y failed: %v", err)
+	}
+	if q != nil {
+		t.Fatal("expected nil — repo Y must not receive repo X's question")
+	}
+
+	q, err = s.NextQuestion(ctx, "/repo/x", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion for repo X failed: %v", err)
+	}
+	if q == nil {
+		t.Fatal("expected non-nil question for repo X")
+	}
+	if q.Question != "X's question" {
+		t.Fatalf("expected X's question, got %q", q.Question)
+	}
+}
+
 func TestAnswerQuestion(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "test question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "test question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
-	q, err := s.NextQuestion(ctx, "test")
+	q, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -180,7 +255,7 @@ func TestQueueDepthEmpty(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	n, err := s.QueueDepth(ctx)
+	n, err := s.QueueDepth(ctx, "")
 	if err != nil {
 		t.Fatalf("QueueDepth failed: %v", err)
 	}
@@ -193,7 +268,7 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	n, err := s.QueueDepth(ctx)
+	n, err := s.QueueDepth(ctx, "")
 	if err != nil {
 		t.Fatalf("initial QueueDepth failed: %v", err)
 	}
@@ -201,10 +276,10 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 		t.Fatalf("expected initial depth 0, got %d", n)
 	}
 
-	if err := s.SaveQuestion(ctx, "q1", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "q1", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	n, err = s.QueueDepth(ctx)
+	n, err = s.QueueDepth(ctx, "")
 	if err != nil {
 		t.Fatalf("QueueDepth after save failed: %v", err)
 	}
@@ -212,10 +287,10 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 		t.Fatalf("expected depth 1 after save, got %d", n)
 	}
 
-	if _, err := s.NextQuestion(ctx, "test"); err != nil {
+	if _, err := s.NextQuestion(ctx, "", "test"); err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
-	n, err = s.QueueDepth(ctx)
+	n, err = s.QueueDepth(ctx, "")
 	if err != nil {
 		t.Fatalf("QueueDepth after claim failed: %v", err)
 	}
@@ -224,9 +299,42 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 	}
 }
 
-// rawDBPath resolves the memory.db path under the current test HOME.
+func TestQueueDepthScopedToRepo(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/x", "q1", []string{"a"}, 0); err != nil {
+		t.Fatalf("SaveQuestion for repo X failed: %v", err)
+	}
+	if err := s.SaveQuestion(ctx, "/repo/y", "q2", []string{"a"}, 0); err != nil {
+		t.Fatalf("SaveQuestion for repo Y failed: %v", err)
+	}
+
+	xDepth, err := s.QueueDepth(ctx, "/repo/x")
+	if err != nil {
+		t.Fatalf("QueueDepth for repo X failed: %v", err)
+	}
+	if xDepth != 1 {
+		t.Fatalf("expected depth 1 for repo X, got %d", xDepth)
+	}
+
+	yDepth, err := s.QueueDepth(ctx, "/repo/y")
+	if err != nil {
+		t.Fatalf("QueueDepth for repo Y failed: %v", err)
+	}
+	if yDepth != 1 {
+		t.Fatalf("expected depth 1 for repo Y, got %d", yDepth)
+	}
+}
+
+// rawDBPath resolves the memory.db path under the active test data directory.
+// Honors TR_HOME when set (matching cache.trDir); otherwise falls back to
+// ~/.tr/memory.db. Used by openRawDB for column-level assertions.
 func rawDBPath(t *testing.T) string {
 	t.Helper()
+	if env := os.Getenv("TR_HOME"); env != "" {
+		return filepath.Join(env, "memory.db")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("UserHomeDir: %v", err)
@@ -251,11 +359,11 @@ func TestSaveQuestionPersistsCorrectIndex(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "correct-index question", []string{"a", "b", "c"}, 2); err != nil {
+	if err := s.SaveQuestion(ctx, "", "correct-index question", []string{"a", "b", "c"}, 2); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -282,10 +390,10 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "full row question", []string{"x", "y", "z"}, 1); err != nil {
+	if err := s.SaveQuestion(ctx, "", "full row question", []string{"x", "y", "z"}, 1); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -329,10 +437,10 @@ func TestSkipQuestionLeavesNulls(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "skip me", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "skip me", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -355,7 +463,7 @@ func TestSkipQuestionLeavesNulls(t *testing.T) {
 	}
 
 	// Verify nullable enriched fields via RecentAnswered.
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -378,10 +486,10 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "feedback question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -393,7 +501,7 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 		t.Fatalf("AnswerQuestion failed: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -419,10 +527,10 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "empty feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "empty feedback question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
-	claimed, err := s.NextQuestion(ctx, "test")
+	claimed, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion failed: %v", err)
 	}
@@ -434,7 +542,7 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 		t.Fatalf("AnswerQuestion failed: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -452,10 +560,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	ctx := context.Background()
 
 	// q1: correct with feedback (terminal-style)
-	if err := s.SaveQuestion(ctx, "terminal-style", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "terminal-style", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q1: %v", err)
 	}
-	q1, err := s.NextQuestion(ctx, "test")
+	q1, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q1: %v", err)
 	}
@@ -464,10 +572,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	}
 
 	// q2: incorrect without feedback (MCP-style)
-	if err := s.SaveQuestion(ctx, "mcp-style", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "mcp-style", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q2: %v", err)
 	}
-	q2, err := s.NextQuestion(ctx, "test")
+	q2, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q2: %v", err)
 	}
@@ -476,10 +584,10 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 	}
 
 	// q3: skipped
-	if err := s.SaveQuestion(ctx, "skipped-one", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "skipped-one", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("SaveQuestion q3: %v", err)
 	}
-	q3, err := s.NextQuestion(ctx, "test")
+	q3, err := s.NextQuestion(ctx, "", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q3: %v", err)
 	}
@@ -487,7 +595,7 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 		t.Fatalf("SkipQuestion q3: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
@@ -543,7 +651,8 @@ func TestAddColumnIfMissingMigration(t *testing.T) {
 	t.Setenv("USERPROFILE", tempDir)
 
 	// Pre-create the memory.db with the old Phase 4A schema (no correct_index,
-	// answer_index, correct, or feedback columns) and a surviving legacy row.
+	// answer_index, correct, feedback, or repo columns) and a legacy row that
+	// phase 05's repo-scoping migration will purge on first open.
 	trDir := filepath.Join(tempDir, ".tr")
 	if err := os.MkdirAll(trDir, 0o700); err != nil {
 		t.Fatalf("mkdir .tr: %v", err)
@@ -580,33 +689,38 @@ CREATE TABLE IF NOT EXISTS concepts (
 		t.Fatalf("close old db: %v", err)
 	}
 
-	// cache.Open() must add all 4 new columns via addColumnIfMissing.
+	// cache.Open() must add the 4 phase 4C columns plus the phase 05 repo
+	// column, and purge the un-tagged legacy row.
 	s, err := cache.Open()
 	if err != nil {
 		t.Fatalf("cache.Open migration failed: %v", err)
 	}
 
 	ctx := context.Background()
-	q, err := s.GetQuestion(ctx, 1)
+	legacy, err := s.GetQuestion(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetQuestion after migration: %v", err)
 	}
-	if q == nil {
-		t.Fatal("expected legacy row to survive migration, got nil")
-	}
-	if q.Question != "legacy q" {
-		t.Fatalf("expected legacy question text, got %q", q.Question)
-	}
-	if q.CorrectIndex != 0 {
-		t.Fatalf("expected default CorrectIndex 0, got %d", q.CorrectIndex)
+	if legacy != nil {
+		t.Fatalf("expected legacy row to be purged by repo-scoping migration, got %+v", legacy)
 	}
 
-	// Exercise all 4 new columns via RecentAnswered (which selects them) by
-	// answering the legacy row.
-	if err := s.AnswerQuestion(ctx, 1, 0, "a", true, ""); err != nil {
+	// Exercise all 5 new columns (4 phase 4C + 1 phase 05) by saving and
+	// answering a fresh question through the new schema.
+	if err := s.SaveQuestion(ctx, "", "post-migration q", []string{"a", "b"}, 0); err != nil {
+		t.Fatalf("SaveQuestion after migration: %v", err)
+	}
+	q, err := s.NextQuestion(ctx, "", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion after migration: %v", err)
+	}
+	if q == nil {
+		t.Fatal("expected non-nil question after migration")
+	}
+	if err := s.AnswerQuestion(ctx, q.ID, 0, "a", true, ""); err != nil {
 		t.Fatalf("AnswerQuestion after migration: %v", err)
 	}
-	recent, err := s.RecentAnswered(ctx, 10)
+	recent, err := s.RecentAnswered(ctx, "", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered after migration: %v", err)
 	}
@@ -623,4 +737,39 @@ CREATE TABLE IF NOT EXISTS concepts (
 		t.Fatalf("cache.Open idempotent check failed: %v", err)
 	}
 	defer s2.Close()
+}
+
+// Task 10.18: Cover the covering indexes idx_concepts_repo_seen and
+// idx_questions_repo_q exist after cache.Open(), defending against a regression
+// that drops the CREATE INDEX calls.
+func TestRepoIndexesExist(t *testing.T) {
+	s := setupCache(t)
+	_ = s // store is kept open; SQLite allows concurrent connections
+
+	trHome := os.Getenv("TR_HOME")
+	if trHome == "" {
+		t.Fatal("TR_HOME not set by setupCache")
+	}
+	dbPath := filepath.Join(trHome, "memory.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	for _, idx := range []string{"idx_concepts_repo_seen", "idx_questions_repo_q"} {
+		var name string
+		err := db.QueryRowContext(ctx,
+			`SELECT name FROM sqlite_master WHERE type='index' AND name = ?`, idx).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Fatalf("index %s not found in sqlite_master", idx)
+		}
+		if err != nil {
+			t.Fatalf("querying sqlite_master for %s: %v", idx, err)
+		}
+		if name != idx {
+			t.Fatalf("expected index %s, got %s", idx, name)
+		}
+	}
 }

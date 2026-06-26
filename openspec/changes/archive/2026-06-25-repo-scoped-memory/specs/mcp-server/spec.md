@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: MCP server is mounted at /mcp/ on port 7331
 `mcp.NewStreamableHTTPHandler(mcpServer, nil)` SHALL be registered at `/mcp/` in `RegisterRoutes()`. The MCP server SHALL share the existing HTTP listener — no new port, no new process.

@@ -18,8 +18,8 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Entrypoint**: `cmd/total-recall/main.go` (Cobra CLI)
 - **Provider factory**: `cmd/total-recall/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
 - **Daemon**: `total-recall serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
-- **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only
-- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`
+- **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
+- **Cache**: SQLite at `~/.tr/memory.db` (or `$TR_HOME/memory.db`) via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`; both tagged with a `repo` column (absolute repo path) so recall questions are scoped to the repository the developer is working in. Empty `repo` matches the global pool (fallback for `tr ask` outside a git repo)
 - **MCP server**: mounted at `/mcp/` inside the daemon
 
 ### Key packages

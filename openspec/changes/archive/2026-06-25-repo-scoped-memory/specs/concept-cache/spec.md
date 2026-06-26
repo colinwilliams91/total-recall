@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Concept cache is a SQLite database at ~/.tr/memory.db
 The cache SHALL be stored in a single SQLite file at `~/.tr/memory.db`. `cache.Open()` SHALL create `~/.tr/` (or `$TR_HOME` when `TR_HOME` is set) if it does not exist and run schema migration on every open (idempotent `CREATE TABLE IF NOT EXISTS`). The legacy `concepts.db` filename is no longer supported — `Open()` SHALL NOT attempt any `concepts.db` → `memory.db` migration.

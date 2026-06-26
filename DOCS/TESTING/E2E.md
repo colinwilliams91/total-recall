@@ -37,6 +37,34 @@ OR run `.\scripts\rebuild.ps1` on Windows PowerShell to clean, build, and vet.
 
 ---
 
+## Test Isolation with TR_HOME
+
+Set the `TR_HOME` environment variable to redirect all Total Recall state (config + `memory.db`) to an arbitrary directory. This prevents manual/E2E testing from polluting your real `~/.tr/` state.
+
+```sh
+# POSIX
+export TR_HOME=/tmp/tr-e2e
+./tr serve   # opens /tmp/tr-e2e/memory.db, not ~/.tr/memory.db
+
+# Windows PowerShell
+$env:TR_HOME = "$env:TEMP\tr-e2e"
+.\tr.exe serve
+```
+
+When `TR_HOME` is unset, the default `~/.tr/` is used. Go tests use `t.Setenv("TR_HOME", t.TempDir())` for automatic isolation.
+
+### Repo-scoped recall
+
+Recall questions are tagged with the absolute repo path at ingestion and scoped at dequeue. To verify repo isolation:
+
+1. Start the daemon with `TR_HOME` set to a throwaway dir.
+2. Create two scratch git repos (X and Y).
+3. Commit in repo X (with AI configured) → a question is queued for X's repo path.
+4. Run `tr ask` in repo Y → expect "all caught up" (Y has no questions).
+5. Run `tr ask` in repo X → expect X's question.
+
+---
+
 ## Phase 00 — Foundation
 
 **Goal:** Binary exists and top-level commands are registered.

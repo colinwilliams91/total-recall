@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: tr ask exits silently in non-interactive contexts
 On startup, `tr ask` SHALL check `term.IsTerminal(int(os.Stdout.Fd()))`. If false (CI/CD, piped output, non-TTY), it SHALL exit 0 immediately with no output.

@@ -5,17 +5,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/colinwilliams91/total-recall/internal/hooks"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
 var daemonBaseURL = "http://localhost:7331"
+
+// resolveAskRepo resolves the current git repository root for repo-scoped recall.
+// On error (not inside a git repo, or git unavailable) it logs an advisory to
+// stderr and returns "" (the global fallback pool).
+func resolveAskRepo() string {
+	repo, err := hooks.FindRepoRoot()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[ask] not inside a git repo — falling back to global recall queue")
+		return ""
+	}
+	return repo
+}
 
 const (
 	defaultTimeout = 15 * time.Second
@@ -40,7 +54,8 @@ func askCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return nil
 			}
-			m := newAskModel(time.Duration(timeout) * time.Second)
+			repo := resolveAskRepo()
+			m := newAskModel(time.Duration(timeout)*time.Second, repo)
 			p := tea.NewProgram(m)
 			finalModel, err := p.Run()
 			if err != nil {
@@ -103,9 +118,10 @@ type askModel struct {
 	skipped        bool
 	advisory       string
 	httpClient     *http.Client
+	repo           string
 }
 
-func newAskModel(timeout time.Duration) askModel {
+func newAskModel(timeout time.Duration, repo string) askModel {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
@@ -114,6 +130,7 @@ func newAskModel(timeout time.Duration) askModel {
 		started:    time.Now(),
 		timeout:    timeout,
 		httpClient: &http.Client{Timeout: 3 * time.Second},
+		repo:       repo,
 	}
 }
 
@@ -127,8 +144,13 @@ func tick() tea.Cmd {
 
 func (m askModel) pollCmd() tea.Cmd {
 	client := m.httpClient
+	repo := m.repo
 	return func() tea.Msg {
-		resp, err := client.Get(daemonBaseURL + "/recall/next")
+		u := daemonBaseURL + "/recall/next"
+		if repo != "" {
+			u += "?repo=" + url.QueryEscape(repo)
+		}
+		resp, err := client.Get(u)
 		if err != nil {
 			return daemonUnreachableMsg{}
 		}
@@ -207,10 +229,10 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
+		if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			m.state = stateFeedback
-			return m, postAnswer(m.question.id, idx, m.httpClient)
+			return m, postAnswer(m.question.id, idx, m.repo, m.httpClient)
 		}
 		return m, nil
 	}
@@ -219,7 +241,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.state = stateDone
 		m.skipped = true
-		return m, postSkip(m.question.id, m.httpClient)
+		return m, postSkip(m.question.id, m.repo, m.httpClient)
 	case "q", "esc":
 		m.state = stateDone
 		return m, tea.Quit
@@ -252,10 +274,14 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func postAnswer(id int64, answerIndex int, client *http.Client) tea.Cmd {
+func postAnswer(id int64, answerIndex int, repo string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
 		body, _ := json.Marshal(map[string]any{"id": id, "answer_index": answerIndex})
-		resp, err := client.Post(daemonBaseURL+"/recall/answer?feedback=true", "application/json", bytes.NewReader(body))
+		u := daemonBaseURL + "/recall/answer?feedback=true"
+		if repo != "" {
+			u += "&repo=" + url.QueryEscape(repo)
+		}
+		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return feedbackMsg{}
 		}
@@ -277,10 +303,14 @@ func postAnswer(id int64, answerIndex int, client *http.Client) tea.Cmd {
 	}
 }
 
-func postSkip(id int64, client *http.Client) tea.Cmd {
+func postSkip(id int64, repo string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
 		body, _ := json.Marshal(map[string]any{"id": id, "skip": true})
-		resp, err := client.Post(daemonBaseURL+"/recall/answer", "application/json", bytes.NewReader(body))
+		u := daemonBaseURL + "/recall/answer"
+		if repo != "" {
+			u += "?repo=" + url.QueryEscape(repo)
+		}
+		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return skipMsg{}
 		}

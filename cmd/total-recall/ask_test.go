@@ -1,19 +1,24 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/colinwilliams91/total-recall/internal/hooks"
 )
 
 func TestAskViewShowsCaughtUpMessageInFinalWindow(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 	m.started = time.Now().Add(-7 * time.Second)
 
 	view := m.View()
@@ -23,7 +28,7 @@ func TestAskViewShowsCaughtUpMessageInFinalWindow(t *testing.T) {
 }
 
 func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
-	m := newAskModel(2 * time.Second)
+	m := newAskModel(2*time.Second, "")
 	m.started = time.Now().Add(-3 * time.Second)
 
 	updated, _ := m.updateThinking(tickMsg{})
@@ -62,7 +67,7 @@ func TestParseChoiceSelectionSupportsFourthChoice(t *testing.T) {
 }
 
 func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(daemonUnreachableMsg{})
 	got := updated.(askModel)
@@ -76,7 +81,7 @@ func TestAskDaemonUnreachableShowsAdvisory(t *testing.T) {
 }
 
 func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
-	m := newAskModel(200 * time.Millisecond)
+	m := newAskModel(200*time.Millisecond, "")
 	m.httpClient.Timeout = 50 * time.Millisecond
 	m.started = time.Now().Add(-250 * time.Millisecond)
 
@@ -96,7 +101,7 @@ func TestAskProgramRunKeepsCaughtUpFeedbackOnTimeout(t *testing.T) {
 }
 
 func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -121,7 +126,7 @@ func TestAskModelSendsAnswerOnKeyPress(t *testing.T) {
 }
 
 func TestAskModelExitsOnCtrlC(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	final, cmd := m.updateThinking(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
 	got := final.(askModel)
@@ -135,7 +140,7 @@ func TestAskModelExitsOnCtrlC(t *testing.T) {
 }
 
 func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -163,7 +168,7 @@ func TestAskModelEnterKeySkipsQuestion(t *testing.T) {
 }
 
 func TestAskModelIgnoresOutOfRangeChoice(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10*time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -197,7 +202,7 @@ func isQuitCmd(cmd tea.Cmd) bool {
 }
 
 func TestUpdateFeedbackReceivesFeedbackMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(feedbackMsg{correct: true, correctText: "X", feedback: "Y"})
@@ -221,7 +226,7 @@ func TestUpdateFeedbackReceivesFeedbackMsg(t *testing.T) {
 }
 
 func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(skipMsg{})
@@ -239,7 +244,7 @@ func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
 }
 
 func TestUpdateFeedbackCtrlC(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
@@ -254,7 +259,7 @@ func TestUpdateFeedbackCtrlC(t *testing.T) {
 }
 
 func TestStateFeedbackView(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 	m.state = stateFeedback
 
 	view := m.View()
@@ -273,7 +278,7 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "post-answer q", []string{"correct-a", "wrong-b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "post-answer q", []string{"correct-a", "wrong-b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -286,7 +291,7 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	cmd := postAnswer(q.ID, 0, &http.Client{Timeout: 3 * time.Second})
+	cmd := postAnswer(q.ID, 0, "", &http.Client{Timeout: 3 * time.Second})
 	msg := cmd()
 
 	fm, ok := msg.(feedbackMsg)
@@ -308,7 +313,7 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "post-skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "", "post-skip q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -321,7 +326,7 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	cmd := postSkip(q.ID, &http.Client{Timeout: 3 * time.Second})
+	cmd := postSkip(q.ID, "", &http.Client{Timeout: 3 * time.Second})
 	msg := cmd()
 
 	if _, ok := msg.(skipMsg); !ok {
@@ -372,7 +377,7 @@ func TestPostAltScreenRendering(t *testing.T) {
 }
 
 func TestAskModelQKeyExitsSilently(t *testing.T) {
-	m := newAskModel(10 * time.Second)
+	m := newAskModel(10 * time.Second, "")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -404,5 +409,114 @@ func TestAskModelQKeyExitsSilently(t *testing.T) {
 	}
 	if out := renderPostAltScreen(got); out != "" {
 		t.Fatalf("expected no post-alt-screen output for q exit, got %q", out)
+	}
+}
+
+// ── 10. ask.go URL encoding tests ────────────────────────────────────────────
+
+// captureRequestServer starts an httptest.Server that records the request URL
+// and returns the given status code with the optional JSON body.
+func captureRequestServer(t *testing.T, status int, body string) (*httptest.Server, *string) {
+	t.Helper()
+	var captured string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		if body != "" {
+			w.Write([]byte(body))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &captured
+}
+
+// withDaemonBaseURL temporarily sets the package-level daemonBaseURL for a test.
+func withDaemonBaseURL(t *testing.T, newURL string) {
+	t.Helper()
+	orig := daemonBaseURL
+	daemonBaseURL = newURL
+	t.Cleanup(func() { daemonBaseURL = orig })
+}
+
+// Task 10.10: pollCmd appends ?repo=<url-encoded> when repo is non-empty.
+func TestPollCmdAppendsRepoQueryParam(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusNoContent, "")
+	withDaemonBaseURL(t, srv.URL)
+
+	m := newAskModel(10*time.Second, "/path/to/repo")
+	cmd := m.pollCmd()
+	cmd()
+
+	expected := "?repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.11: pollCmd omits the repo query param when repo is "" (global fallback).
+func TestPollCmdOmitsRepoQueryParamWhenEmpty(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusNoContent, "")
+	withDaemonBaseURL(t, srv.URL)
+
+	m := newAskModel(10*time.Second, "")
+	cmd := m.pollCmd()
+	cmd()
+
+	if strings.Contains(*captured, "?repo=") {
+		t.Fatalf("expected no repo param in URL, got %q", *captured)
+	}
+}
+
+// Task 10.12: postAnswer appends &repo=<url-encoded> when repo is non-empty.
+func TestPostAnswerAppendsRepoQueryParam(t *testing.T) {
+	body := `{"ok":true,"correct":true,"correct_text":"a","feedback":""}`
+	srv, captured := captureRequestServer(t, http.StatusOK, body)
+	withDaemonBaseURL(t, srv.URL)
+
+	cmd := postAnswer(42, 0, "/path/to/repo", &http.Client{Timeout: 3 * time.Second})
+	cmd()
+
+	expected := "&repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.13: postSkip appends ?repo=<url-encoded> when repo is non-empty.
+func TestPostSkipAppendsRepoQueryParam(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusOK, `{"ok":true}`)
+	withDaemonBaseURL(t, srv.URL)
+
+	cmd := postSkip(42, "/path/to/repo", &http.Client{Timeout: 3 * time.Second})
+	cmd()
+
+	expected := "?repo=" + url.QueryEscape("/path/to/repo")
+	if !strings.Contains(*captured, expected) {
+		t.Fatalf("expected %q in URL, got %q", expected, *captured)
+	}
+}
+
+// Task 10.14: resolveAskRepo writes the stderr advisory when FindRepoRoot errors.
+func TestResolveAskRepoAdvisoryOnGitError(t *testing.T) {
+	origFindRepoRoot := hooks.FindRepoRoot
+	hooks.FindRepoRoot = func() (string, error) {
+		return "", fmt.Errorf("not a git repository")
+	}
+	t.Cleanup(func() { hooks.FindRepoRoot = origFindRepoRoot })
+
+	var buf bytes.Buffer
+	restore := captureStderr(&buf)
+	repo := resolveAskRepo()
+	restore()
+
+	if repo != "" {
+		t.Fatalf("expected empty repo on git error, got %q", repo)
+	}
+	if !strings.Contains(buf.String(), "[ask] not inside a git repo") {
+		t.Fatalf("expected advisory on stderr, got:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "falling back to global recall queue") {
+		t.Fatalf("expected fallback message on stderr, got:\n%s", buf.String())
 	}
 }
