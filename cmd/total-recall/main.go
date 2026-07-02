@@ -494,5 +494,6 @@ func runStatus() error {
 		return nil
 	}
 	config.Show(cfg, os.Stdout)
+	fmt.Println("this is a test.")
 	return nil
 }
