@@ -210,7 +210,7 @@ func runInit() error {
 				Value(&preCommit),
 			huh.NewConfirm().
 				Title("Enable commit-msg hook?").
-				Description("Enriches recall with your commit intent. Runs silently after pre-commit.").
+				Description("No-op on its own — pre-commit handles all recall dispatch on commit. Enable only to chain an existing commit-msg hook.").
 				Value(&commitMsg),
 			huh.NewConfirm().
 				Title("Enable pre-push hook?").

@@ -19,8 +19,9 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Provider factory**: `cmd/total-recall/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
 - **Daemon**: `total-recall serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
-- **Cache**: SQLite at `~/.tr/memory.db` (or `$TR_HOME/memory.db`) via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`; both tagged with a `repo` column (absolute repo path) so recall questions are scoped to the repository the developer is working in. Empty `repo` matches the global pool (fallback for `tr ask` outside a git repo)
+- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`. **Spec drift**: `openspec/specs/concept-cache/spec.md` requires per-repo, per-branch scoping; current schema has no `repo`/`branch` columns and `Store.Recent` takes no `repo` arg. Concepts pool globally across repos. See Y1 follow-up.
 - **MCP server**: mounted at `/mcp/` inside the daemon
+- **Install & layer model**: five independent layers (binary / user config / user cache / repo config / git hooks) with a small set of explicit leak points. Rebuilding the binary does NOT update installed hook files — re-run `tr init` for that. See [DOCS/ARCHITECTURE/INSTALL_LAYERS.md](DOCS/ARCHITECTURE/INSTALL_LAYERS.md) for the full model, canonical new-user install flow, and the testing simulation rules (scratch must be its own repo; re-`init` after hook-body changes)
 
 ### Key packages
 
