@@ -30,7 +30,10 @@ func NewInstaller(repoRoot string) *Installer {
 
 // FindRepoRoot runs `git rev-parse --show-toplevel` to locate the Git repository root.
 // Returns an error if not inside a Git repository or if git is unavailable.
-func FindRepoRoot() (string, error) {
+// Implemented as a var so tests can stub it without spawning git.
+var FindRepoRoot = findRepoRoot
+
+func findRepoRoot() (string, error) {
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository (or git is not available in PATH)")

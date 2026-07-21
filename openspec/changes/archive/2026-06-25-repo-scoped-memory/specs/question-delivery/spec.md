@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: GET /recall/next returns the next pending question or 204, scoped to repo
 `GET /recall/next` SHALL accept an optional `repo` query parameter (the absolute repository path). It SHALL call `store.NextQuestion(ctx, repo, "shell")` where `repo` is the query param value or `""` when absent. When a question is available, it SHALL respond `200 OK` with `{"id":N,"question":"...","choices":["..."]}`. When no question is available, it SHALL respond `204 No Content`. `correct_index` SHALL NOT be included.

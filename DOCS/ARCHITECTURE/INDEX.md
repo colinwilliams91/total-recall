@@ -278,13 +278,13 @@ See [CONFIG.md](CONFIG.md) for full schema, merge rules, and `total-recall confi
 ### Concept Cache (`internal/cache/`)
 
 - SQLite via `modernc.org/sqlite` (pure Go, no CGo)
-- Database at `~/.tr/memory.db`; schema: `concepts(id, concept, source, weight, seen_at)`, `questions(id, question, choices, queued_at, claimed_by, answer)`
-- `Save(ctx, []Fingerprint)` — batch INSERT in a single transaction
-- `Recent(ctx, n)` — SELECT ordered by `seen_at DESC`
+- Database at `~/.tr/memory.db` (or `$TR_HOME/memory.db`); both tables tagged with `repo TEXT` column for repo-scoped recall; schema: `concepts(id, concept, source, weight, repo, seen_at)`, `questions(id, question, choices, correct_index, repo, queued_at, delivered_at, claimed_by, answer, answer_index, correct, feedback, answered_at)`
+- `Save(ctx, repo, []Fingerprint)` — batch INSERT in a single transaction, tagged with repo
+- `Recent(ctx, repo, n)` — SELECT for repo ordered by `seen_at DESC`
 
 ### Recall Engine (`internal/recall/`)
 
-- `Synthesize(ctx, difficulty, model)` — loads recent concepts, calls AI for a multiple-choice question
+- `Synthesize(ctx, repo, difficulty, model)` — loads recent concepts for repo, calls AI for a multiple-choice question
 - `Question{Question string, Choices []string}` — first choice is always correct
 - AI/parse failures are non-fatal (nil, nil)
 

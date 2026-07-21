@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: DB path is ~/.tr/memory.db (no legacy migration)
 `store.Open()` SHALL open `~/.tr/memory.db` (or `$TR_HOME/memory.db` when `TR_HOME` is set). The legacy `concepts.db` → `memory.db` migration guard is removed — only `memory.db` is supported. If `memory.db` does not exist, `Open()` creates it with the full schema.
