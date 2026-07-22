@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,10 +23,10 @@ CREATE TABLE IF NOT EXISTS concepts (
   concept   TEXT    NOT NULL,
   source    TEXT    NOT NULL DEFAULT 'code',
   weight    REAL    NOT NULL DEFAULT 1.0,
-  repo      TEXT    NOT NULL DEFAULT '',
+  repo      TEXT    NOT NULL,
+  branch    TEXT    NOT NULL,
   seen_at   DATETIME NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_concepts_seen_at ON concepts(seen_at DESC);
 `
 
 	createQuestionsTableSQL = `
@@ -36,7 +35,8 @@ CREATE TABLE IF NOT EXISTS questions (
     question      TEXT     NOT NULL,
     choices       TEXT     NOT NULL,
     correct_index INTEGER  NOT NULL DEFAULT 0,
-    repo          TEXT     NOT NULL DEFAULT '',
+    repo          TEXT     NOT NULL,
+    branch        TEXT     NOT NULL,
     queued_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
     delivered_at  DATETIME,
     claimed_by    TEXT,
@@ -108,70 +108,16 @@ func Open() (*Store, error) {
 		return nil, fmt.Errorf("initializing questions schema: %w", err)
 	}
 
-	existingMigrations := []struct{ table, column, def string }{
-		{"questions", "correct_index", "INTEGER NOT NULL DEFAULT 0"},
-		{"questions", "answer_index", "INTEGER"},
-		{"questions", "correct", "INTEGER"},
-		{"questions", "feedback", "TEXT"},
-	}
-	for _, m := range existingMigrations {
-		if _, err := addColumnIfMissing(bg, db, m.table, m.column, m.def); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("migrating %s.%s: %w", m.table, m.column, err)
-		}
-	}
-
-	// Repo-scoping migration: add the repo column to both tables. When newly
-	// added on an existing database, purge un-tagged legacy rows so they don't
-	// leak across repos. Fresh databases already have the column in CREATE
-	// TABLE, so addColumnIfMissing reports added=false and no purge runs.
-	purged := false
-	for _, table := range []string{"concepts", "questions"} {
-		added, err := addColumnIfMissing(bg, db, table, "repo", "TEXT NOT NULL DEFAULT ''")
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("migrating %s.repo: %w", table, err)
-		}
-		if added {
-			if _, err := db.ExecContext(bg, "DELETE FROM "+table); err != nil {
-				db.Close()
-				return nil, fmt.Errorf("purging legacy %s rows: %w", table, err)
-			}
-			purged = true
-		}
-	}
-	if purged {
-		log.Printf("[store] purged un-tagged legacy rows during repo-scoping migration")
-	}
-
-	// Repo indexes must be created after the repo column migration — pre-phase-05
-	// databases don't have the column yet, and CREATE INDEX on a missing column
-	// is a hard error.
-	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_concepts_repo_seen ON concepts(repo, seen_at DESC)`); err != nil {
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_concepts_repo_branch_seen ON concepts(repo, branch, seen_at DESC)`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("creating idx_concepts_repo_seen: %w", err)
+		return nil, fmt.Errorf("creating idx_concepts_repo_branch_seen: %w", err)
 	}
-	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_questions_repo_q ON questions(repo, queued_at ASC) WHERE delivered_at IS NULL`); err != nil {
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_questions_repo_branch_q ON questions(repo, branch, queued_at ASC) WHERE delivered_at IS NULL`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("creating idx_questions_repo_q: %w", err)
+		return nil, fmt.Errorf("creating idx_questions_repo_branch_q: %w", err)
 	}
 
 	return &Store{db: db}, nil
-}
-
-// addColumnIfMissing executes `ALTER TABLE <table> ADD COLUMN <column> <definition>`.
-// If the column already exists (SQLite returns a "duplicate column name" error),
-// it returns (false, nil) so the call is idempotent. It returns (true, nil) when
-// the column was newly added, so callers can gate one-time migration work.
-func addColumnIfMissing(ctx context.Context, db *sql.DB, table, column, definition string) (bool, error) {
-	_, err := db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition)
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate column name") {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 // Save persists a batch of concept fingerprints to the cache, tagged with repo.
@@ -182,7 +128,11 @@ type Fingerprint struct {
 	Weight  float64
 }
 
-func (s *Store) Save(ctx context.Context, repo string, concepts []Fingerprint) error {
+func (s *Store) Save(ctx context.Context, repo, branch string, concepts []Fingerprint) error {
+	if repo == "" || branch == "" {
+		log.Printf("[store] skipping insert: empty repo or branch")
+		return nil
+	}
 	if len(concepts) == 0 {
 		return nil
 	}
@@ -192,7 +142,7 @@ func (s *Store) Save(ctx context.Context, repo string, concepts []Fingerprint) e
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO concepts (concept, source, weight, repo, seen_at) VALUES (?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO concepts (concept, source, weight, repo, branch, seen_at) VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("preparing insert: %w", err)
 	}
@@ -200,21 +150,26 @@ func (s *Store) Save(ctx context.Context, repo string, concepts []Fingerprint) e
 
 	now := time.Now().UTC()
 	for _, c := range concepts {
-		if _, err := stmt.ExecContext(ctx, c.Concept, c.Source, c.Weight, repo, now); err != nil {
+		if _, err := stmt.ExecContext(ctx, c.Concept, c.Source, c.Weight, repo, branch, now); err != nil {
 			return fmt.Errorf("inserting concept %q: %w", c.Concept, err)
 		}
 	}
 	return tx.Commit()
 }
 
-// Recent returns up to n concept rows for repo, ordered by most recently seen.
-// An empty repo matches the global pool.
-func (s *Store) Recent(ctx context.Context, repo string, n int) ([]ConceptRow, error) {
+// Recent returns up to n concept rows for repo+branch, ordered by most recently
+// seen. Both repo and branch are required; empty values return (nil, nil)
+// without touching the store.
+func (s *Store) Recent(ctx context.Context, repo, branch string, n int) ([]ConceptRow, error) {
+	if repo == "" || branch == "" {
+		log.Printf("[store] skipping recent: empty repo or branch")
+		return nil, nil
+	}
 	if n <= 0 {
 		n = recentLimit
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, concept, source, weight, seen_at FROM concepts WHERE repo = ? ORDER BY seen_at DESC LIMIT ?`, repo, n)
+		`SELECT id, concept, source, weight, seen_at FROM concepts WHERE repo = ? AND branch = ? ORDER BY seen_at DESC LIMIT ?`, repo, branch, n)
 	if err != nil {
 		return nil, fmt.Errorf("querying recent concepts: %w", err)
 	}
@@ -232,34 +187,43 @@ func (s *Store) Recent(ctx context.Context, repo string, n int) ([]ConceptRow, e
 }
 
 // SaveQuestion inserts a synthesized question into the questions table, tagged
-// with repo. Choices are JSON-marshalled into a TEXT column.
-func (s *Store) SaveQuestion(ctx context.Context, repo, question string, choices []string, correctIndex int) error {
+// with repo and branch. Choices are JSON-marshalled into a TEXT column. Both
+// repo and branch are required; empty values are a no-op.
+func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []string, correctIndex int) error {
+	if repo == "" || branch == "" {
+		log.Printf("[store] skipping savequestion: empty repo or branch")
+		return nil
+	}
 	choicesJSON, err := json.Marshal(choices)
 	if err != nil {
 		return fmt.Errorf("marshalling choices: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO questions (question, choices, correct_index, repo) VALUES (?, ?, ?, ?)`,
-		question, string(choicesJSON), correctIndex, repo,
+		`INSERT INTO questions (question, choices, correct_index, repo, branch) VALUES (?, ?, ?, ?, ?)`,
+		question, string(choicesJSON), correctIndex, repo, branch,
 	)
 	return err
 }
 
 // NextQuestion atomically claims and returns the oldest unclaimed question for
-// the given repo. It sets delivered_at and claimed_by in a single
-// UPDATE ... RETURNING statement. An empty repo matches the global pool.
-// Returns nil, nil when no unclaimed question exists for repo.
-func (s *Store) NextQuestion(ctx context.Context, repo, claimedBy string) (*StoredQuestion, error) {
+// the given repo and branch. It sets delivered_at and claimed_by in a single
+// UPDATE ... RETURNING statement. Both repo and branch are required; empty
+// values return (nil, nil) without touching the store. Returns nil, nil when
+// no unclaimed question exists for the (repo, branch) pair.
+func (s *Store) NextQuestion(ctx context.Context, repo, branch, claimedBy string) (*StoredQuestion, error) {
+	if repo == "" || branch == "" {
+		return nil, nil
+	}
 	row := s.db.QueryRowContext(ctx, `
 UPDATE questions
 SET delivered_at = datetime('now'), claimed_by = ?
 WHERE id = (
   SELECT id FROM questions
-  WHERE delivered_at IS NULL AND repo = ?
+  WHERE delivered_at IS NULL AND repo = ? AND branch = ?
   ORDER BY queued_at ASC
   LIMIT 1
 )
-RETURNING id, question, choices, correct_index, queued_at`, claimedBy, repo)
+RETURNING id, question, choices, correct_index, queued_at`, claimedBy, repo, branch)
 
 	var sq StoredQuestion
 	var choicesJSON string
@@ -345,25 +309,33 @@ func parseSQLiteTime(s string) time.Time {
 	return t
 }
 
-// QueueDepth returns the number of unclaimed (undelivered) questions for repo.
-// An empty repo matches the global pool.
-func (s *Store) QueueDepth(ctx context.Context, repo string) (int, error) {
+// QueueDepth returns the number of unclaimed (undelivered) questions for the
+// (repo, branch) pair. Both are required; empty values return (0, nil)
+// without touching the store.
+func (s *Store) QueueDepth(ctx context.Context, repo, branch string) (int, error) {
+	if repo == "" || branch == "" {
+		return 0, nil
+	}
 	var n int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM questions WHERE delivered_at IS NULL AND repo = ?`, repo).Scan(&n)
+		`SELECT COUNT(*) FROM questions WHERE delivered_at IS NULL AND repo = ? AND branch = ?`, repo, branch).Scan(&n)
 	return n, err
 }
 
-// RecentAnswered returns up to limit answered questions for repo, ordered by
-// most recently answered. An empty repo matches the global pool.
-func (s *Store) RecentAnswered(ctx context.Context, repo string, limit int) ([]StoredQuestion, error) {
+// RecentAnswered returns up to limit answered questions for the (repo, branch)
+// pair, ordered by most recently answered. Both are required; empty values
+// return (nil, nil) without touching the store.
+func (s *Store) RecentAnswered(ctx context.Context, repo, branch string, limit int) ([]StoredQuestion, error) {
+	if repo == "" || branch == "" {
+		return nil, nil
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, question, choices, correct_index, queued_at, answer_index, correct, feedback
 		   FROM questions
-		  WHERE answered_at IS NOT NULL AND repo = ?
+		  WHERE answered_at IS NOT NULL AND repo = ? AND branch = ?
 		  ORDER BY answered_at DESC
 		  LIMIT ?`,
-		repo, limit)
+		repo, branch, limit)
 	if err != nil {
 		return nil, fmt.Errorf("querying recent answered: %w", err)
 	}
@@ -400,11 +372,42 @@ func (s *Store) RecentAnswered(ctx context.Context, repo string, limit int) ([]S
 	return result, rows.Err()
 }
 
-// PeekNextQuestion returns the next unclaimed question for repo without claiming
-// it. An empty repo matches the global pool. Used by the recall://queue resource.
-func (s *Store) PeekNextQuestion(ctx context.Context, repo string) (*StoredQuestion, error) {
+// StalePerBranch returns a map of branch name → count of undelivered questions
+// for that branch, restricted to the given repo. Branches with zero
+// undelivered questions are omitted. Repo is required; an empty value returns
+// an empty map. Used by GET /recall/stale to back the `tr status` advisory.
+func (s *Store) StalePerBranch(ctx context.Context, repo string) (map[string]int, error) {
+	out := make(map[string]int)
+	if repo == "" {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT branch, COUNT(*) FROM questions WHERE delivered_at IS NULL AND repo = ? AND branch != '' GROUP BY branch`,
+		repo)
+	if err != nil {
+		return nil, fmt.Errorf("querying stale per-branch counts: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var branch string
+		var count int
+		if err := rows.Scan(&branch, &count); err != nil {
+			return nil, fmt.Errorf("scanning stale per-branch row: %w", err)
+		}
+		out[branch] = count
+	}
+	return out, rows.Err()
+}
+
+// PeekNextQuestion returns the next unclaimed question for the (repo, branch)
+// pair without claiming it. Both are required; empty values return
+// (nil, nil) without touching the store. Used by the recall://queue resource.
+func (s *Store) PeekNextQuestion(ctx context.Context, repo, branch string) (*StoredQuestion, error) {
+	if repo == "" || branch == "" {
+		return nil, nil
+	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, question, choices, correct_index, queued_at FROM questions WHERE delivered_at IS NULL AND repo = ? ORDER BY queued_at ASC LIMIT 1`, repo)
+		`SELECT id, question, choices, correct_index, queued_at FROM questions WHERE delivered_at IS NULL AND repo = ? AND branch = ? ORDER BY queued_at ASC LIMIT 1`, repo, branch)
 
 	var sq StoredQuestion
 	var choicesJSON, queuedAt string

@@ -22,12 +22,24 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@v4
-        with:
-          args: --latest --strip header
-        env:
-          OUTPUT: /tmp/release-notes.md
+      - name: Install git-cliff
+        run: |
+          case "$(uname -m)" in
+            x86_64)  ARCH="x86_64-unknown-linux-musl" ;;
+            aarch64) ARCH="aarch64-unknown-linux-musl" ;;
+            *) echo "::error::unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+          curl -sL "https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-${ARCH}.tar.gz" \
+            | tar xz -C /usr/local/bin git-cliff
+          git cliff --version
+
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+          git cliff --latest --strip header --output /tmp/release-notes.md
+          echo "----- /tmp/release-notes.md (first 30 lines) -----"
+          head -30 /tmp/release-notes.md
+          echo "----- ($(wc -l < /tmp/release-notes.md) lines total) -----"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

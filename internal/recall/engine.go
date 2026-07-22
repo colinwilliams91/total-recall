@@ -32,12 +32,16 @@ func New(provider ai.Provider, store *cache.Store) *Engine {
 	return &Engine{provider: provider, store: store}
 }
 
-// Synthesize loads recent concepts for repo from the cache and asks the AI to
-// generate a recall question.  It returns nil, nil (not an error) if:
-//   - the concept cache is empty for repo, or
-//   - the AI call or JSON parse fails (failure is logged instead).
-func (e *Engine) Synthesize(ctx context.Context, repo, difficulty, model string) (*Question, error) {
-	rows, err := e.store.Recent(ctx, repo, 20)
+// Synthesize loads recent concepts for repo+branch from the cache and asks the
+// AI to generate a recall question. Both repo and branch are required; the
+// method returns (nil, nil) (not an error) when either is empty. It also
+// returns (nil, nil) (not an error) when the concept cache is empty for the
+// (repo, branch) pair, or when the AI call or JSON parse fails.
+func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model string) (*Question, error) {
+	if repo == "" || branch == "" {
+		return nil, nil
+	}
+	rows, err := e.store.Recent(ctx, repo, branch, 20)
 	if err != nil {
 		return nil, err
 	}
