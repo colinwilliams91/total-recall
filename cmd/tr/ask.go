@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -20,15 +21,27 @@ import (
 var daemonBaseURL = "http://localhost:7331"
 
 // resolveAskRepo resolves the current git repository root for repo-scoped recall.
-// On error (not inside a git repo, or git unavailable) it logs an advisory to
-// stderr and returns "" (the global fallback pool).
-func resolveAskRepo() string {
-	repo, err := hooks.FindRepoRoot()
+// On error (not inside a git repo, or git unavailable) it returns the error.
+// Callers MUST check the error and abort — there is no "global pool" fallback.
+func resolveAskRepo() (string, error) {
+	return hooks.FindRepoRoot()
+}
+
+// resolveAskBranch resolves the current git branch for repo+branch-scoped
+// recall. It runs `git rev-parse --abbrev-ref HEAD`; on success, returns the
+// trimmed branch name. On error (detached HEAD, git unavailable, empty
+// stdout) it returns the error. Detached HEAD is reported by git as either
+// "HEAD" or empty output, so we treat empty trimmed output as an error.
+func resolveAskBranch() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "[ask] not inside a git repo — falling back to global recall queue")
-		return ""
+		return "", err
 	}
-	return repo
+	branch := strings.TrimSpace(string(out))
+	if branch == "" || branch == "HEAD" {
+		return "", fmt.Errorf("detached HEAD — no branch context")
+	}
+	return branch, nil
 }
 
 const (
@@ -54,8 +67,17 @@ func askCmd() *cobra.Command {
 			if !term.IsTerminal(int(os.Stdout.Fd())) {
 				return nil
 			}
-			repo := resolveAskRepo()
-			m := newAskModel(time.Duration(timeout)*time.Second, repo)
+			repo, repoErr := resolveAskRepo()
+			if repoErr != nil {
+				fmt.Fprintln(os.Stderr, "[ask] not inside a git repo — skipping this recall window")
+				return nil
+			}
+			branch, branchErr := resolveAskBranch()
+			if branchErr != nil {
+				fmt.Fprintln(os.Stderr, "[ask] detached HEAD — no branch context; skipping this recall window")
+				return nil
+			}
+			m := newAskModel(time.Duration(timeout)*time.Second, repo, branch)
 			p := tea.NewProgram(m)
 			finalModel, err := p.Run()
 			if err != nil {
@@ -119,9 +141,10 @@ type askModel struct {
 	advisory       string
 	httpClient     *http.Client
 	repo           string
+	branch         string
 }
 
-func newAskModel(timeout time.Duration, repo string) askModel {
+func newAskModel(timeout time.Duration, repo, branch string) askModel {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
@@ -131,6 +154,7 @@ func newAskModel(timeout time.Duration, repo string) askModel {
 		timeout:    timeout,
 		httpClient: &http.Client{Timeout: 3 * time.Second},
 		repo:       repo,
+		branch:     branch,
 	}
 }
 
@@ -145,11 +169,9 @@ func tick() tea.Cmd {
 func (m askModel) pollCmd() tea.Cmd {
 	client := m.httpClient
 	repo := m.repo
+	branch := m.branch
 	return func() tea.Msg {
-		u := daemonBaseURL + "/recall/next"
-		if repo != "" {
-			u += "?repo=" + url.QueryEscape(repo)
-		}
+		u := daemonBaseURL + "/recall/next?repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
 		resp, err := client.Get(u)
 		if err != nil {
 			return daemonUnreachableMsg{}
@@ -232,7 +254,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			m.state = stateFeedback
-			return m, postAnswer(m.question.id, idx, m.repo, m.httpClient)
+			return m, postAnswer(m.question.id, idx, m.repo, m.branch, m.httpClient)
 		}
 		return m, nil
 	}
@@ -241,7 +263,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.state = stateDone
 		m.skipped = true
-		return m, postSkip(m.question.id, m.repo, m.httpClient)
+		return m, postSkip(m.question.id, m.repo, m.branch, m.httpClient)
 	case "q", "esc":
 		m.state = stateDone
 		return m, tea.Quit
@@ -274,13 +296,10 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func postAnswer(id int64, answerIndex int, repo string, client *http.Client) tea.Cmd {
+func postAnswer(id int64, answerIndex int, repo, branch string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
 		body, _ := json.Marshal(map[string]any{"id": id, "answer_index": answerIndex})
-		u := daemonBaseURL + "/recall/answer?feedback=true"
-		if repo != "" {
-			u += "&repo=" + url.QueryEscape(repo)
-		}
+		u := daemonBaseURL + "/recall/answer?feedback=true&repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
 		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return feedbackMsg{}
@@ -303,13 +322,10 @@ func postAnswer(id int64, answerIndex int, repo string, client *http.Client) tea
 	}
 }
 
-func postSkip(id int64, repo string, client *http.Client) tea.Cmd {
+func postSkip(id int64, repo, branch string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
 		body, _ := json.Marshal(map[string]any{"id": id, "skip": true})
-		u := daemonBaseURL + "/recall/answer"
-		if repo != "" {
-			u += "?repo=" + url.QueryEscape(repo)
-		}
+		u := daemonBaseURL + "/recall/answer?repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
 		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return skipMsg{}

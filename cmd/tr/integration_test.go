@@ -208,7 +208,7 @@ func TestDaemonHookInvalidJSON(t *testing.T) {
 func TestRecallNextEmpty(t *testing.T) {
 	_, _, baseURL := startTestDaemon(t)
 
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -220,7 +220,7 @@ func TestRecallNextWithQuestion(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", "What does DRY stand for?", []string{
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "What does DRY stand for?", []string{
 		"Don't Repeat Yourself",
 		"Don't Run Yaks",
 		"Digital Repository YAML",
@@ -229,7 +229,7 @@ func TestRecallNextWithQuestion(t *testing.T) {
 		t.Fatalf("seed question: %v", err)
 	}
 
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -258,17 +258,17 @@ func TestRecallNextIdempotent(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", "single question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "single question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	r1 := mustGET(t, baseURL, "/recall/next")
+	r1 := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	if r1.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 on first call, got %d", r1.StatusCode)
 	}
 	r1.Body.Close()
 
-	r2 := mustGET(t, baseURL, "/recall/next")
+	r2 := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	defer r2.Body.Close()
 
 	if r2.StatusCode != http.StatusNoContent {
@@ -280,11 +280,11 @@ func TestRecallAnswer(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
@@ -318,11 +318,11 @@ func TestRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", "skippable question", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "skippable question", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
@@ -416,17 +416,17 @@ func TestRecallNextRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/x", "X's question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed for repo X: %v", err)
 	}
 
-	rY := mustGET(t, baseURL, "/recall/next?repo=/repo/y")
+	rY := mustGET(t, baseURL, "/recall/next?repo=/repo/y&branch=main")
 	defer rY.Body.Close()
 	if rY.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected 204 for repo Y (no questions), got %d", rY.StatusCode)
 	}
 
-	rX := mustGET(t, baseURL, "/recall/next?repo=/repo/x")
+	rX := mustGET(t, baseURL, "/recall/next?repo=/repo/x&branch=main")
 	defer rX.Body.Close()
 	if rX.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 for repo X, got %d", rX.StatusCode)
@@ -457,7 +457,7 @@ func waitForConcepts(t *testing.T, store *cache.Store, repo string, n int) []cac
 	ctx := context.Background()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		recent, err := store.Recent(ctx, repo, 10)
+		recent, err := store.Recent(ctx, repo, "main", 10)
 		if err != nil {
 			t.Fatalf("Recent poll: %v", err)
 		}
@@ -477,7 +477,7 @@ func waitForUndeliveredQuestion(t *testing.T, store *cache.Store, repo string) *
 	ctx := context.Background()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		q, err := store.PeekNextQuestion(ctx, repo)
+		q, err := store.PeekNextQuestion(ctx, repo, "main")
 		if err != nil {
 			t.Fatalf("Peek poll: %v", err)
 		}
@@ -508,7 +508,7 @@ func TestPipelineSavesConceptsTaggedWithRepo(t *testing.T) {
 		t.Fatalf("expected cached-connection, got %q", recent[0].Concept)
 	}
 
-	wrongRecent, err := store.Recent(context.Background(), "/wrong/repo", 10)
+	wrongRecent, err := store.Recent(context.Background(), "/wrong/repo", "main", 10)
 	if err != nil {
 		t.Fatalf("Recent for wrong repo: %v", err)
 	}
@@ -538,7 +538,7 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 		t.Fatalf("expected synthesized question, got %q", q.Question)
 	}
 
-	wrongQ, err := store.PeekNextQuestion(context.Background(), "/wrong/repo")
+	wrongQ, err := store.PeekNextQuestion(context.Background(), "/wrong/repo", "main")
 	if err != nil {
 		t.Fatalf("Peek for wrong repo: %v", err)
 	}
@@ -556,7 +556,7 @@ func TestRecallNextRepoMoveAdvisory(t *testing.T) {
 	log.SetOutput(&logBuf)
 	defer log.SetOutput(origOut)
 
-	resp := mustGET(t, baseURL, "/recall/next?repo=/moved/repo")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/moved/repo&branch=main")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
@@ -575,11 +575,11 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", "repo-param-symmetry q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "repo-param-symmetry q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	var q struct {
 		ID int64 `json:"id"`
 	}
@@ -602,6 +602,167 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 	}
 	if !result.OK {
 		t.Fatal("expected ok:true")
+	}
+}
+
+// TestRecallNextBranchIsolation adds an analog to TestRecallNextRepoScoped
+// for branch-isolation: queueing under (repo, branch-A) and dequeueing under
+// (repo, branch-B) must return 204.
+func TestRecallNextBranchIsolation(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+
+	ctx := context.Background()
+	if err := store.SaveQuestion(ctx, "/repo/x", "feature-A", "feature-A's q", []string{"a", "b"}, 0); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rWrongBranch := mustGET(t, baseURL, "/recall/next?repo="+url.QueryEscape("/repo/x")+"&branch=main")
+	defer rWrongBranch.Body.Close()
+	if rWrongBranch.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 for wrong branch, got %d", rWrongBranch.StatusCode)
+	}
+
+	rRight := mustGET(t, baseURL, "/recall/next?repo="+url.QueryEscape("/repo/x")+"&branch=feature-A")
+	defer rRight.Body.Close()
+	if rRight.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for correct branch, got %d", rRight.StatusCode)
+	}
+	var result struct {
+		Question string `json:"question"`
+	}
+	if err := json.NewDecoder(rRight.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Question != "feature-A's q" {
+		t.Fatalf("expected feature-A's q, got %q", result.Question)
+	}
+}
+
+// TestPipelineSavesConceptsTaggedWithBranch extends the repo-tagging test to
+// also assert that the branch column is populated by the pipeline.
+func TestPipelineSavesConceptsTaggedWithBranch(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`[{"concept":"branch-isolation-concept","source":"code","weight":1.0}]`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, nil)
+
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/branch-test", "+ func branchIsolation() {}")))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+
+	// waitForConcepts takes the legacy 3-arg (repo) signature; assert branch
+	// isolation directly via store.Recent.
+	ctx := context.Background()
+	deadline := time.Now().Add(3 * time.Second)
+	var found bool
+	for time.Now().Before(deadline) {
+		recent, err := store.Recent(ctx, "/repo/branch-test", "main", 10)
+		if err != nil {
+			t.Fatalf("Recent: %v", err)
+		}
+		if len(recent) >= 1 {
+			found = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !found {
+		t.Fatalf("timed out waiting for concept on (repo=/repo/branch-test, branch=main)")
+	}
+
+	// Cross-branch leak check: querying the same repo with a different branch
+	// must return zero rows.
+	wrongBranch, err := store.Recent(ctx, "/repo/branch-test", "feature-X", 10)
+	if err != nil {
+		t.Fatalf("Recent for wrong branch: %v", err)
+	}
+	if len(wrongBranch) != 0 {
+		t.Fatalf("expected 0 concepts for branch=feature-X (cross-branch leak), got %d", len(wrongBranch))
+	}
+}
+
+// TestRecallStaleEndpoint exercises GET /recall/stale?repo=<path>. The
+// handler returns 400 on missing repo, 200 with an empty map when no stale
+// questions, and 200 with per-branch counts when there are pending
+// undelivered questions.
+func TestRecallStaleEndpoint(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+
+	// 400 when repo is missing.
+	rBad := mustGET(t, baseURL, "/recall/stale")
+	defer rBad.Body.Close()
+	if rBad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 with missing repo, got %d", rBad.StatusCode)
+	}
+
+	// 200 with empty branches when no pending questions.
+	rEmpty := mustGET(t, baseURL, "/recall/stale?repo="+url.QueryEscape("/repo/stale-test"))
+	defer rEmpty.Body.Close()
+	if rEmpty.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with empty branches, got %d", rEmpty.StatusCode)
+	}
+	var emptyResult struct {
+		Repo     string         `json:"repo"`
+		Branches map[string]int `json:"branches"`
+	}
+	if err := json.NewDecoder(rEmpty.Body).Decode(&emptyResult); err != nil {
+		t.Fatalf("decode empty: %v", err)
+	}
+	if emptyResult.Repo != "/repo/stale-test" {
+		t.Fatalf("expected repo %q, got %q", "/repo/stale-test", emptyResult.Repo)
+	}
+	if len(emptyResult.Branches) != 0 {
+		t.Fatalf("expected empty branches, got %v", emptyResult.Branches)
+	}
+
+	// Seed pending questions on two branches.
+	ctx := context.Background()
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A1", []string{"x"}, 0); err != nil {
+		t.Fatalf("seed A1: %v", err)
+	}
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A2", []string{"x"}, 0); err != nil {
+		t.Fatalf("seed A2: %v", err)
+	}
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "bugfix-B", "stale B1", []string{"x"}, 0); err != nil {
+		t.Fatalf("seed B1: %v", err)
+	}
+
+	// 200 with per-branch counts.
+	rFull := mustGET(t, baseURL, "/recall/stale?repo="+url.QueryEscape("/repo/stale-test"))
+	defer rFull.Body.Close()
+	if rFull.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with stale counts, got %d", rFull.StatusCode)
+	}
+	var fullResult struct {
+		Repo     string         `json:"repo"`
+		Branches map[string]int `json:"branches"`
+	}
+	if err := json.NewDecoder(rFull.Body).Decode(&fullResult); err != nil {
+		t.Fatalf("decode full: %v", err)
+	}
+	if fullResult.Branches["feature-A"] != 2 {
+		t.Fatalf("expected feature-A count 2, got %d (all: %v)", fullResult.Branches["feature-A"], fullResult.Branches)
+	}
+	if fullResult.Branches["bugfix-B"] != 1 {
+		t.Fatalf("expected bugfix-B count 1, got %d (all: %v)", fullResult.Branches["bugfix-B"], fullResult.Branches)
+	}
+	if _, ok := fullResult.Branches["main"]; ok {
+		t.Fatalf("expected no entry for main (zero count omitted), got branches: %v", fullResult.Branches)
+	}
+
+	// Cross-repo isolation: a different repo must not see these counts.
+	rOther := mustGET(t, baseURL, "/recall/stale?repo="+url.QueryEscape("/other/repo"))
+	defer rOther.Body.Close()
+	var otherResult struct {
+		Branches map[string]int `json:"branches"`
+	}
+	if err := json.NewDecoder(rOther.Body).Decode(&otherResult); err != nil {
+		t.Fatalf("decode other: %v", err)
+	}
+	if len(otherResult.Branches) != 0 {
+		t.Fatalf("expected empty branches for unrelated repo, got %v", otherResult.Branches)
 	}
 }
 
@@ -642,10 +803,10 @@ func toolText(t *testing.T, result *mcp.CallToolResult) string {
 func seedAndClaim(t *testing.T, store *cache.Store, baseURL, question string, choices []string, correctIndex int) int64 {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "", question, choices, correctIndex); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", question, choices, correctIndex); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	resp := mustGET(t, baseURL, "/recall/next")
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	defer resp.Body.Close()
 	var q struct {
 		ID int64 `json:"id"`
@@ -765,14 +926,17 @@ func TestMCPRecallNextReturnsCorrectIndex(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "", "mcp next q", []string{"a", "b", "c"}, 2); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp next q", []string{"a", "b", "c"}, 2); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	session := mcpSession(t, baseURL)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_next",
-		Arguments: map[string]any{},
+        Arguments: map[string]any{
+            "repo":   "/repo/test",
+            "branch": "main",
+        },
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
@@ -795,7 +959,7 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "", "mcp answer q", []string{"right", "wrong"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp answer q", []string{"right", "wrong"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -803,7 +967,10 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 
 	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_next",
-		Arguments: map[string]any{},
+        Arguments: map[string]any{
+            "repo":   "/repo/test",
+            "branch": "main",
+        },
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_next: %v", err)
@@ -838,7 +1005,7 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "", "mcp skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp skip q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -846,7 +1013,10 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 
 	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_next",
-		Arguments: map[string]any{},
+        Arguments: map[string]any{
+            "repo":   "/repo/test",
+            "branch": "main",
+        },
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_next: %v", err)
@@ -877,10 +1047,10 @@ func TestRecallRecentEnriched(t *testing.T) {
 	ctx := context.Background()
 
 	// Answer one question correctly (terminal-style with feedback).
-	if err := store.SaveQuestion(ctx, "", "recent-correct", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-correct", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed q1: %v", err)
 	}
-	q1, err := store.NextQuestion(ctx, "", "test")
+	q1, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
 	if err != nil {
 		t.Fatalf("claim q1: %v", err)
 	}
@@ -889,10 +1059,10 @@ func TestRecallRecentEnriched(t *testing.T) {
 	}
 
 	// Skip one question.
-	if err := store.SaveQuestion(ctx, "", "recent-skip", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-skip", []string{"x", "y"}, 0); err != nil {
 		t.Fatalf("seed q2: %v", err)
 	}
-	q2, err := store.NextQuestion(ctx, "", "test")
+	q2, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
 	if err != nil {
 		t.Fatalf("claim q2: %v", err)
 	}
@@ -901,7 +1071,7 @@ func TestRecallRecentEnriched(t *testing.T) {
 	}
 
 	session := mcpSession(t, baseURL)
-	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://recent"})
+	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://recent?repo=" + url.QueryEscape("/repo/test") + "&branch=main"})
 	if err != nil {
 		t.Fatalf("ReadResource: %v", err)
 	}
@@ -962,17 +1132,17 @@ func TestMCPRecallNextRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "X's MCP question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's MCP question", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "Y's MCP question", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y's MCP question", []string{"c", "d"}, 0); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
 	session := mcpSession(t, baseURL)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_next",
-		Arguments: map[string]any{"repo": "/repo/x"},
+		Arguments: map[string]any{"repo": "/repo/x", "branch": "main"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
@@ -986,7 +1156,7 @@ func TestMCPRecallNextRepoScoped(t *testing.T) {
 		t.Fatalf("expected X's question, got %v", m["question"])
 	}
 
-	yDepth, err := store.QueueDepth(ctx, "/repo/y")
+	yDepth, err := store.QueueDepth(ctx, "/repo/y", "main")
 	if err != nil {
 		t.Fatalf("QueueDepth for Y: %v", err)
 	}
@@ -1000,20 +1170,20 @@ func TestMCPRecallStatusRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "X depth q", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X depth q", []string{"a"}, 0); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "Y depth q", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q", []string{"a"}, 0); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "Y depth q2", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q2", []string{"a"}, 0); err != nil {
 		t.Fatalf("seed Y2: %v", err)
 	}
 
 	session := mcpSession(t, baseURL)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_status",
-		Arguments: map[string]any{"repo": "/repo/x"},
+		Arguments: map[string]any{"repo": "/repo/x", "branch": "main"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
@@ -1033,7 +1203,7 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "MCP repo answer q", []string{"right", "wrong"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "MCP repo answer q", []string{"right", "wrong"}, 0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1041,7 +1211,7 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 
 	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_next",
-		Arguments: map[string]any{"repo": "/repo/x"},
+		Arguments: map[string]any{"repo": "/repo/x", "branch": "main"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_next: %v", err)
@@ -1052,7 +1222,7 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 
 	answerResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "recall_answer",
-		Arguments: map[string]any{"id": id, "answer_index": 0, "skip": false, "repo": "/repo/x"},
+		Arguments: map[string]any{"id": id, "answer_index": 0, "skip": false, "repo": "/repo/x", "branch": "main"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_answer with repo: %v", err)
@@ -1075,15 +1245,15 @@ func TestMCPQueueResourceRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "X queue q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X queue q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "Y queue q", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y queue q", []string{"c", "d"}, 0); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
 	session := mcpSession(t, baseURL)
-	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://queue?repo=" + url.QueryEscape("/repo/x")})
+	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://queue?repo=" + url.QueryEscape("/repo/x") + "&branch=main"})
 	if err != nil {
 		t.Fatalf("ReadResource: %v", err)
 	}
@@ -1112,10 +1282,10 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	ctx := context.Background()
 
 	// Answer one question for repo X.
-	if err := store.SaveQuestion(ctx, "/repo/x", "X answered q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X answered q", []string{"a", "b"}, 0); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	qX, err := store.NextQuestion(ctx, "/repo/x", "test")
+	qX, err := store.NextQuestion(ctx, "/repo/x", "main", "test")
 	if err != nil {
 		t.Fatalf("claim X: %v", err)
 	}
@@ -1124,10 +1294,10 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	}
 
 	// Answer one question for repo Y.
-	if err := store.SaveQuestion(ctx, "/repo/y", "Y answered q", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y answered q", []string{"c", "d"}, 0); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
-	qY, err := store.NextQuestion(ctx, "/repo/y", "test")
+	qY, err := store.NextQuestion(ctx, "/repo/y", "main", "test")
 	if err != nil {
 		t.Fatalf("claim Y: %v", err)
 	}
@@ -1136,7 +1306,7 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	}
 
 	session := mcpSession(t, baseURL)
-	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://recent?repo=" + url.QueryEscape("/repo/x")})
+	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://recent?repo=" + url.QueryEscape("/repo/x") + "&branch=main"})
 	if err != nil {
 		t.Fatalf("ReadResource: %v", err)
 	}

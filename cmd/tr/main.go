@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -494,5 +495,45 @@ func runStatus() error {
 		return nil
 	}
 	config.Show(cfg, os.Stdout)
+
+	// Stale-questions advisory: ask the daemon for per-branch undelivered
+	// counts in the current repo. Skipped silently when not in a git repo
+	// or when the daemon is unreachable (the upstream health check has
+	// already exited non-zero in the latter case).
+	repo, repoErr := hooks.FindRepoRoot()
+	if repoErr == nil {
+		printStaleQuestionsAdvisory(client, repo)
+	}
 	return nil
+}
+
+// printStaleQuestionsAdvisory queries GET /recall/stale?repo=<repo> with the
+// shared status client (1s timeout). For each branch with `count > 0`, it
+// prints a warning line and a suggested switch-back command. Silently no-ops
+// on any failure (network, non-200, malformed body) — the advisory is
+// additive, not a blocker.
+func printStaleQuestionsAdvisory(client *http.Client, repo string) {
+	staleURL := fmt.Sprintf("http://localhost:7331/recall/stale?repo=%s", url.QueryEscape(repo))
+	resp, err := client.Get(staleURL)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	var stale struct {
+		Repo     string         `json:"repo"`
+		Branches map[string]int `json:"branches"`
+	}
+	if jsonErr := json.NewDecoder(resp.Body).Decode(&stale); jsonErr != nil || len(stale.Branches) == 0 {
+		return
+	}
+	for branch, count := range stale.Branches {
+		if count <= 0 {
+			continue
+		}
+		fmt.Printf("\n⚠  %d recall question(s) pending on branch %s\n", count, branch)
+		fmt.Printf("   Switch back: git switch %s && tr ask\n", branch)
+	}
 }

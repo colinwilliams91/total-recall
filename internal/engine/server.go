@@ -100,6 +100,7 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /hooks/pre-push", s.handleHook)
 	s.mux.HandleFunc("GET /recall/next", s.handleRecallNext)
 	s.mux.HandleFunc("POST /recall/answer", s.handleRecallAnswer)
+	s.mux.HandleFunc("GET /recall/stale", s.handleRecallStale)
 	s.mux.Handle("/mcp/", mcpHandler(s.mcpServer))
 }
 
@@ -139,6 +140,14 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
+	// Detached HEAD / non-git context: no branch means we can't scope concepts
+	// to active work. Skip silently — the store layer also refuses empty
+	// values, but logging here gives maintainers a clearer trail.
+	if env.Branch == "" {
+		log.Printf("[pipeline] skipping insert: detached HEAD (no branch)")
+		return
+	}
+
 	concepts, err := pipeline.ExtractConcepts(ctx, s.provider, payload.Diff, s.cfg.AI.Model)
 	if err != nil {
 		log.Printf("[pipeline] extract error: %v", err)
@@ -157,14 +166,14 @@ func (s *Server) runPipeline(env HookEnvelope) {
 			Weight:  c.Weight,
 		}
 	}
-	if err := s.store.Save(ctx, env.Repo, fingerprints); err != nil {
+	if err := s.store.Save(ctx, env.Repo, env.Branch, fingerprints); err != nil {
 		log.Printf("[pipeline] cache save error: %v", err)
 	}
 
 	if s.recallEngine == nil {
 		return
 	}
-	q, err := s.recallEngine.Synthesize(ctx, env.Repo, "", s.cfg.AI.Model)
+	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, "", s.cfg.AI.Model)
 	if err != nil {
 		log.Printf("[recall] synthesize error: %v", err)
 		return
@@ -173,7 +182,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
-	if err := s.store.SaveQuestion(ctx, env.Repo, q.Question, q.Choices, q.CorrectIndex); err != nil {
+	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, q.Choices, q.CorrectIndex); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -194,15 +203,19 @@ func (s *Server) runPipeline(env HookEnvelope) {
 
 func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 	repo := r.URL.Query().Get("repo")
-	q, err := s.store.NextQuestion(r.Context(), repo, "shell")
+	branch := r.URL.Query().Get("branch")
+	if repo == "" || branch == "" {
+		log.Printf("[recall] next called with empty repo or branch — client is outside git or detached HEAD")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	q, err := s.store.NextQuestion(r.Context(), repo, branch, "shell")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	if q == nil {
-		if repo != "" {
-			log.Printf("[recall] no pending questions for repo=%q — if you recently moved this repo, its key has changed", repo)
-		}
+		log.Printf("[recall] no pending questions for repo=%q branch=%q", repo, branch)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -274,7 +287,31 @@ func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Shutdown gracefully stops the HTTP server without interrupting active connections.
+// handleRecallStale returns per-branch counts of undelivered questions for the
+// given repo. It backs the `tr status` advisory: the user is told which branch
+// has pending questions so they can switch back and answer them.
+//
+// Query: ?repo=<path> (required).
+// Response (200): {"repo":"<path>","branches":{"<branch>":<count>, ...}}.
+// Branches with zero undelivered questions are omitted.
+func (s *Server) handleRecallStale(w http.ResponseWriter, r *http.Request) {
+	repo := r.URL.Query().Get("repo")
+	if repo == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "repo query parameter is required"})
+		return
+	}
+
+	branches, err := s.store.StalePerBranch(r.Context(), repo)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"repo":     repo,
+		"branches": branches,
+	})
+}
 // After Shutdown returns, Start() will return http.ErrServerClosed.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpSrv.Shutdown(ctx)

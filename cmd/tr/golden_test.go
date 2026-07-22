@@ -37,21 +37,21 @@ func requireEqualGolden(t *testing.T, data []byte) {
 }
 
 func TestGoldenAskThinkingView(t *testing.T) {
-	m := newAskModel(10*time.Second, "")
+	m := newAskModel(10*time.Second, "", "main")
 	m.frame = 0
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
 }
 
 func TestGoldenAskCaughtUpView(t *testing.T) {
-	m := newAskModel(10*time.Second, "")
+	m := newAskModel(10*time.Second, "", "main")
 	m.started = time.Now().Add(-7 * time.Second)
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
 }
 
 func TestGoldenAskQuestionView(t *testing.T) {
-	m := newAskModel(10*time.Second, "")
+	m := newAskModel(10*time.Second, "", "main")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       42,
@@ -65,14 +65,14 @@ func TestGoldenAskQuestionView(t *testing.T) {
 }
 
 func TestGoldenAskDoneView(t *testing.T) {
-	m := newAskModel(10*time.Second, "")
+	m := newAskModel(10*time.Second, "", "main")
 	m.state = stateDone
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
 }
 
 func TestGoldenAskFeedbackView(t *testing.T) {
-	m := newAskModel(10 * time.Second, "")
+	m := newAskModel(10 * time.Second, "", "main")
 	m.state = stateFeedback
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
