@@ -7,7 +7,7 @@ const sentinel = "# total-recall managed"
 const hookHeader = "#!/usr/bin/env bash\n" +
 	sentinel + "\n" +
 	"# Managed by Total Recall — do not edit this block manually.\n" +
-	"# Re-run 'total-recall init' to update.\n\n"
+	"# Re-run 'tr init' to update.\n\n"
 
 // preCommitBody is the sh hook body for the pre-commit hook (no shebang/sentinel).
 // Order: P0 credential scan → curl check → capture context → POST (non-blocking).
@@ -54,7 +54,7 @@ curl --silent --max-time "${HOOK_TIMEOUT}" \
     --header "Content-Type: application/json" \
     --data "{\"hook\":\"pre-commit\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"diff\":${DIFF_JSON},\"staged_files\":${STAGED_JSON},\"loc_delta\":${LOC_DELTA}}}" \
     "${DAEMON_URL}/hooks/pre-commit" >/dev/null 2>&1 \
-    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'total-recall serve'.\n" "${DAEMON_URL}" >&2
+    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'tr serve'.\n" "${DAEMON_URL}" >&2
 
 exit 0
 `
@@ -95,7 +95,7 @@ curl --silent --max-time "${HOOK_TIMEOUT}" \
     --header "Content-Type: application/json" \
     --data "{\"hook\":\"pre-push\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"refs\":${REFS_JSON}}}" \
     "${DAEMON_URL}/hooks/pre-push" >/dev/null 2>&1 \
-    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'total-recall serve'.\n" "${DAEMON_URL}" >&2
+    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'tr serve'.\n" "${DAEMON_URL}" >&2
 
 exit 0
 `
@@ -106,7 +106,7 @@ exit 0
 const preCommitBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'total-recall init' to update.
+:: Re-run 'tr init' to update.
 
 set "DAEMON_URL=http://localhost:7331"
 
@@ -125,7 +125,7 @@ for /f "delims=" %%i in ('git rev-parse --show-toplevel 2^>nul') do set "REPO=%%
 for /f "delims=" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "BRANCH=%%i"
 
 powershell -NoProfile -Command ^
-    "try { Invoke-WebRequest -Uri '%DAEMON_URL%/hooks/pre-commit' -Method POST -ContentType 'application/json' -Body ('{\"hook\":\"pre-commit\",\"repo\":\"%REPO%\",\"branch\":\"%BRANCH%\",\"timestamp\":\"' + (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') + '\",\"payload\":{}}') -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null } catch { Write-Host '[total-recall] Daemon not running. Start with total-recall serve.' -ForegroundColor Yellow }"
+    "try { Invoke-WebRequest -Uri '%DAEMON_URL%/hooks/pre-commit' -Method POST -ContentType 'application/json' -Body ('{\"hook\":\"pre-commit\",\"repo\":\"%REPO%\",\"branch\":\"%BRANCH%\",\"timestamp\":\"' + (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') + '\",\"payload\":{}}') -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null } catch { Write-Host '[total-recall] Daemon not running. Start with tr serve.' -ForegroundColor Yellow }"
 
 exit /b 0
 `
@@ -137,7 +137,7 @@ exit /b 0
 const commitMsgBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'total-recall init' to update.
+:: Re-run 'tr init' to update.
 
 exit /b 0
 `
@@ -146,7 +146,7 @@ exit /b 0
 const prePushBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'total-recall init' to update.
+:: Re-run 'tr init' to update.
 
 set "DAEMON_URL=http://localhost:7331"
 
@@ -154,7 +154,7 @@ for /f "delims=" %%i in ('git rev-parse --show-toplevel 2^>nul') do set "REPO=%%
 for /f "delims=" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "BRANCH=%%i"
 
 powershell -NoProfile -Command ^
-    "try { Invoke-WebRequest -Uri '%DAEMON_URL%/hooks/pre-push' -Method POST -ContentType 'application/json' -Body ('{\"hook\":\"pre-push\",\"repo\":\"%REPO%\",\"branch\":\"%BRANCH%\",\"timestamp\":\"' + (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') + '\",\"payload\":{\"refs\":[]}}') -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null } catch { Write-Host '[total-recall] Daemon not running. Start with total-recall serve.' -ForegroundColor Yellow }"
+    "try { Invoke-WebRequest -Uri '%DAEMON_URL%/hooks/pre-push' -Method POST -ContentType 'application/json' -Body ('{\"hook\":\"pre-push\",\"repo\":\"%REPO%\",\"branch\":\"%BRANCH%\",\"timestamp\":\"' + (Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') + '\",\"payload\":{\"refs\":[]}}') -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null } catch { Write-Host '[total-recall] Daemon not running. Start with tr serve.' -ForegroundColor Yellow }"
 
 exit /b 0
 `

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # total-recall managed
 # Managed by Total Recall — do not edit this block manually.
-# Re-run 'total-recall init' to update.
+# Re-run 'tr init' to update.
 
 DAEMON_URL="http://localhost:7331"
 HOOK_TIMEOUT=2
@@ -28,6 +28,6 @@ curl --silent --max-time "${HOOK_TIMEOUT}" \
     --header "Content-Type: application/json" \
     --data "{\"hook\":\"pre-push\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"refs\":${REFS_JSON}}}" \
     "${DAEMON_URL}/hooks/pre-push" >/dev/null 2>&1 \
-    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'total-recall serve'.\n" "${DAEMON_URL}" >&2
+    || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'tr serve'.\n" "${DAEMON_URL}" >&2
 
 exit 0

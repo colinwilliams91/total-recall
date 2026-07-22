@@ -74,6 +74,18 @@ The `recall://recent` resource SHALL return the last 10 answered questions for t
 
 Resource template URI: `recall://recent{?repo}{&branch}`.
 
+#### Scenario: Recent answered questions returned for repo and branch
+- **WHEN** `recall://recent?repo=/path/X&branch=feature-X` is requested and 3 answered questions exist for that repo AND branch
+- **THEN** the resource returns a JSON array of 3 items, each with `id`, `question`, `choices`, `correct_index`, `answer_index`, `correct`, and `feedback` fields
+
+#### Scenario: Recent empty when no repo or branch
+- **WHEN** `recall://recent` is requested without a `repo` or `branch` query string
+- **THEN** the resource returns `[]` without querying the store
+
+#### Scenario: Branch-isolation in recent history
+- **WHEN** `recall://recent?repo=/path/X&branch=main` is requested and only `branch=feature-X` questions exist for `/path/X`
+- **THEN** the resource returns `[]` — strict branch isolation
+
 ---
 
 ### Requirement: recall_workflow prompt instructs agent to self-explain and pass repo + branch

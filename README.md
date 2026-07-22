@@ -53,7 +53,7 @@ go install github.com/colinwilliams91/total-recall@latest
 **1. Initialize user config and preferences:**
 
 ```sh
-total-recall init
+tr init
 ```
 
 This creates `~/.tr/config.yaml` (your personal config, never committed) and prompts
@@ -62,7 +62,7 @@ you about enabling conversation analysis.
 **2. Start the daemon:**
 
 ```sh
-total-recall serve
+tr serve
 ```
 
 The daemon runs on `localhost:7331` and must be running for hooks and MCP to function.
@@ -70,7 +70,7 @@ The daemon runs on `localhost:7331` and must be running for hooks and MCP to fun
 **Check daemon status:**
 
 ```sh
-total-recall status
+tr status
 ```
 
 Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (exits 1, for scripting).
@@ -78,7 +78,7 @@ Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (e
 **3. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
 
 ```sh
-total-recall init  # inside the repo
+tr init  # inside the repo
 ```
 
 Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
@@ -92,7 +92,7 @@ Total Recall uses two config files with clear separation of concerns:
 ### Inspect the resolved config
 
 ```sh
-total-recall config --show
+tr config --show
 ```
 
 Prints every key annotated with its source (`user` / `repo` / `default`).
@@ -137,12 +137,12 @@ Using Make:
 make build
 ```
 
-Produces `total-recall.exe` (Windows) or `bin/total-recall` (Linux/macOS).
+Produces `tr.exe` (Windows) or `bin/tr` (Linux/macOS).
 
 Or directly with Go:
 
 ```sh
-go build -o bin/total-recall.exe ./cmd/total-recall
+go build -o bin/tr.exe ./cmd/tr
 ```
 
 Install to your $GOPATH/bin:
@@ -150,7 +150,7 @@ Install to your $GOPATH/bin:
 ```sh
 make install
 # or
-go install ./cmd/total-recall
+go install ./cmd/tr
 ```
 
 #### ENV
@@ -169,7 +169,7 @@ go install ./cmd/total-recall
 After building:
 
 ```sh
-./bin/total-recall --help
+./bin/tr --help
 ```
 
 Available subcommands:
@@ -185,7 +185,7 @@ Available subcommands:
 Example:
 
 ```sh
-./bin/total-recall serve
+./bin/tr serve
 ```
 
 ---

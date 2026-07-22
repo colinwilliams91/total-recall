@@ -20,8 +20,8 @@ Each phase section covers what is testable, what is intentionally untestable (de
 Run from the repo root before testing any phase:
 
 ```sh
-go build -o tr ./cmd/total-recall   # Linux/macOS
-go build -o tr.exe ./cmd/total-recall  # Windows
+go build -o tr ./cmd/tr   # Linux/macOS
+go build -o tr.exe ./cmd/tr  # Windows
 ```
 
 Verify clean build and vet:
@@ -72,7 +72,7 @@ Recall questions are tagged with the absolute repo path at ingestion and scoped 
 | Check | Command | Expected |
 |-------|---------|----------|
 | Binary runs | `./tr --help` | Usage text with `serve`, `init`, `config`, `status` listed |
-| Version flag | `./tr --version` | `total-recall version dev` (or semver if built with ldflags) |
+| Version flag | `./tr --version` | `tr version dev` (or semver if built with ldflags) |
 
 **Not yet testable in this phase:** All runtime behaviour (daemon, hooks, config, AI).
 
@@ -305,7 +305,7 @@ echo "test" >> foo.txt
 git add . && git commit -m "test: no daemon"
 # Expected:
 #   - Each enabled hook prints once:
-#       "[total-recall] Daemon not running at http://localhost:7331 — skipping recall check. Start with 'total-recall serve'."
+#       "[total-recall] Daemon not running at http://localhost:7331 — skipping recall check. Start with 'tr serve'."
 #   - If multiple hooks are enabled (e.g. pre-commit + commit-msg), you will see
 #     the message TWICE — once per hook. This is expected behaviour, not a bug.
 #   - Commit SUCCEEDS (all hooks exit 0 — TR never blocks Git)
@@ -321,7 +321,7 @@ git add . && git commit -m "test: no daemon"
 
 ### Prerequisites
 
-- Binary built from current source (`go build -o tr ./cmd/total-recall`).
+- Binary built from current source (`go build -o tr ./cmd/tr`).
 - Scratch Git repo from Phase 02 still available (or create a new one).
 - **At least one of the following for live AI checks:**
   - Anthropic API key (set `ANTHROPIC_API_KEY` in your shell)
@@ -409,7 +409,7 @@ C:\path\to\tr.exe serve
 # Expected:
 #   ✓ Total Recall daemon running on localhost:7331
 #   Advisory logged: "[daemon] AI provider not configured — recall questions
-#     will not be generated. Run 'total-recall init' to configure."
+#     will not be generated. Run 'tr init' to configure."
 #   Daemon continues running (AI is optional — non-blocking)
 ```
 
@@ -656,7 +656,7 @@ git add . && git commit -m "test: bad api key"
 ### Prerequisites
 
 - Binary built from current source.
-- Daemon running (`total-recall serve`) with AI configured (see Phase 03 prereqs).
+- Daemon running (`tr serve`) with AI configured (see Phase 03 prereqs).
 - Scratch Git repo from Phase 03 with at least one concept-generating commit already made (so `memory.db` exists).
 
 ---
@@ -835,14 +835,14 @@ $LASTEXITCODE
 # 4.11  tr ask when daemon is not running (POSIX)
 # Stop daemon, then:
 ./tr ask
-# Expected: prints "[total-recall] Daemon not running. Start with total-recall serve." and exits 0
+# Expected: prints "[total-recall] Daemon not running. Start with tr serve." and exits 0
 ```
 
 ```powershell
 # 4.11 (WINDOWS)
 # Stop daemon, then:
 .\tr.exe ask
-# Expected: prints "[total-recall] Daemon not running. Start with total-recall serve." and exits 0
+# Expected: prints "[total-recall] Daemon not running. Start with tr serve." and exits 0
 ```
 
 ---
@@ -852,13 +852,13 @@ $LASTEXITCODE
 ```sh
 # 4.12  Verify post-commit hook was installed by tr init (POSIX)
 cat .git/hooks/post-commit
-# Expected: contains "total-recall ask" or "$(which total-recall) ask"
+# Expected: contains "tr ask" or "$(which tr) ask"
 ```
 
 ```powershell
 # 4.12 (WINDOWS)
 Get-Content .git/hooks/post-commit
-# Expected: contains "total-recall ask" or "$(which total-recall) ask"
+# Expected: contains "tr ask" or "$(which tr) ask"
 ```
 
 ```sh
@@ -936,7 +936,7 @@ $r.StatusCode
 ### Prerequisites
 
 - Binary built from current source.
-- Daemon running (`total-recall serve`) with AI configured (see Phase 03 prereqs).
+- Daemon running (`tr serve`) with AI configured (see Phase 03 prereqs).
 - Scratch Git repo with at least one concept-generating commit.
 - `curl` and `sqlite3` available (PowerShell `Invoke-RestMethod` on Windows).
 

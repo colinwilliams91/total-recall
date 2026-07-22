@@ -7,8 +7,8 @@ before:
     - go mod tidy
 
 builds:
-  - main: ./cmd/total-recall
-    binary: total-recall
+  - main: ./cmd/tr
+    binary: tr
     env:
       - CGO_ENABLED=0
     goos:

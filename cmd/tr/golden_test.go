@@ -25,13 +25,13 @@ func requireEqualGolden(t *testing.T, data []byte) {
 
 	expected, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		t.Fatalf("golden file %s does not exist.\nTo create it:\n  $env:UPDATE_GOLDEN=1; go test -run %s ./cmd/total-recall/...\n\nGot output:\n%s", path, name, string(data))
+		t.Fatalf("golden file %s does not exist.\nTo create it:\n  $env:UPDATE_GOLDEN=1; go test -run %s ./cmd/tr/...\n\nGot output:\n%s", path, name, string(data))
 	}
 	if err != nil {
 		t.Fatalf("reading golden file %s: %v", path, err)
 	}
 	if !bytes.Equal(expected, data) {
-		t.Fatalf("golden file mismatch: %s\n\nexpected (%d bytes):\n%q\n\ngot (%d bytes):\n%q\n\nTo update: $env:UPDATE_GOLDEN=1 go test -run %s ./cmd/total-recall/...",
+		t.Fatalf("golden file mismatch: %s\n\nexpected (%d bytes):\n%q\n\ngot (%d bytes):\n%q\n\nTo update: $env:UPDATE_GOLDEN=1 go test -run %s ./cmd/tr/...",
 			path, len(expected), string(expected), len(data), string(data), name)
 	}
 }

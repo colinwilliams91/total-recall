@@ -4,7 +4,7 @@
 
 | Task | Command |
 |------|---------|
-| Build | `make build` → `bin/total-recall(.exe)` |
+| Build | `make build` → `bin/tr(.exe)` |
 | Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `tr.exe` in root, also runs `go vet` |
 | Test | `go test ./...` |
 | Single test | `go test -run TestName ./path/to/pkg/...` |
@@ -15,9 +15,9 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ## Architecture
 
-- **Entrypoint**: `cmd/total-recall/main.go` (Cobra CLI)
-- **Provider factory**: `cmd/total-recall/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
-- **Daemon**: `total-recall serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
+- **Entrypoint**: `cmd/tr/main.go` (Cobra CLI)
+- **Provider factory**: `cmd/tr/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
+- **Daemon**: `tr serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
 - **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`. **Spec drift**: `openspec/specs/concept-cache/spec.md` requires per-repo, per-branch scoping; current schema has no `repo`/`branch` columns and `Store.Recent` takes no `repo` arg. Concepts pool globally across repos. See Y1 follow-up.
 - **MCP server**: mounted at `/mcp/` inside the daemon
@@ -43,14 +43,14 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Conventional commits**
 - **Prompt assets** live under `assets/prompts/` — runtime cognition assets loaded dynamically, not static docs
 - **OpenSpec**: repo uses spec-driven development. Specs: `openspec/specs/`. Changes: `openspec/changes/`. Config: `openspec/config.yaml`
-- **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `total-recall init` time
+- **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `tr init` time
 - **Keep adapters thin**: Core Go Engine is authoritative; hooks, MCP, and presentation are thin clients
 
 ## Testing
 
 ### Framework
 
-All automated tests are Go-native, collocated in `cmd/total-recall/*_test.go`. No external test runners or Node.js dependencies. The test suite uses three strategies from the Bubble Tea testing model:
+All automated tests are Go-native, collocated in `cmd/tr/*_test.go`. No external test runners or Node.js dependencies. The test suite uses three strategies from the Bubble Tea testing model:
 
 | Strategy | What it tests | Key tools |
 |----------|--------------|-----------|
@@ -89,7 +89,7 @@ Follow these steps to maintain test coverage:
 
 5. **New AI provider** → Add a case to `TestNewProviderRoutesOpenAIFallback` (or `TestNewProviderRoutesAnthropic` if it uses the Anthropic adapter) in `provider_test.go`.
 
-6. **New TUI view or visual change** → Add a golden file test in `golden_test.go`. Run `$env:UPDATE_GOLDEN=1; go test -run TestGolden... ./cmd/total-recall/...` to generate the snapshot, then re-run without the flag to verify.
+6. **New TUI view or visual change** → Add a golden file test in `golden_test.go`. Run `$env:UPDATE_GOLDEN=1; go test -run TestGolden... ./cmd/tr/...` to generate the snapshot, then re-run without the flag to verify.
 
 7. **New hook script content** → Add a test in `main_test.go` asserting on `buildPostCommitHookScript()` output.
 
@@ -97,13 +97,13 @@ Follow these steps to maintain test coverage:
 
 ```powershell
 # Generate or update golden files
-$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/total-recall/...
+$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/tr/...
 
 # Verify (normal CI run)
-go test -run TestGolden ./cmd/total-recall/...
+go test -run TestGolden ./cmd/tr/...
 ```
 
-Golden files live in `cmd/total-recall/testdata/*.golden` and are marked `-text` in `.gitattributes` to prevent CRLF corruption on Windows.
+Golden files live in `cmd/tr/testdata/*.golden` and are marked `-text` in `.gitattributes` to prevent CRLF corruption on Windows.
 
 ### Key patterns
 

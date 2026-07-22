@@ -20,6 +20,10 @@
 ### Requirement: questions table schema is created idempotently with repo and branch columns
 `store.Open()` SHALL run `CREATE TABLE IF NOT EXISTS questions (...)` including `repo TEXT NOT NULL` and `branch TEXT NOT NULL` columns (no `DEFAULT ''` — every insert must supply both values). A covering partial index `idx_questions_repo_branch_q ON questions(repo, branch, queued_at ASC) WHERE delivered_at IS NULL` SHALL be created idempotently to support repo-AND-branch-scoped atomic dequeue.
 
+#### Scenario: Idempotent schema creation across repeated opens
+- **WHEN** `Open()` is called twice in succession against the same `memory.db` file
+- **THEN** the second call's `CREATE TABLE IF NOT EXISTS` is a no-op; `questions` has `repo TEXT NOT NULL` and `branch TEXT NOT NULL` columns; and the `idx_questions_repo_branch_q` partial index exists
+
 ---
 
 ### Requirement: SaveQuestion persists a synthesized question with repo and branch tags
@@ -59,15 +63,39 @@
 ### Requirement: QueueDepth returns unclaimed count scoped to repo and branch
 `(*Store).QueueDepth(ctx, repo, branch)` SHALL return `SELECT COUNT(*) FROM questions WHERE delivered_at IS NULL AND repo = ? AND branch = ?`. Both `repo` and `branch` MUST be non-empty. If either is empty, the method SHALL return `(0, nil)` without executing the query.
 
+#### Scenario: Queue depth for repo and branch
+- **WHEN** `QueueDepth(ctx, "/path/X", "feature-X")` is called and 3 unclaimed questions exist for that repo AND branch
+- **THEN** the method returns `(3, nil)`
+
+#### Scenario: Empty repo or branch returns zero without query
+- **WHEN** `QueueDepth` is called with `repo = ""` or `branch = ""`
+- **THEN** the method returns `(0, nil)` without executing the query
+
 ---
 
 ### Requirement: PeekNextQuestion returns the next unclaimed question scoped to repo and branch
 `(*Store).PeekNextQuestion(ctx, repo, branch)` SHALL return the oldest unclaimed question where `delivered_at IS NULL AND repo = ? AND branch = ?` without claiming it. Both `repo` and `branch` MUST be non-empty. If either is empty, the method SHALL return `(nil, nil)` without executing the query. Used by the `recall://queue` resource handler.
 
+#### Scenario: Peek returns oldest unclaimed without claiming
+- **WHEN** `PeekNextQuestion(ctx, "/path/X", "feature-X")` is called and an unclaimed question exists for that repo AND branch
+- **THEN** the method returns that question without marking it delivered (`delivered_at` remains `NULL`)
+
+#### Scenario: Empty repo or branch returns nil without query
+- **WHEN** `PeekNextQuestion` is called with `repo = ""` or `branch = ""`
+- **THEN** the method returns `(nil, nil)` without executing the query
+
 ---
 
 ### Requirement: RecentAnswered returns answered questions scoped to repo and branch
 `(*Store).RecentAnswered(ctx, repo, branch, limit)` SHALL return up to `limit` answered questions where `answered_at IS NOT NULL AND repo = ? AND branch = ?`, ordered by `answered_at DESC`. Both `repo` and `branch` MUST be non-empty. If either is empty, the method SHALL return `(nil, nil)` without executing the query.
+
+#### Scenario: Recent answered questions for repo and branch
+- **WHEN** `RecentAnswered(ctx, "/path/X", "feature-X", 10)` is called and 5 answered questions exist for that repo AND branch
+- **THEN** the method returns all 5, ordered by `answered_at DESC`
+
+#### Scenario: Empty repo or branch returns nil without query
+- **WHEN** `RecentAnswered` is called with `repo = ""` or `branch = ""`
+- **THEN** the method returns `(nil, nil)` without executing the query
 
 ---
 

@@ -7,7 +7,7 @@ param(
 #
 # This is the ONLY remaining manual e2e test. All other e2e coverage
 # (daemon, hooks, recall, MCP, config, cache, provider routing, ask
-# state machine, golden views) is automated in cmd/total-recall/*_test.go.
+# state machine, golden views) is automated in cmd/tr/*_test.go.
 #
 # `tr init` uses huh.NewForm() which requires a real TTY. The huh
 # accessible mode (TERM=dumb) exists but has a bufio.Scanner-per-field
@@ -83,7 +83,7 @@ Then: User config saved, repo config saved, hooks installed, post-commit install
             $issues += "post-commit hook not installed"
         } else {
             $postContent = Get-Content $postCommitPath -Raw
-            if (-not ($postContent -match "total-recall ask|tr\.exe ask|tr ask")) { $issues += "post-commit missing 'tr ask'" }
+            if (-not ($postContent -match "tr\.exe ask|tr ask")) { $issues += "post-commit missing 'tr ask'" }
         }
         if ($issues.Count -gt 0) {
             return @{ Passed = $false; Detail = ($issues -join "; ") }

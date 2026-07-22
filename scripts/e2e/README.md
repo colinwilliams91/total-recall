@@ -4,7 +4,7 @@
 
 | Location | Scope | Strategy |
 |----------|-------|----------|
-| `cmd/total-recall/*_test.go` | Automated e2e (58 tests) | Go-native: model isolation, headless integration, golden file |
+| `cmd/tr/*_test.go` | Automated e2e (58 tests) | Go-native: model isolation, headless integration, golden file |
 | `scripts/e2e/manual-init.ps1` | Manual e2e (3 steps) | Interactive TTY — `tr init` TUI only |
 
 ## Why `tr init` is still manual
@@ -51,7 +51,7 @@ The script will:
 Run all automated tests:
 
 ```bash
-go test ./cmd/total-recall/...
+go test ./cmd/tr/...
 ```
 
 ## Removed scripts
@@ -65,4 +65,4 @@ The following scripts were removed because their coverage migrated to Go tests:
 | `phase-02.ps1` | `integration_test.go`, `main_test.go` |
 | `phase-03.ps1` | `provider_test.go`, `cache_test.go` |
 | `phase-04a.ps1` | `integration_test.go`, `ask_test.go`, `golden_test.go` |
-| `run-all.ps1` | `go test ./cmd/total-recall/...` |
+| `run-all.ps1` | `go test ./cmd/tr/...` |

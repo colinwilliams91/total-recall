@@ -30,7 +30,7 @@ func newProvider(cfg config.AIConfig) (ai.Provider, error) {
 
 	if cfg.Provider == "custom" {
 		if cfg.BaseURL == "" {
-			return nil, fmt.Errorf("%w: provider is \"custom\" but base-url is empty — run 'total-recall init' to configure", ai.ErrNoProvider)
+			return nil, fmt.Errorf("%w: provider is \"custom\" but base-url is empty — run 'tr init' to configure", ai.ErrNoProvider)
 		}
 		baseURL = cfg.BaseURL
 	}

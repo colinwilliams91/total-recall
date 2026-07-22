@@ -299,7 +299,7 @@ func (s *Server) Start() error {
 	ln, err := net.Listen("tcp", daemonAddr)
 	if err != nil {
 		return fmt.Errorf(
-			"cannot bind to %s — another process may be using port %s\n  hint: run 'total-recall status' to check: %w",
+			"cannot bind to %s — another process may be using port %s\n  hint: run 'tr status' to check: %w",
 			daemonAddr, daemonPort, err,
 		)
 	}

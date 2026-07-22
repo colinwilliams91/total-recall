@@ -1,4 +1,4 @@
-BINARY_NAME = total-recall
+BINARY_NAME = tr
 BIN_DIR     = bin
 
 ifeq ($(OS),Windows_NT)
@@ -12,10 +12,10 @@ endif
 .PHONY: build install test lint clean tidy release-dry-run changelog
 
 build:
-	go build -o $(BINARY) ./cmd/total-recall
+	go build -o $(BINARY) ./cmd/tr
 
 install:
-	go install ./cmd/total-recall
+	go install ./cmd/tr
 
 test:
 	go test ./...

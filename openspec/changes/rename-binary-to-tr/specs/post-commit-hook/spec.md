@@ -15,3 +15,7 @@
 
 ### Requirement: Post-commit hook calls tr ask
 The generated post-commit hook SHALL call `tr ask` via `exec "$(which tr)" ask`. Using `exec` replaces the shell process, keeping process count minimal. Using `$(which tr)` avoids hardcoding the binary path.
+
+#### Scenario: Hook invokes tr ask
+- **WHEN** the post-commit hook fires after `git commit`
+- **THEN** the hook replaces its own shell process with `tr ask` (via `exec "$(which tr)" ask`) so the recall question is surfaced
