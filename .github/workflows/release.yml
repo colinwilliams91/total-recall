@@ -24,13 +24,17 @@ jobs:
 
       - name: Install git-cliff
         run: |
+          set -euo pipefail
           case "$(uname -m)" in
-            x86_64)  ARCH="x86_64-unknown-linux-musl" ;;
-            aarch64) ARCH="aarch64-unknown-linux-musl" ;;
+            x86_64)  TRIPLE="x86_64-unknown-linux-musl" ;;
+            aarch64) TRIPLE="aarch64-unknown-linux-musl" ;;
             *) echo "::error::unsupported arch: $(uname -m)"; exit 1 ;;
           esac
-          curl -sL "https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-${ARCH}.tar.gz" \
-            | tar xz -C /usr/local/bin git-cliff
+          TAG=$(curl -sL https://api.github.com/repos/orhun/git-cliff/releases/latest | grep -oP '"tag_name": "\K[^"]+')
+          VERSION=${TAG#v}
+          URL="https://github.com/orhun/git-cliff/releases/download/${TAG}/git-cliff-${VERSION}-${TRIPLE}.tar.gz"
+          echo "Downloading $URL"
+          curl -sL "$URL" | tar xz -C /usr/local/bin git-cliff
           git cliff --version
 
       - name: Generate release notes
