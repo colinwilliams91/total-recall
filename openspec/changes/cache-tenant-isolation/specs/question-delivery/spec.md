@@ -69,7 +69,19 @@ When the request body contains `"skip": true`, the handler SHALL call `store.Ski
 ### Requirement: POST /recall/answer error handling
 The handler SHALL respond `400 Bad Request` with `{"error":"answer_index out of range"}` when `answer_index` is negative or >= `len(choices)`. It SHALL respond `404 Not Found` when no question with the given ID exists. No DB write SHALL occur on either error path.
 
+#### Scenario: Out-of-range answer index
+- **WHEN** `POST /recall/answer {"id":1,"answer_index":99}` is sent and the question has 3 choices
+- **THEN** the response is `400 Bad Request` with `{"error":"answer_index out of range"}` and no DB write occurs
+
+#### Scenario: Unknown question ID
+- **WHEN** `POST /recall/answer {"id":9999,"answer_index":0}` is sent and no question with that ID exists
+- **THEN** the response is `404 Not Found` and no DB write occurs
+
 ---
 
 ### Requirement: Feedback AI call failure degrades gracefully
 If `GenerateFeedback` returns an error or empty string, the handler SHALL still call `AnswerQuestion` with `feedback = ""` and respond `200 OK` with `"feedback":null`. The answer is recorded regardless of feedback failure.
+
+#### Scenario: Feedback AI error - answer still recorded
+- **WHEN** `POST /recall/answer?feedback=true {"id":1,"answer_index":0}` is sent and `GenerateFeedback` returns an error
+- **THEN** `AnswerQuestion` is still called with `feedback = ""` and the response is `200 OK` with `"feedback":null`

@@ -1,16 +1,16 @@
 sequenceDiagram
     autonumber
     actor User
-    participant Init as total-recall init
+    participant Init as tr init
     participant Prompt as Huh TUI prompts
     participant UserCfg as ~/.tr/config.yaml
     participant RepoCfg as .tr.yaml
     participant Installer as internal/hooks.Installer
     participant GitHooks as .git/hooks/*
-    participant Serve as total-recall serve
+    participant Serve as tr serve
     participant Config as internal/config
     participant Daemon as localhost:7331
-    participant Status as total-recall status
+    participant Status as tr status
     participant Git as git
     participant Hook as managed hook script
 
@@ -50,7 +50,7 @@ sequenceDiagram
             Hook-->>Git: Exit 0
             Git-->>User: Operation continues
         else Daemon unavailable
-            Hook-->>User: Print advisory to start total-recall serve
+            Hook-->>User: Print advisory to start tr serve
             Hook-->>Git: Exit 0
             Git-->>User: Operation continues
         end

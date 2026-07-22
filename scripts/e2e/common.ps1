@@ -5,7 +5,7 @@ param(
 
 # common.ps1 — shared helpers for the manual tr init e2e test.
 # All daemon/HTTP/assertion helpers were removed when the automated
-# e2e phases migrated to Go tests in cmd/total-recall/*_test.go.
+# e2e phases migrated to Go tests in cmd/tr/*_test.go.
 
 $script:passed  = 0
 $script:failed  = 0
@@ -27,10 +27,8 @@ function Initialize-E2E {
         $script:TrBin = (Resolve-Path $BinaryPath).Path
     } elseif (Test-Path "./tr.exe") {
         $script:TrBin = (Resolve-Path "./tr.exe").Path
-    } elseif (Test-Path "./total-recall.exe") {
-        $script:TrBin = (Resolve-Path "./total-recall.exe").Path
-    } elseif (Test-Path "./bin/total-recall.exe") {
-        $script:TrBin = (Resolve-Path "./bin/total-recall.exe").Path
+    } elseif (Test-Path "./bin/tr.exe") {
+        $script:TrBin = (Resolve-Path "./bin/tr.exe").Path
     } else {
         Write-Host "[ERROR] Cannot find tr.exe. Build first with: .\scripts\rebuild.ps1" -ForegroundColor Red
         exit 1

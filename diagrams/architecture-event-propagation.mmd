@@ -1,7 +1,7 @@
 sequenceDiagram
     autonumber
     actor User as User / Git / MCP Client
-    participant CLI as cmd/total-recall
+    participant CLI as cmd/tr
     participant Cfg as internal/config
     participant UserCfg as ~/.tr/config.yaml
     participant RepoCfg as .tr.yaml
@@ -17,7 +17,7 @@ sequenceDiagram
     participant Present as internal/presentation
     participant MCP as /mcp/* + internal/mcp
 
-    User->>CLI: total-recall serve
+    User->>CLI: tr serve
     CLI->>Cfg: Load(quiet)
     Cfg->>UserCfg: EnsureUserConfig()
     Cfg->>RepoCfg: LoadRepoConfig()
@@ -27,7 +27,7 @@ sequenceDiagram
     Engine->>HTTP: RegisterRoutes()
     Note over HTTP: Implemented routes:\nGET /health\nPOST /hooks/pre-commit\nPOST /hooks/commit-msg\nPOST /hooks/pre-push\n/mcp/* stub
 
-    User->>CLI: total-recall init
+    User->>CLI: tr init
     CLI->>UserCfg: WriteUserConfig()
     CLI->>RepoCfg: WriteRepoConfig()
     CLI->>HookScripts: InstallEnabled()

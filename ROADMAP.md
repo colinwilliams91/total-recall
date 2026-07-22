@@ -2,7 +2,7 @@
 
 ## Phase 00 — Foundation (Shipped)
 
-- Go binary scaffolding (`total-recall` CLI, `cmd/`, `internal/` package layout)
+- Go binary scaffolding (`tr` CLI, `cmd/`, `internal/` package layout)
 - Hook script stubs (`hooks/*.sh`, `hooks/*.bat`)
 - Go module, Cobra command skeleton, `go.mod`
 
@@ -11,8 +11,8 @@
 ## Phase 01 — Config Architecture (Shipped)
 
 - Two-tier configuration: `~/.tr/config.yaml` (user) + `.tr.yaml` (per-repo)
-- `total-recall init` with conversation analysis opt-in (Huh TUI)
-- `total-recall config --show` with source annotations and deep-merge
+- `tr init` with conversation analysis opt-in (Huh TUI)
+- `tr config --show` with source annotations and deep-merge
 - `EnsureUserConfig` with auto-create and `--quiet` flag
 - MCP conversation analysis gate (`privacy.conversation_analysis`)
 - Daemon-required architecture; transient mode deferred
@@ -21,9 +21,9 @@
 
 ## Phase 02 — Daemon Foundation (Shipped)
 
-- HTTP daemon at `localhost:7331` (`total-recall serve`)
+- HTTP daemon at `localhost:7331` (`tr serve`)
 - Hook routes: `POST /hooks/pre-commit`, `/hooks/commit-msg`, `/hooks/pre-push`
-- `GET /health` endpoint; `total-recall status` with exit-code-1 on failure
+- `GET /health` endpoint; `tr status` with exit-code-1 on failure
 - Hook installation in `tr init` — Huh prompts, sentinel chaining, idempotent re-runs
 - Full hook scripts: P0 credential scan, diff capture, curl dispatch, graceful degradation
 - `.bat` variants for Windows environments outside Git Bash
@@ -53,7 +53,7 @@
 - **MCP server** mounted at `/mcp/` — AI coding agents (Copilot CLI, Claude Code) receive questions via `recall_next` tool, subscribe to `recall://queue` resource, and are guided by the `recall_workflow` prompt
 - **REST endpoints**: `GET /recall/next` (atomic dequeue) and `POST /recall/answer` (answer/skip recording)
 - **`tr ask` subcommand** — Bubbletea TUI with "Thinking." animation, multiple-choice keypress handler, 30-second timeout; TTY-aware (silent in CI/CD)
-- **Post-commit hook** — `tr init` writes `.git/hooks/post-commit` that calls `total-recall ask` after each successful commit
+- **Post-commit hook** — `tr init` writes `.git/hooks/post-commit` that calls `tr ask` after each successful commit
 - **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); both `concepts` and `questions` tables tagged with a `repo` column for repo-scoped recall; `TR_HOME` env var redirects the data directory for test/CI isolation
 - **`terminal.Adapter` opt-in** — `presentation.terminal: true` retains daemon-pane delivery for users who prefer it; off by default
 

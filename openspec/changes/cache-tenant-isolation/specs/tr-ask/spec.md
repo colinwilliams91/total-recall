@@ -31,6 +31,14 @@ In an interactive TTY, `tr ask` SHALL display a cycling animation: `Thinking.` �
 
 If no question has arrived and 4 seconds or less remain in the timeout window, `tr ask` SHALL replace the cycling animation with `You're all caught up on your recall questions. Great job 🤖🤖` while continuing to poll.
 
+#### Scenario: Thinking animation cycles while polling an empty queue
+- **WHEN** `tr ask` is in the polling state and the queue is empty for the resolved repo AND branch
+- **THEN** the animation cycles `Thinking.` → `Thinking..` → `Thinking...` → `Thinking.` on a single line, advancing every 400ms
+
+#### Scenario: Caught-up message replaces animation in final 4 seconds
+- **WHEN** 4 seconds or less remain in the timeout window and no question has arrived
+- **THEN** the cycling animation is replaced with `You're all caught up on your recall questions. Great job 🤖🤖`
+
 ---
 
 ### Requirement: tr ask renders the question and captures a keypress
@@ -54,15 +62,35 @@ After a choice keypress, `tr ask` SHALL transition to `stateFeedback` and render
 ### Requirement: Post-alt-screen rendering shows verdict and feedback
 After the alt-screen closes, `askCmd.RunE` SHALL inspect `am.skipped`, `am.feedbackResult`, and `am.advisory` and print the verdict/feedback/advisory as before. The repo-and-branch-scoping change does not alter this output.
 
+#### Scenario: Verdict and feedback printed after correct answer
+- **WHEN** the alt-screen closes after a correct answer with non-empty feedback
+- **THEN** `askCmd.RunE` prints the verdict, the `correct_text`, and the feedback prose to stdout
+
+#### Scenario: Skip advisory printed after alt-screen closes
+- **WHEN** the user pressed Enter (skip) and the alt-screen closes
+- **THEN** `askCmd.RunE` prints `→ Question saved for later.` via `am.skipped`
+
+#### Scenario: Daemon-unreachable advisory printed after alt-screen closes
+- **WHEN** the daemon was unreachable and the alt-screen closes
+- **THEN** `askCmd.RunE` prints the message stored in `am.advisory`
+
 ---
 
 ### Requirement: Skip sends postSkip and renders gentle acknowledgement
 When the user presses `Enter`, `tr ask` SHALL fire `postSkip(id)` (POST body `{"id":N,"skip":true}` to `/recall/answer?repo=<...>`), transition to `stateDone`, and after the alt-screen closes print `→ Question saved for later.`
 
+#### Scenario: Enter fires postSkip and prints acknowledgement
+- **WHEN** the user presses `Enter` with a question displayed
+- **THEN** `tr ask` fires `postSkip(id)` (POST body `{"id":N,"skip":true}` to `/recall/answer?repo=<...>`), transitions to `stateDone`, and after the alt-screen closes prints `→ Question saved for later.`
+
 ---
 
 ### Requirement: q / Esc - silent exit, no POST
 When the user presses `q` or `Esc`, `tr ask` SHALL transition to `stateDone` immediately, make no `POST /recall/answer`, and print nothing. The question remains unclaimed in the queue for its repo and branch.
+
+#### Scenario: q / Esc - silent exit, no POST
+- **WHEN** the user presses `q` or `Esc` with a question displayed
+- **THEN** `tr ask` transitions to `stateDone` immediately, makes no `POST /recall/answer`, prints nothing, and the question remains unclaimed in the queue for its repo and branch
 
 ---
 

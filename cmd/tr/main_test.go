@@ -25,7 +25,7 @@ func TestBuildPostCommitHookScriptEscapesPowerShellQuotes(t *testing.T) {
 }
 
 func TestPostCommitHookTemplateIncludesSentinel(t *testing.T) {
-	script := buildPostCommitHookScript("/usr/local/bin/total-recall")
+	script := buildPostCommitHookScript("/usr/local/bin/tr")
 
 	if !strings.Contains(script, "# total-recall managed") {
 		t.Fatalf("expected sentinel comment in script, got:\n%s", script)

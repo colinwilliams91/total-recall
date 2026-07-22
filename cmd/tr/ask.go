@@ -41,7 +41,7 @@ var animFrames = []string{"Thinking.", "Thinking..", "Thinking..."}
 
 const caughtUpMessage = "You're all caught up on your recall questions. Great job 🤖💗"
 
-const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with total-recall serve."
+const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with tr serve."
 
 // askCmd is the Cobra command for surfacing a recall question in the terminal.
 func askCmd() *cobra.Command {

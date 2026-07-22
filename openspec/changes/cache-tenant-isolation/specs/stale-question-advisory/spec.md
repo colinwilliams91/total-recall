@@ -58,7 +58,7 @@ The advisory block SHALL print AFTER the existing daemon-status and config-show 
 ---
 
 ### Requirement: Future anchor - migrate-vs-answer UX is deferred
-This requirement exists to document a future-phase enhancement that builds on the stale-question advisory. It is NOT to be implemented in the `cache-tenant-isolation` phase.
+This requirement exists to document a future-phase enhancement that builds on the stale-question advisory. It is NOT to be implemented in the `cache-tenant-isolation` phase. The documentation anchor SHALL be preserved in this spec for future-phase authors to discover when scanning for `migrate-vs-answer`. No code path, route, or CLI command related to the scope below SHALL be introduced in `cache-tenant-isolation`.
 
 A future phase MAY introduce a `tr migrate --from <branch> --to <branch>` command that updates the `branch` column on pending (unclaimed) questions in the cache, effectively re-queueing them under a different branch (typically from a feature branch into `main` after a merge). It MAY also introduce a `tr ask --branch <branch>` flag that allows in-place answering of a different branch's pending questions without switching branches first.
 

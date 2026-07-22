@@ -16,10 +16,10 @@ const (
 	RepoConfigFile = ".tr.yaml"
 
 	// AdvisoryMessage is emitted (to stderr) when ~/.tr/config.yaml is auto-created
-	// because the user bypassed `total-recall init`. Suppressed by --quiet.
+	// because the user bypassed `tr init`. Suppressed by --quiet.
 	AdvisoryMessage = "\n⚠  No Total Recall user config found.\n" +
 		"   Created ~/.tr/config.yaml with safe defaults.\n" +
-		"   Run 'total-recall init' to configure your preferences.\n\n"
+		"   Run 'tr init' to configure your preferences.\n\n"
 )
 
 // LoadUserConfig reads and parses ~/.tr/config.yaml.
@@ -64,7 +64,7 @@ func EnsureUserConfig(quiet bool) (*UserConfig, error) {
 }
 
 // WriteUserConfig serializes cfg to ~/.tr/config.yaml, creating ~/.tr/ if needed.
-// Used by `total-recall init` after the user completes the setup prompt.
+// Used by `tr init` after the user completes the setup prompt.
 func WriteUserConfig(cfg *UserConfig) error {
 	path, err := UserConfigPath()
 	if err != nil {
@@ -77,7 +77,7 @@ func WriteUserConfig(cfg *UserConfig) error {
 // ~/.tr/config.yaml. Using a template (instead of yaml.Marshal) gives full
 // control over field ordering, inline comments, and the always-visible base-url.
 var userConfigTemplate = template.Must(template.New("user-config").Parse(`# Total Recall user configuration
-# Run 'total-recall init' to reconfigure interactively.
+# Run 'tr init' to reconfigure interactively.
 # This file is never committed — it lives at ~/.tr/config.yaml.
 
 privacy:
@@ -87,7 +87,7 @@ privacy:
 
 ai:
   # Provider: anthropic | openai | ollama | groq | lm-studio | custom
-  # Run 'total-recall init' to change provider interactively.
+  # Run 'tr init' to change provider interactively.
   provider: {{.AI.Provider}}
 
   # Model to use for concept extraction and question synthesis.
@@ -124,7 +124,7 @@ func writeUserConfig(path string, cfg *UserConfig) error {
 }
 
 // WriteRepoConfig serializes cfg to .tr.yaml in repoRoot.
-// Used by `total-recall init` to persist hook selections and repo-level settings.
+// Used by `tr init` to persist hook selections and repo-level settings.
 func WriteRepoConfig(repoRoot string, cfg *RepoConfig) error {
 	path := filepath.Join(repoRoot, RepoConfigFile)
 	data, err := yaml.Marshal(cfg)

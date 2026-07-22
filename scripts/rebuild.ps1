@@ -4,11 +4,11 @@ Invoke-Command -ScriptBlock {
         Remove-Item -Path "./tr.exe" -Force
     }
 
-    Write-Host "🧠⚡Building total-recall..."
-    go build -o tr.exe ./cmd/total-recall
+    Write-Host "🧠⚡Building tr..."
+    go build -o tr.exe ./cmd/tr
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error building total-recall. Exiting."
+        Write-Host "Error building tr. Exiting."
         exit $LASTEXITCODE
     }
 
