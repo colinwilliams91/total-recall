@@ -38,12 +38,14 @@ Every commit is a learning opportunity.
 
 ## Setup
 
+**Prerequisite:** Git 2.5+ (2015) for linked worktree support (`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature).
+
 ```sh
-# Go
+# 1. Install the binary (one-time, user-level).
 go install github.com/colinwilliams91/total-recall@latest
 ```
 
-**1. Initialize user config and preferences:**
+**2. Initialize user config (run from any directory; one-time, user-level):**
 
 ```sh
 tr init
@@ -52,7 +54,7 @@ tr init
 This creates `~/.tr/config.yaml` (your personal config, never committed) and prompts
 you about enabling conversation analysis and AI provider setup.
 
-**2. Start the daemon:**
+**3. Start the daemon:**
 
 ```sh
 tr serve
@@ -68,7 +70,7 @@ tr status
 
 Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (exits 1, for scripting).
 
-**3. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
+**4. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
 
 ```sh
 cd your-project/
@@ -76,6 +78,10 @@ tr repo
 ```
 
 Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
+
+### Non-Go install path
+
+Without Go: download the release archive from GitHub Releases, extract, place `tr` (or `tr.exe`) on PATH manually. Same downstream flow.
 
 ---
 
