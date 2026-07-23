@@ -151,7 +151,8 @@ func TestResolveHooksDirWorktree(t *testing.T) {
 		t.Fatalf("expected absolute path, got %q", hooksDir)
 	}
 
-	normalizedMain := filepath.ToSlash(mainDir)
+	normalizedMain, _ := filepath.Abs(mainDir)
+	normalizedMain = filepath.ToSlash(normalizedMain)
 	normalizedHooks := filepath.ToSlash(hooksDir)
 	if !strings.Contains(normalizedHooks, normalizedMain) {
 		t.Fatalf("expected hooks dir to point to main repo's gitdir, got %q (main: %q)", hooksDir, mainDir)
