@@ -22,28 +22,12 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install git-cliff
-        run: |
-          set -euo pipefail
-          case "$(uname -m)" in
-            x86_64)  TRIPLE="x86_64-unknown-linux-musl" ;;
-            aarch64) TRIPLE="aarch64-unknown-linux-musl" ;;
-            *) echo "::error::unsupported arch: $(uname -m)"; exit 1 ;;
-          esac
-          TAG=$(curl -sL https://api.github.com/repos/orhun/git-cliff/releases/latest | grep -oP '"tag_name": "\K[^"]+')
-          VERSION=${TAG#v}
-          URL="https://github.com/orhun/git-cliff/releases/download/${TAG}/git-cliff-${VERSION}-${TRIPLE}.tar.gz"
-          echo "Downloading $URL"
-          curl -sL "$URL" | tar xz -C /usr/local/bin --strip-components=1 "git-cliff-${VERSION}/git-cliff"
-          git cliff --version
-
-      - name: Generate release notes
-        run: |
-          set -euo pipefail
-          git cliff --latest --strip header --output /tmp/release-notes.md
-          echo "----- /tmp/release-notes.md (first 30 lines) -----"
-          head -30 /tmp/release-notes.md
-          echo "----- ($(wc -l < /tmp/release-notes.md) lines total) -----"
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          args: --latest --strip header --output /tmp/release-notes.md
+        env:
+          OUTPUT: /tmp/release-notes.md
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
