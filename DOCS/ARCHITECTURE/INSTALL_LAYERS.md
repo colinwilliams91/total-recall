@@ -40,7 +40,7 @@ The cross-layer couplings that exist — each is instructive:
 | Binary → hooks (content) | At `tr repo` time only | Hook script bodies are embedded `const` strings in `internal/hooks/scripts.go`, compiled into the binary, written verbatim to `.git/hooks/` by `tr repo` | Rebuilding the binary does NOT update already-installed hooks. You must re-run `tr repo`. |
 | Binary → post-commit hook (path) | At `tr repo` time only | `postCommitHookScript` in `main.go` is a static template that relies on `tr` being on PATH | If `tr` is not on PATH, the post-commit hook will fail. Re-run `tr repo` to refresh. |
 | Hooks → daemon (URL) | At hook-fire time | `curl http://localhost:7331/hooks/...` — URL is a string in the hook script | Daemon must be running for dispatch to succeed. No daemon → advisory printed (the #14 surface). |
-| post-commit hook → binary (ask) | At hook-fire time | Shells out to `tr ask` via the captured binary path | The only hook that invokes the binary at fire time, and the only hook coupled to binary path. A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
+| post-commit hook → binary (ask) | At hook-fire time | Shells out to `tr ask` via PATH (no baked path) | The only hook that invokes the binary at fire time. Depends on `tr` being on PATH. A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
 
 ---
 
@@ -147,5 +147,5 @@ These are real follow-ups, not novel discoveries — each is a consequence of th
 
 - **Worktree install** (resolved): `tr repo` from a linked worktree now works correctly — it resolves the hooks dir via `git rev-parse --git-path hooks`, which points to the common gitdir shared across all linked worktrees.
 - **Stale post-commit after binary move** (resolved): post-commit hook now relies on `tr` being on PATH rather than capturing the binary path at install time. No more stale-path issue.
-- **Binary version drift across repos** (architectural): hooks are static; if a user has 10 repos with `init`'d hooks and upgrades the binary, only repos where they re-run `init` get new hook bodies. No version handshake exists.
+- **Binary version drift across repos** (architectural): hooks are static; if a user has 10 repos with `tr repo`'d hooks and upgrades the binary, only repos where they re-run `tr repo` get new hook bodies. No version handshake exists.
 - **`tr init` and `tr repo` are separate commands** (resolved): user-config (`tr init`) and repo-config (`tr repo`) are now physically and logically separate. Re-running either command only re-prompts its own concerns.
