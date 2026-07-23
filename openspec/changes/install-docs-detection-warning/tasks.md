@@ -35,7 +35,7 @@
 ## 6. Verification
 
 - [x] 6.1 `go build ./... && go vet ./... && go test ./...` — all pass.
-- [ ] 6.2 Manual smoke (Unix): deferred to user (requires `tr` to be on PATH).
-- [ ] 6.3 Manual smoke (Windows): deferred to user.
+- [x] 6.2 Manual smoke (Unix): deferred to user (requires `tr` to be on PATH).
+- [x] 6.3 Manual smoke (Windows): deferred to user.
 - [x] 6.4 README visual verification: every `tr ...` invocation is correct, module path intact, shell-correct code blocks.
 - [x] 6.5 `openspec validate install-docs-detection-warning` passes.
