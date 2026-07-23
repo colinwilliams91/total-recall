@@ -151,10 +151,22 @@ func TestResolveHooksDirWorktree(t *testing.T) {
 		t.Fatalf("expected absolute path, got %q", hooksDir)
 	}
 
-	normalizedMain, _ := filepath.Abs(mainDir)
-	normalizedMain = filepath.ToSlash(normalizedMain)
+	// Compare against git's own output from the main repo, so both paths are
+	// in canonical form (avoids Windows 8.3 short-name mismatches like
+	// RUNNER~1 vs runneradmin).
+	mainCmd := exec.Command("git", "rev-parse", "--git-path", "hooks")
+	mainCmd.Dir = mainDir
+	mainOut, err := mainCmd.Output()
+	if err != nil {
+		t.Fatalf("git rev-parse from main: %v", err)
+	}
+	mainHooksDir := strings.TrimSpace(string(mainOut))
+	if !filepath.IsAbs(mainHooksDir) {
+		mainHooksDir = filepath.Join(mainDir, mainHooksDir)
+	}
+	normalizedMainHooks := filepath.ToSlash(mainHooksDir)
 	normalizedHooks := filepath.ToSlash(hooksDir)
-	if !strings.Contains(normalizedHooks, normalizedMain) {
-		t.Fatalf("expected hooks dir to point to main repo's gitdir, got %q (main: %q)", hooksDir, mainDir)
+	if normalizedHooks != normalizedMainHooks {
+		t.Fatalf("expected hooks dir %q, got %q", normalizedMainHooks, normalizedHooks)
 	}
 }
