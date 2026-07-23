@@ -18,12 +18,20 @@
 ---
 
 ### Requirement: Post-commit hook calls tr ask
-The generated post-commit hook SHALL call `tr ask` via `exec "$(which tr)" ask`. Using `exec` replaces the shell process, keeping process count minimal. Using `$(which tr)` avoids hardcoding the binary path. (Y4 may amend this further to drop the `$(which ...)` indirection in favor of pure PATH reliance; Y3 does not modify the hook template content.)
+The generated post-commit hook SHALL call `tr ask` via `exec tr ask`. Using `exec` replaces the shell process, keeping process count minimal. The hook relies on `tr` being available on PATH (Y4 fold-in: no longer captures the binary path at install time).
+
+#### Scenario: Post-commit hook fires after a commit
+- **WHEN** a commit succeeds and the post-commit hook fires
+- **THEN** `tr ask` is invoked via `exec tr ask`, replacing the shell process
 
 ---
 
 ### Requirement: Post-commit hook is installed after existing dispatch hooks
 The post-commit hook installation step SHALL run after the existing pre-commit, commit-msg, and pre-push hook installations in `runRepo()`. The install order matches the existing `runInit()` flow; only the function name changes (init → repo).
+
+#### Scenario: Install order in tr repo
+- **WHEN** `tr repo` completes hook installation
+- **THEN** the post-commit hook is written after the dispatch hooks (pre-commit, commit-msg, pre-push) have been installed
 
 ---
 

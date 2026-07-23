@@ -20,12 +20,33 @@ type Installer struct {
 	hooksDir string
 }
 
-// NewInstaller creates an Installer for the given repository root.
-func NewInstaller(repoRoot string) *Installer {
+// NewInstaller creates an Installer for the given repository root and hooks directory.
+// hooksDir should be the resolved absolute path to the git hooks directory
+// (e.g., from ResolveHooksDir).
+func NewInstaller(repoRoot string, hooksDir string) *Installer {
 	return &Installer{
 		repoRoot: repoRoot,
-		hooksDir: filepath.Join(repoRoot, ".git", "hooks"),
+		hooksDir: hooksDir,
 	}
+}
+
+// ResolveHooksDir runs `git rev-parse --git-path hooks` to resolve the actual
+// git hooks directory. This is correct for linked worktrees where .git is a
+// pointer file rather than a directory. Relative results are absolutized via
+// filepath.Join(repoRoot, hooksDir).
+func ResolveHooksDir(repoRoot string) (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--git-path", "hooks").Output()
+	if err != nil {
+		return "", fmt.Errorf("resolving git hooks dir: %w", err)
+	}
+	hooksDir := strings.TrimSpace(string(out))
+	if hooksDir == "" {
+		return "", fmt.Errorf("git rev-parse --git-path hooks returned empty")
+	}
+	if !filepath.IsAbs(hooksDir) {
+		hooksDir = filepath.Join(repoRoot, hooksDir)
+	}
+	return hooksDir, nil
 }
 
 // FindRepoRoot runs `git rev-parse --show-toplevel` to locate the Git repository root.
