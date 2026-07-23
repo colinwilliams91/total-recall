@@ -34,7 +34,7 @@ jobs:
           VERSION=${TAG#v}
           URL="https://github.com/orhun/git-cliff/releases/download/${TAG}/git-cliff-${VERSION}-${TRIPLE}.tar.gz"
           echo "Downloading $URL"
-          curl -sL "$URL" | tar xz -C /usr/local/bin git-cliff
+          curl -sL "$URL" | tar xz -C /usr/local/bin --strip-components=1 "git-cliff-${VERSION}/git-cliff"
           git cliff --version
 
       - name: Generate release notes
