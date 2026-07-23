@@ -54,12 +54,3 @@ For cloud providers that require an API key, the TUI prompt description SHALL ex
 #### Scenario: tr init run from inside a git repo
 - **WHEN** `tr init` is run from inside a git repository
 - **THEN** `tr init` behaves identically to running from outside a git repo — it writes only `~/.tr/config.yaml`, prints the next-step guidance, and exits 0; no `.tr.yaml` is written, no hooks are installed
-
----
-
-### Requirement: Cloud provider prompts explain the env:VAR_NAME pattern
-For cloud providers that require an API key, the TUI prompt description SHALL explain the `env:VAR_NAME` pattern in plain language, advising users to set the variable in their shell profile rather than pasting the key directly.
-
-#### Scenario: API key prompt description
-- **WHEN** the user is at the API key input for any cloud provider
-- **THEN** the prompt includes copy similar to: `"Use env:VAR_NAME so your key is never stored in plaintext. Example: env:ANTHROPIC_API_KEY. Set this variable in your ~/.zshrc or ~/.bashrc."`
