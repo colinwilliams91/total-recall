@@ -110,6 +110,14 @@ func TestResolveHooksDirWorktree(t *testing.T) {
 	mainDir := filepath.Join(tmpDir, "main-repo")
 	worktreeDir := filepath.Join(tmpDir, "worktree")
 
+	// Resolve symlinks so git invocations agree on a canonical path
+	// (macOS: /var -> /private/var; Windows: 8.3 short names).
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+		mainDir = filepath.Join(tmpDir, "main-repo")
+		worktreeDir = filepath.Join(tmpDir, "worktree")
+	}
+
 	if err := os.MkdirAll(mainDir, 0o755); err != nil {
 		t.Fatalf("mkdir main: %v", err)
 	}
@@ -152,8 +160,8 @@ func TestResolveHooksDirWorktree(t *testing.T) {
 	}
 
 	// Compare against git's own output from the main repo, so both paths are
-	// in canonical form (avoids Windows 8.3 short-name mismatches like
-	// RUNNER~1 vs runneradmin).
+	// in canonical form (avoids macOS /var -> /private/var symlink mismatches
+	// and Windows 8.3 short-name mismatches like RUNNER~1 vs runneradmin).
 	mainCmd := exec.Command("git", "rev-parse", "--git-path", "hooks")
 	mainCmd.Dir = mainDir
 	mainOut, err := mainCmd.Output()
