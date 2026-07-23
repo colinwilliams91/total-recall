@@ -48,14 +48,14 @@ func TestCheckTrOnPath_Found(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NotFound_Bash: SHELL=/bin/bash, PATH=empty → bash warning.
+// TestCheckTrOnPath_NotFound_Bash: SHELL=/bin/bash, PATH=empty dir → bash warning.
 func TestCheckTrOnPath_NotFound_Bash(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: bash advisory")
 	}
 
 	t.Setenv("SHELL", "/bin/bash")
-	t.Setenv("PATH", "/usr/bin:/bin") // /usr/bin has the Unix `tr` (translate), not the Total Recall binary
+	t.Setenv("PATH", t.TempDir()) // empty dir; no `tr` (Unix translate or Total Recall)
 
 	buf, restore := captureStderrTo(t)
 	checkTrOnPath()
@@ -77,7 +77,7 @@ func TestCheckTrOnPath_NotFound_Zsh(t *testing.T) {
 	}
 
 	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
 	checkTrOnPath()
@@ -96,7 +96,7 @@ func TestCheckTrOnPath_NotFound_DefaultShell(t *testing.T) {
 	}
 
 	t.Setenv("SHELL", "")
-	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
 	checkTrOnPath()
@@ -115,7 +115,7 @@ func TestCheckTrOnPath_NotFound_OtherShell(t *testing.T) {
 	}
 
 	t.Setenv("SHELL", "/usr/bin/fish")
-	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
 	checkTrOnPath()
@@ -159,7 +159,7 @@ func TestCheckTrOnPath_NeverWrites(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("SHELL", "/bin/bash")
-	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("PATH", t.TempDir()) // empty PATH ensures detection fails (no Unix `tr` to find)
 
 	_, restore := captureStderrTo(t)
 	checkTrOnPath()
