@@ -4,7 +4,7 @@ Invoke-Command -ScriptBlock {
         Remove-Item -Path "./tr.exe" -Force
     }
 
-    Write-Host "🧠⚡Building tr..."
+    Write-Host "🧠⚡Building total-recall..."
     go build -o tr.exe ./cmd/tr
 
     if ($LASTEXITCODE -ne 0) {

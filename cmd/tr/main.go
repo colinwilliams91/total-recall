@@ -132,6 +132,8 @@ func repoCmd() *cobra.Command {
 }
 
 func runInit() error {
+	checkTrOnPath()
+
 	cfgPath, err := config.UserConfigPath()
 	if err != nil {
 		return err
@@ -187,6 +189,8 @@ func runInit() error {
 }
 
 func runRepo() error {
+	checkTrOnPath()
+
 	repoRoot, err := hooks.FindRepoRoot()
 	if err != nil {
 		fmt.Println("Total Recall only works with git projects. cd into a project and run tr repo.")
