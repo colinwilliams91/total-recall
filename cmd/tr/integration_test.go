@@ -9,6 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +21,7 @@ import (
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/engine"
+	"github.com/colinwilliams91/total-recall/internal/hooks"
 	"github.com/colinwilliams91/total-recall/internal/recall"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -1322,5 +1326,73 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	}
 	if rows[0]["question"] != "X answered q" {
 		t.Fatalf("expected X answered q, got %v", rows[0]["question"])
+	}
+}
+
+func TestRepoInstallsIntoCommonGitdirInWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	mainDir := filepath.Join(tmpDir, "main-repo")
+	worktreeDir := filepath.Join(tmpDir, "worktree")
+
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		t.Fatalf("mkdir main: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@test"},
+		{"config", "user.name", "test"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = mainDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	cmd := exec.Command("git", "commit", "--allow-empty", "-m", "initial", "-q")
+	cmd.Dir = mainDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	cmd = exec.Command("git", "worktree", "add", worktreeDir, "-b", "worktree-branch")
+	cmd.Dir = mainDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+
+	origDir, _ := os.Getwd()
+	os.Chdir(worktreeDir)
+	defer os.Chdir(origDir)
+
+	hooksDir, err := hooks.ResolveHooksDir(worktreeDir)
+	if err != nil {
+		t.Fatalf("ResolveHooksDir: %v", err)
+	}
+
+	installer := hooks.NewInstaller(worktreeDir, hooksDir)
+	repoCfg := config.HooksConfig{PreCommit: true}
+	installed, err := installer.InstallEnabled(repoCfg)
+	if err != nil {
+		t.Fatalf("InstallEnabled: %v", err)
+	}
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 hook installed, got %d", len(installed))
+	}
+
+	mainHooksDir := filepath.Join(mainDir, ".git", "hooks")
+	hookPath := filepath.Join(mainHooksDir, "pre-commit")
+	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
+		t.Fatalf("expected pre-commit hook in main repo's .git/hooks/ (%s), not found", hookPath)
+	}
+
+	postCommitPath := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(postCommitPath, []byte(postCommitHookScript), 0o755); err != nil {
+		t.Fatalf("write post-commit: %v", err)
+	}
+	mainPostCommit := filepath.Join(mainHooksDir, "post-commit")
+	if _, err := os.Stat(mainPostCommit); os.IsNotExist(err) {
+		t.Fatalf("expected post-commit hook in main repo's .git/hooks/ (%s), not found", mainPostCommit)
 	}
 }
