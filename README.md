@@ -2,9 +2,13 @@
 	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
 </p>
 
-Preserve engineering intuition in the age of AI agents.
+> _AI coding assistants make us faster while we slowly forget the fundamentals._
+>
+> _Total Recall reinforces software engineering knowledge through short, diff-aware questions triggered by your normal Git workflow._
 
-Cognitive retention layer for AI-assisted engineering. Four seconds per Git event is two letter-grades of skill retention saved.
+***AI can write the code. Total Recall makes sure you're still learning from it.***
+
+_Cognitive retention layer for AI-assisted engineering. Four seconds per Git event is two letter-grades of skill retention saved._
 
 ## Problem Statement
 
@@ -22,26 +26,15 @@ Aggressive adoption of AI assisted development tooling has proven to have negati
 	- Anthropic Research Team
 
 ## Philosophy
-Git is the stable substrate.
+You're a software engineer.
 
-That is where we anchor.
+AI writes faster. You think deeper.
 
-We should never feel like "work after the work".
+Don't forget how to design good software.
 
-We should feel like "a 4-second mental rep".
+Hone software engineering while AI writes code.
 
-## Key Features
-- [ ] 1.0 Fast and Interruptible
-	- [ ] 1.1 Optional Strict Mode
-- [ ] 2.0 Difficulty Configurable
-	- [ ] 2.1 Adaptive Recall Difficulty
-- [ ] 3.0 Feels Invisible
-	- [ ] 3.1 Async/Cache Layers
-- [ ] 4.0 Gamification/Hosted Leaderboard
-	- [ ] 4.1 see -> 1.0.3
-	- [ ] 4.2 "Recall Debt"
-- [ ] 5.0 Concept Fingerprinting
-	- [ ] 5.1. Long-term Adaptive Curricula
+Every commit is a learning opportunity.
 
 ## Setup
 
@@ -57,7 +50,7 @@ tr init
 ```
 
 This creates `~/.tr/config.yaml` (your personal config, never committed) and prompts
-you about enabling conversation analysis.
+you about enabling conversation analysis and AI provider setup.
 
 **2. Start the daemon:**
 
@@ -78,7 +71,8 @@ Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (e
 **3. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
 
 ```sh
-tr init  # inside the repo
+cd your-project/
+tr repo
 ```
 
 Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
@@ -99,7 +93,10 @@ Prints every key annotated with its source (`user` / `repo` / `default`).
 
 See [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 
-## Data
+---
+---
+
+## The Data
 
 - ## 84% of respondents are using AI tools this year
 	- According to Stack Overflow's [2025 developer survey](https://survey.stackoverflow.co/2025/ai#sentiment-and-usage-ai-select-ai-select)
@@ -117,7 +114,9 @@ See [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 > In the initial coding phase of our qualitative analysis... we developed a typology of six AI interaction patterns... yielding different outcomes for both completion time and skill formation (i.e. quiz score). (figure 11)
 > - Shen & Tamkin, [How AI Impacts Skill Formation](https://arxiv.org/pdf/2601.20245)
 
-![figure 11 AI interaction patterns](DOCS/MEDIA/DATA/FIG_11.png)
+<p align="center">
+	<img src="DOCS/MEDIA/DATA/FIG_11.png" alt="total recall logo"/>
+</p>
 
 The group with in optimal intersection of *lowest* Completion Time and *highest* Quiz Score axes "Generation-Then-Comprehension".
 > *High-scoring interaction patterns* were clusters of behaviors where the average quiz score is 65% or higher. *Participants in these clusters used AI both for code generation, conceptual queries or a combination of the two*.
@@ -125,98 +124,17 @@ The group with in optimal intersection of *lowest* Completion Time and *highest*
 
 > **Figure 6** shows that while using AI to complete our coding task did not significantly improve task completion time, *the level of skill formation gained by completing the task, measured by our quiz, is significantly reduced* (Cohen d=0.738, p=0.01). There is a 4.15 point difference between the means of the treatment and control groups. ***For a 27-point quiz, this translates into a 17% score difference or 2 grade points.*** Controlling for warm-up task time as a covariate, the treatment effect remains significant (Cohen’s d=0.725, p=0.016). [emphasis mine]
 
-![figure 6 task completion time over quiz score](DOCS/MEDIA/DATA/FIG_6.png)
+<p align="center">
+	<img src="DOCS/MEDIA/DATA/FIG_6.png" alt="total recall logo"/>
+</p>
 
 ## Contributing
-
-### Build
-
-Using Make:
-
-```sh
-make build
-```
-
-Produces `tr.exe` (Windows) or `bin/tr` (Linux/macOS).
-
-Or directly with Go:
-
-```sh
-go build -o bin/tr.exe ./cmd/tr
-```
-
-Install to your $GOPATH/bin:
-
-```sh
-make install
-# or
-go install ./cmd/tr
-```
-
-#### ENV
-
-*Note*: There are no environment variables required to run Total Recall.
-
-- The daemon will run on `localhost:7331` by default, and the config file is located at `~/.tr/config.yaml`.
-- You can override the config file location with `--config <path>`.
-- The init should walk you through the config setup and create the file if it does not exist.
-**USE YOUR LOCAL MACHINE ENV VARIABLES FOR API KEYS AND EXTRA SECURITY**. Total Recall will not store your API keys in the repo config file.
+- I strongly believe in the sharing of knowledge, transparent information and FOSS.
+- Contributions are welcome!
+- Please see [CONTRIBUTING.md](DOCS/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `tr init` test.
 
 ---
 
-### Run
+<img src="https://img.shields.io/liberapay/receives/colin-williams-dev.svg?logo=liberapay">
 
-After building:
-
-```sh
-./bin/tr --help
-```
-
-Available subcommands:
-
-| Command   |	Description |
-| --------- | ------------- |
-| --help    | Show the help/man page                |
-| serve     | Start the daemon on localhost:7331    |
-| init      | Initialize Total Recall for a project |
-| config    | Read/write config values              |
-| status    | Show daemon status and active config  |
-
-Example:
-
-```sh
-./bin/tr serve
-```
-
----
-
-### Test
-
-#### E2E
-
-> You can run the E2E tests in `./scripts/e2e/` using PowerShell. These tests require the daemon to be running and will create a temporary Git repo for testing.
-> They will output an agent-first JSON log of the test run to `./scripts/e2e/output/` -- add that directory to the `.gitignore` if it is not already there.
-```sh
-./scripts/e2e/run-all.ps1
-```
-
-#### Unit
-
-```sh
-make test
-# or
-go test ./...
-```
-
-> Note: No test files exist yet — `go test open-source.` will complete with no tests run. The internal packages under `internal` only contain `doc.go` stubs at this stage.
-
----
-
-### Other Useful Commands
-
-```sh
-make tidy    # go mod tidy — sync dependencies
-make lint    # run golangci-lint (must be installed separately)
-make clean   # remove the bin/ directory
-```
-Build and use the `--help` flag to explore more commands and options.
+https://liberapay.com/colin-williams-dev/
