@@ -50,7 +50,7 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 	}
 
 	if difficulty == "" {
-		difficulty = defaultDifficulty
+		difficulty = "difficulty: " + defaultDifficulty
 	}
 
 	concepts := make([]string, len(rows))
