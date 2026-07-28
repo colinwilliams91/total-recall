@@ -45,7 +45,7 @@ func resolveAskBranch() (string, error) {
 }
 
 const (
-	defaultTimeout = 15 * time.Second
+	defaultTimeout = 60 * time.Second
 	animTick       = 400 * time.Millisecond
 	caughtUpWindow = 4 * time.Second
 )
@@ -94,7 +94,7 @@ func askCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&timeout, "timeout", 15, "Seconds to wait for a question before exiting")
+	cmd.Flags().IntVar(&timeout, "timeout", 60, "Seconds to wait for a question before exiting")
 	return cmd
 }
 

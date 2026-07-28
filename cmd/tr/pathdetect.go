@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const pathWarningContext = "   (tr repo installs a post-commit hook that relies on PATH resolution at fire time.)"
+const pathWarningContext = "   (tr needs to be on PATH so you can run tr serve, tr repo, and tr ask from any terminal.)"
 
 // checkTrOnPath detects whether the `tr` binary is reachable via PATH and
 // prints a shell-specific warning to stderr if not. It NEVER writes to shell

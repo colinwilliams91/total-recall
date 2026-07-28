@@ -12,7 +12,7 @@ import (
 	"github.com/colinwilliams91/total-recall/internal/ai"
 )
 
-const defaultTimeout = 10 * time.Second
+const defaultTimeout = 60 * time.Second
 
 // Client implements ai.Provider using the OpenAI Chat Completions API.
 // It also handles OpenAI-compatible providers (Ollama, Groq, LM Studio, custom).

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultTimeout    = 10 * time.Second
+	defaultTimeout    = 60 * time.Second
 	anthropicVersion  = "2023-06-01"
 	messagesEndpoint  = "/v1/messages"
 	jsonOnlyInstruct  = "\n\nRespond with valid JSON only."

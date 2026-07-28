@@ -128,7 +128,7 @@ func (s *Server) handleHook(w http.ResponseWriter, r *http.Request) {
 func (s *Server) runPipeline(env HookEnvelope) {
 	defer s.wg.Done()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	// Extract the diff from the payload (pre-commit hook sends it as a string).
