@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/huh"
@@ -119,9 +120,13 @@ exec "%s" ask
 //
 // The PowerShell branch uses single quotes so the path is a literal string
 // (PowerShell accepts native backslash paths). The sh branch uses forward
-// slashes so MSYS sh on Windows can exec the .exe directly.
+// slashes so MSYS sh on Windows can exec the .exe directly. strings.ReplaceAll
+// is used instead of filepath.ToSlash because ToSlash only converts the
+// OS-specific path separator — on Linux, backslashes are not the separator
+// and would be left unchanged, causing the sh fallback to fail when a
+// Windows-style path is baked in.
 func buildPostCommitHookScript(selfPath string) string {
-	return fmt.Sprintf(postCommitHookScriptTmpl, selfPath, filepath.ToSlash(selfPath))
+	return fmt.Sprintf(postCommitHookScriptTmpl, selfPath, strings.ReplaceAll(selfPath, "\\", "/"))
 }
 
 // osExit is a var so tests can stub os.Exit without terminating the process.

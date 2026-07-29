@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/colinwilliams91/total-recall/internal/ai"
 )
-
-const defaultTimeout = 60 * time.Second
 
 // Client implements ai.Provider using the OpenAI Chat Completions API.
 // It also handles OpenAI-compatible providers (Ollama, Groq, LM Studio, custom).
@@ -30,7 +27,7 @@ func New(baseURL, apiKey, model string) *Client {
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		model:      model,
-		httpClient: &http.Client{Timeout: defaultTimeout},
+		httpClient: &http.Client{Timeout: ai.DefaultHTTPTimeout},
 	}
 }
 

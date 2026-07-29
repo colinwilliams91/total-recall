@@ -128,6 +128,12 @@ func (s *Server) handleHook(w http.ResponseWriter, r *http.Request) {
 func (s *Server) runPipeline(env HookEnvelope) {
 	defer s.wg.Done()
 
+	// This context covers two sequential AI calls: concept extraction and
+	// question synthesis. Each call is bounded by ai.DefaultHTTPTimeout,
+	// so the pipeline needs at least 2x that to avoid premature cancellation.
+	// The tr ask --timeout default (in cmd/tr/ask.go) must be >= this
+	// value so the ask poller doesn't give up before the pipeline produces a
+	// question. See the timeout relationship documented on ai.DefaultHTTPTimeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -312,6 +318,7 @@ func (s *Server) handleRecallStale(w http.ResponseWriter, r *http.Request) {
 		"branches": branches,
 	})
 }
+
 // After Shutdown returns, Start() will return http.ErrServerClosed.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpSrv.Shutdown(ctx)

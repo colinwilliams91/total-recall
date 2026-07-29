@@ -7,16 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/colinwilliams91/total-recall/internal/ai"
 )
 
 const (
-	defaultTimeout    = 60 * time.Second
-	anthropicVersion  = "2023-06-01"
-	messagesEndpoint  = "/v1/messages"
-	jsonOnlyInstruct  = "\n\nRespond with valid JSON only."
+	anthropicVersion = "2023-06-01"
+	messagesEndpoint = "/v1/messages"
+	jsonOnlyInstruct = "\n\nRespond with valid JSON only."
 )
 
 // Client implements ai.Provider using the Anthropic Messages API.
@@ -33,7 +31,7 @@ func New(baseURL, apiKey, model string) *Client {
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		model:      model,
-		httpClient: &http.Client{Timeout: defaultTimeout},
+		httpClient: &http.Client{Timeout: ai.DefaultHTTPTimeout},
 	}
 }
 

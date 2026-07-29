@@ -45,6 +45,11 @@ func resolveAskBranch() (string, error) {
 }
 
 const (
+	// defaultTimeout is how long tr ask polls for a question before showing
+	// the "caught up" message and exiting. Must be >= the pipeline context
+	// timeout in internal/engine/server.go so the poller doesn't give up
+	// before the pipeline produces a question. See the timeout relationship
+	// documented on ai.DefaultHTTPTimeout.
 	defaultTimeout = 60 * time.Second
 	animTick       = 400 * time.Millisecond
 	caughtUpWindow = 4 * time.Second
