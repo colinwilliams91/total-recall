@@ -34,6 +34,10 @@ func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model stri
 
 	var concepts []ConceptFingerprint
 	if err := json.Unmarshal([]byte(raw), &concepts); err != nil {
+		var single ConceptFingerprint
+		if err2 := json.Unmarshal([]byte(raw), &single); err2 == nil {
+			return []ConceptFingerprint{single}, nil
+		}
 		log.Printf("[pipeline] extraction parse failed (response: %.200s): %v", raw, err)
 		return []ConceptFingerprint{}, nil
 	}

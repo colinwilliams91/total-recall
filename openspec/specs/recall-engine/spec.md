@@ -1,15 +1,21 @@
+## Purpose
+
+Synthesize a single multiple-choice recall question per hook event from concepts cached for the triggering repo and branch, build the synthesis and feedback prompts, and degrade gracefully on AI call failure.
 ## Requirements
-
 ### Requirement: Recall engine synthesizes a single question per hook event
-`Engine.Synthesize` SHALL produce at most one `Question` per invocation. The question is derived from recent concepts in the cache for the triggering repo. If no concepts are available, `Synthesize` returns `nil, nil` without calling the provider.
+`Engine.Synthesize(ctx, repo, branch, difficulty, model)` SHALL produce at most one `Question` per invocation. The question is derived from recent concepts in the cache for the triggering repo AND branch. If no concepts are available for that repo and branch combination, `Synthesize` returns `nil, nil` without calling the provider. Both `repo` and `branch` MUST be non-empty; if either is empty, `Synthesize` returns `nil, nil` without calling the store or provider.
 
-#### Scenario: Concepts available in cache
-- **WHEN** the cache contains recent concepts for the repo
-- **THEN** `Synthesize` calls the provider and returns a `*Question` with a non-empty `Question` and at least one entry in `Choices`
+#### Scenario: Concepts available in cache for the repo and branch
+- **WHEN** the cache contains recent concepts for `repo = "/path/X"` and `branch = "feature-X"`
+- **THEN** `Synthesize` calls the provider with those concepts and returns a `*Question` with a non-empty `Question` and at least one entry in `Choices`
 
-#### Scenario: No concepts in cache
-- **WHEN** the cache contains no concepts for the repo (e.g. first-ever commit)
+#### Scenario: No concepts in cache for the repo and branch
+- **WHEN** the cache contains no concepts for `repo = "/path/X"` and `branch = "feature-X"` (e.g. first-ever commit on the branch)
 - **THEN** `Synthesize` returns `nil, nil` without making an AI call
+
+#### Scenario: Empty repo or branch refuses to synthesize
+- **WHEN** `Synthesize` is called with `repo = ""` or `branch = ""` (e.g. detached HEAD scenario upstream)
+- **THEN** `Synthesize` returns `nil, nil` without calling `store.Recent` or the AI provider; the pipeline skips silently
 
 ---
 
@@ -40,18 +46,18 @@ If the AI call fails or the response cannot be parsed as a `Question`, `Synthesi
 
 #### Scenario: CorrectIndex persisted at enqueue
 - **WHEN** `Synthesize` returns a `*Question` with `CorrectIndex = 2`
-- **THEN** `runPipeline` calls `SaveQuestion(ctx, q.Question, q.Choices, q.CorrectIndex)` and the row has `correct_index = 2`
+- **THEN** `runPipeline` calls `SaveQuestion(ctx, repo, branch, q.Question, q.Choices, q.CorrectIndex)` and the row has `correct_index = 2`
 
 ---
 
 ### Requirement: GenerateFeedback produces a post-answer explanation
-`(*Engine).GenerateFeedback(ctx, question string, choices []string, correctIndex, answerIndex int, model string) (string, error)` SHALL call `FeedbackRequest(...)` to build the prompt, then call `e.provider.Complete(ctx, req)`. It SHALL return the raw response string (plain prose, not JSON).
+`(*Engine).GenerateFeedback(ctx, question string, choices []string, correctIndex, answerIndex int, model string) (string, error)` SHALL call `FeedbackRequest(...)` to build the prompt, then call `e.provider.Complete(ctx, req)`. It SHALL return the raw response string (plain prose, not JSON). No `repo` or `branch` parameter is needed because feedback generation is unrelated to cache retrieval — the question content is already in memory.
 
 #### Scenario: Successful feedback generation
 - **WHEN** `GenerateFeedback` is called with a question, choices, correct index, and answer index
 - **THEN** it calls `FeedbackRequest` to build the prompt, calls the provider, and returns the prose explanation
 
-#### Scenario: Feedback AI call failure — degraded, not fatal
+#### Scenario: Feedback AI call failure - degraded, not fatal
 - **WHEN** the AI provider returns an error (timeout, bad key, rate limit)
 - **THEN** `GenerateFeedback` logs `[recall] feedback AI call failed: <err>` and returns `"", nil`
 - **AND** the caller continues with empty feedback rather than failing the answer record
@@ -61,14 +67,14 @@ If the AI call fails or the response cannot be parsed as a `Question`, `Synthesi
 ### Requirement: FeedbackRequest builds the feedback prompt with choice annotations
 `FeedbackRequest(question string, choices []string, correctIndex, answerIndex int, model string) ai.CompletionRequest` SHALL build a `CompletionRequest` with a fixed system prompt and a user turn that lists all choices with annotations. The system prompt SHALL instruct: direct, plain prose, no markdown, max 3 sentences. For correct answers: briefly confirm and explain why right. For incorrect answers: name the correct answer explicitly, explain why it is right, briefly note why the chosen answer doesn't fit, do not apologize.
 
-#### Scenario: Correct answer — user turn annotations
+#### Scenario: Correct answer - user turn annotations
 - **WHEN** `FeedbackRequest` is built for a correct answer (`correctIndex == answerIndex`)
-- **THEN** the user turn lists all choices with `← correct, chosen` annotating the correct choice
+- **THEN** the user turn lists all choices with ` correct, chosen` annotating the correct choice
 - **AND** ends with `"The developer answered correctly."`
 
-#### Scenario: Incorrect answer — user turn annotations
+#### Scenario: Incorrect answer - user turn annotations
 - **WHEN** `FeedbackRequest` is built for an incorrect answer
-- **THEN** the user turn annotates the correct choice with `← correct` and the chosen choice with `← chosen (incorrect)`
+- **THEN** the user turn annotates the correct choice with ` correct` and the chosen choice with ` chosen (incorrect)`
 - **AND** ends with `"The developer chose option N and was incorrect."`
 
 ---
@@ -79,3 +85,4 @@ If the AI call fails or the response cannot be parsed as a `Question`, `Synthesi
 #### Scenario: Token budget on feedback request
 - **WHEN** `FeedbackRequest` is built
 - **THEN** `MaxTokens` is 150 and `JSON` is false
+

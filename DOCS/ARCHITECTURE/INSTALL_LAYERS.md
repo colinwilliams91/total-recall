@@ -38,9 +38,9 @@ The cross-layer couplings that exist — each is instructive:
 | Coupling | Direction | Mechanism | Implication |
 |---|---|---|---|
 | Binary → hooks (content) | At `tr repo` time only | Hook script bodies are embedded `const` strings in `internal/hooks/scripts.go`, compiled into the binary, written verbatim to `.git/hooks/` by `tr repo` | Rebuilding the binary does NOT update already-installed hooks. You must re-run `tr repo`. |
-| Binary → post-commit hook (path) | At `tr repo` time only | `postCommitHookScript` in `main.go` is a static template that relies on `tr` being on PATH | If `tr` is not on PATH, the post-commit hook will fail. Re-run `tr repo` to refresh. |
+| Binary → post-commit hook (path) | At `tr repo` time only | `postCommitHookScriptTmpl` in `main.go` has two `%s` placeholders filled by `buildPostCommitHookScript(os.Executable())` at `tr repo` time — one for the PowerShell branch (native backslash path), one for the sh fallback (forward-slash path for MSYS sh) | Moving/rebuilding the binary to a new path leaves the installed hook pointing at the old path. Re-run `tr repo` to refresh the baked path. |
 | Hooks → daemon (URL) | At hook-fire time | `curl http://localhost:7331/hooks/...` — URL is a string in the hook script | Daemon must be running for dispatch to succeed. No daemon → advisory printed (the #14 surface). |
-| post-commit hook → binary (ask) | At hook-fire time | Shells out to `tr ask` via PATH (no baked path) | The only hook that invokes the binary at fire time. Depends on `tr` being on PATH. A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
+| post-commit hook → binary (ask) | At hook-fire time | `exec "<baked-path>" ask` — runs the absolute path captured at `tr repo` time via `os.Executable()` | The only hook that invokes the binary at fire time. The baked path avoids PATH-collision with the Unix `tr` translate utility (Git for Windows hooks run via MSYS sh with a restricted PATH that includes `/usr/bin/tr` but not the user's Windows PATH additions). A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
 
 ---
 
@@ -103,7 +103,8 @@ For a user without Go: download the release archive from GitHub Releases, extrac
 Tests vary four factors independently: **binary** (which compiled version), **user config** (exists / pristine), **repo** (fresh / existing / worktree), **daemon** (running / not).
 
 ```powershell
-# 1. Build the binary variant under test (location is irrelevant to behavior)
+# 1. Install the binary variant under test (lands in $GOBIN so os.Executable()
+#    resolves to the canonical install location, mirroring real user installs)
 cd D:\repos\open-source\total-recall-05-opsx
 .\scripts\rebuild.ps1
 
@@ -114,8 +115,8 @@ git init -q
 git config user.email t@t
 git config user.name t
 
-# 3. Install hooks using the binary under test
-& "D:\repos\open-source\total-recall-05-opsx\tr.exe" repo
+# 3. Install hooks using the binary under test (resolve from $GOBIN)
+tr repo
 
 # 4. (Optional) simulate brand-new user with isolated HOME
 #    t.Setenv equivalent for manual testing
@@ -127,7 +128,7 @@ git commit -m "test daemon-down"
 # Expected: ONE pre-commit advisory + "Press any key" + ONE ask advisory (different wording)
 
 #    b) daemon UP (separate terminal)
-cd D:\repos\open-source\total-recall-05-opsx; .\tr.exe serve
+tr serve
 # back in scratch:
 "y" | Out-File b.txt; git add b.txt
 git commit -m "test daemon-up"
@@ -146,6 +147,6 @@ git commit -m "test daemon-up"
 These are real follow-ups, not novel discoveries — each is a consequence of the layer model. The phase letter refers to the OpenSpec handoff plan; see your `/opsx-explore` proposal.
 
 - **Worktree install** (resolved): `tr repo` from a linked worktree now works correctly — it resolves the hooks dir via `git rev-parse --git-path hooks`, which points to the common gitdir shared across all linked worktrees.
-- **Stale post-commit after binary move** (resolved): post-commit hook now relies on `tr` being on PATH rather than capturing the binary path at install time. No more stale-path issue.
+- **Post-commit PATH collision with Unix `tr`** (resolved): Git for Windows runs hooks via MSYS sh with a restricted PATH that includes `/usr/bin/tr` (the Unix translate utility) but not the user's Windows PATH additions. The previous `exec tr ask` form silently invoked the wrong binary. Fixed by baking `os.Executable()`'s absolute path into the hook at `tr repo` time (`buildPostCommitHookScript` in `main.go`). Trade-off: moving/rebuilding the binary to a new path now requires re-running `tr repo` to refresh the baked path (see leak-point table above). This is the same stale-path trade-off documented in the original pre-Y4 design; it was deemed preferable to the silent collision because its failure mode is loud (`No such file or directory` pointing at the dead path) rather than silent (unrelated `/usr/bin/tr` error), and it only triggers on binary relocation rather than on every commit.
 - **Binary version drift across repos** (architectural): hooks are static; if a user has 10 repos with `tr repo`'d hooks and upgrades the binary, only repos where they re-run `tr repo` get new hook bodies. No version handshake exists.
 - **`tr init` and `tr repo` are separate commands** (resolved): user-config (`tr init`) and repo-config (`tr repo`) are now physically and logically separate. Re-running either command only re-prompts its own concerns.

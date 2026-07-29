@@ -1,7 +1,24 @@
-## Requirements
+## Purpose
 
-### Requirement: tr init presents a named provider picker before the hooks section
-`runInit()` SHALL include an AI provider selection step that runs before the existing hook selection prompts. The picker SHALL present named options with friendly descriptions — users never see internal details like base URLs or adapter package names.
+Configure user-level AI provider settings (provider, model, API key, base URL) in `~/.tr/config.yaml` via an interactive `tr init` TUI that writes config using the template writer with inline comments — without touching git or hooks (those concerns moved to `tr repo` in Phase Y3).
+## Requirements
+### Requirement: tr init performs PATH detection before any prompts
+`runInit()` SHALL, as its first action before any user-facing prompts are shown, perform PATH detection per the `path-detection-warning` capability specification. Specifically: invoke the `checkTrOnPath()` helper (defined in the same package or a small `cmd/tr/pathdetect.go` file). On Unix, the helper uses `exec.LookPath("tr")` (stdlib, no shell dependency). On Windows, the helper invokes `Get-Command tr` via `exec.Command("powershell.exe", "-NoProfile", "-Command", "(Get-Command tr -ErrorAction SilentlyContinue).Name")`. If `tr` is found, return silently. If not, print a shell-specific warning to stderr per the `path-detection-warning` spec.
+
+After the detection call, `tr init` SHALL proceed with the existing conversation-analysis opt-in prompt and AI provider form, regardless of detection result. The detection warning is informational only and does not change the rest of the `tr init` flow.
+
+#### Scenario: tr on PATH — silent
+- **WHEN** `tr init` is run and `exec.LookPath("tr")` returns no error (Unix) or `Get-Command tr` finds the binary (Windows)
+- **THEN** no PATH-related output is printed; `tr init` proceeds with the conversation-analysis opt-in prompt
+
+#### Scenario: tr not on PATH — warning printed
+- **WHEN** `tr init` is run and `exec.LookPath("tr")` returns a "not in PATH" error (Unix) or `Get-Command tr` returns empty (Windows)
+- **THEN** a shell-specific one-line warning is printed to stderr (see `path-detection-warning` spec for exact format); `tr init` then proceeds with the conversation-analysis opt-in prompt
+
+---
+
+### Requirement: tr init presents a named provider picker
+`runInit()` SHALL include an AI provider selection step that runs AFTER the PATH-detection check. The picker SHALL present named options with friendly descriptions — users never see internal details like base URLs or adapter package names. `tr init` does NOT include any hook-selection step (the hooks section moved to `tr repo` in Phase Y3).
 
 #### Scenario: User selects Anthropic
 - **WHEN** the user picks `Anthropic (Claude)` in the provider picker
@@ -15,10 +32,8 @@
 - **WHEN** the user picks `Custom (advanced)`
 - **THEN** the TUI shows three inputs: base URL (with example `http://localhost:8080/v1`), model name, and optional API key
 
----
-
 ### Requirement: tr init pre-populates from existing config
-If `~/.tr/config.yaml` already contains an `ai` block, all provider prompts SHALL be pre-populated with the existing values. The user can confirm or change each value.
+If `~/.tr/config.yaml` already contains an `ai` block, all provider prompts SHALL be pre-populated with the existing values. The user can confirm or change each value. `tr init` does NOT load or modify any `.tr.yaml` repo-config; re-running `tr init` only re-prompts user-level questions.
 
 #### Scenario: Re-running tr init with existing config
 - **WHEN** `~/.tr/config.yaml` has `provider: anthropic`, `model: claude-sonnet-4-5`, `api-key: env:ANTHROPIC_API_KEY`
@@ -41,3 +56,17 @@ For cloud providers that require an API key, the TUI prompt description SHALL ex
 #### Scenario: API key prompt description
 - **WHEN** the user is at the API key input for any cloud provider
 - **THEN** the prompt includes copy similar to: `"Use env:VAR_NAME so your key is never stored in plaintext. Example: env:ANTHROPIC_API_KEY. Set this variable in your ~/.zshrc or ~/.bashrc."`
+
+---
+
+### Requirement: tr init does not touch git or hooks
+`runInit()` SHALL NOT call `hooks.FindRepoRoot`, `hooks.ResolveHooksDir`, or any hooks-installer method. It SHALL NOT mention git or hooks in any prompt or printed message. After writing `~/.tr/config.yaml`, it SHALL print exactly `Next: cd into your project and run tr repo.` (or equivalent wording clearly guiding the user to `tr repo` as the next step) and return.
+
+#### Scenario: tr init run from outside a git repo
+- **WHEN** `tr init` is run from a directory that is not inside any git repository
+- **THEN** `tr init` writes `~/.tr/config.yaml`, prints the next-step guidance (`Next: cd into your project and run tr repo.`), and exits 0; no warning about "not in a git repo" is printed
+
+#### Scenario: tr init run from inside a git repo
+- **WHEN** `tr init` is run from inside a git repository
+- **THEN** `tr init` behaves identically to running from outside a git repo — it writes only `~/.tr/config.yaml`, prints the next-step guidance, and exits 0; no `.tr.yaml` is written, no hooks are installed
+

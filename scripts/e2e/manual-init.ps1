@@ -15,7 +15,7 @@ param(
 #
 # Usage:
 #   .\scripts\e2e\manual-init.ps1
-#   .\scripts\e2e\manual-init.ps1 -BinaryPath .\tr.exe
+#   .\scripts\e2e\manual-init.ps1 -BinaryPath .\bin\tr.exe
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
 Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir

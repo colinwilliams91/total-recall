@@ -25,12 +25,13 @@ function Initialize-E2E {
 
     if ($BinaryPath -and (Test-Path $BinaryPath)) {
         $script:TrBin = (Resolve-Path $BinaryPath).Path
-    } elseif (Test-Path "./tr.exe") {
-        $script:TrBin = (Resolve-Path "./tr.exe").Path
     } elseif (Test-Path "./bin/tr.exe") {
         $script:TrBin = (Resolve-Path "./bin/tr.exe").Path
+    } elseif ($found = (Get-Command tr.exe -ErrorAction SilentlyContinue).Source) {
+        $script:TrBin = $found
     } else {
-        Write-Host "[ERROR] Cannot find tr.exe. Build first with: .\scripts\rebuild.ps1" -ForegroundColor Red
+        Write-Host "[ERROR] Cannot find tr.exe. Build with: make build" -ForegroundColor Red
+        Write-Host "        Or install to `$GOBIN with: .\scripts\rebuild.ps1" -ForegroundColor DarkRed
         exit 1
     }
 

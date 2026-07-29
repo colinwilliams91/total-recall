@@ -45,7 +45,12 @@ func resolveAskBranch() (string, error) {
 }
 
 const (
-	defaultTimeout = 15 * time.Second
+	// defaultTimeout is how long tr ask polls for a question before showing
+	// the "caught up" message and exiting. Must be >= the pipeline context
+	// timeout in internal/engine/server.go so the poller doesn't give up
+	// before the pipeline produces a question. See the timeout relationship
+	// documented on ai.DefaultHTTPTimeout.
+	defaultTimeout = 60 * time.Second
 	animTick       = 400 * time.Millisecond
 	caughtUpWindow = 4 * time.Second
 )
@@ -94,7 +99,7 @@ func askCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&timeout, "timeout", 15, "Seconds to wait for a question before exiting")
+	cmd.Flags().IntVar(&timeout, "timeout", 60, "Seconds to wait for a question before exiting")
 	return cmd
 }
 
