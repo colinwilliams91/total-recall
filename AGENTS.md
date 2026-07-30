@@ -5,7 +5,7 @@
 | Task | Command |
 |------|---------|
 | Build | `make build` → `bin/tr(.exe)` |
-| Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `tr.exe` in root, also runs `go vet` |
+| Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `go install ./cmd/tr` to `$GOBIN`, also runs `go vet` |
 | Test | `go test ./...` |
 | Single test | `go test -run TestName ./path/to/pkg/...` |
 | Lint | `golangci-lint run` (must be installed separately) |

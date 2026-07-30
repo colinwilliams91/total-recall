@@ -1388,7 +1388,7 @@ func TestRepoInstallsIntoCommonGitdirInWorktree(t *testing.T) {
 	}
 
 	postCommitPath := filepath.Join(hooksDir, "post-commit")
-	if err := os.WriteFile(postCommitPath, []byte(postCommitHookScript), 0o755); err != nil {
+	if err := os.WriteFile(postCommitPath, []byte(buildPostCommitHookScript("/usr/local/bin/tr")), 0o755); err != nil {
 		t.Fatalf("write post-commit: %v", err)
 	}
 	mainPostCommit := filepath.Join(mainHooksDir, "post-commit")

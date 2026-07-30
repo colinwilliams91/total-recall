@@ -3,7 +3,20 @@ package ai
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+// DefaultHTTPTimeout is the per-request timeout used by all AI adapter HTTP
+// clients. Both the OpenAI and Anthropic adapters reference this constant so
+// there is a single source of truth for the AI call deadline.
+//
+// Timeout relationship across the system (must hold to avoid premature
+// cancellation)
+//
+// If you change this value, verify the pipeline context in
+// internal/engine/server.go and the tr ask default in cmd/tr/ask.go still
+// satisfy the relationship.
+const DefaultHTTPTimeout = 60 * time.Second
 
 // ErrNoProvider is returned by the provider factory when unconfigured or unknown.
 // Callers (serveCmd) should log an advisory and proceed with a nil Provider.
