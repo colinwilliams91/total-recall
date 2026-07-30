@@ -76,8 +76,7 @@ type Store struct {
 }
 
 // Open opens (or creates) the memory store at $TR_HOME/memory.db, or
-// ~/.tr/memory.db when TR_HOME is unset. Only memory.db is supported — the
-// legacy concepts.db migration is removed. Returns a non-nil *Store on success.
+// ~/.tr/memory.db when TR_HOME is unset. Returns a non-nil *Store on success.
 func Open() (*Store, error) {
 	dir, err := trDir()
 	if err != nil {
@@ -207,9 +206,7 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 
 // NextQuestion atomically claims and returns the oldest unclaimed question for
 // the given repo and branch. It sets delivered_at and claimed_by in a single
-// UPDATE ... RETURNING statement. Both repo and branch are required; empty
-// values return (nil, nil) without touching the store. Returns nil, nil when
-// no unclaimed question exists for the (repo, branch) pair.
+// UPDATE ... RETURNING statement. Both repo and branch are required.
 func (s *Store) NextQuestion(ctx context.Context, repo, branch, claimedBy string) (*StoredQuestion, error) {
 	if repo == "" || branch == "" {
 		return nil, nil
@@ -259,7 +256,6 @@ func (s *Store) AnswerQuestion(ctx context.Context, id int64, answerIndex int, a
 
 // GetQuestion fetches a single question by ID for answer evaluation.
 // ID-keyed (globally unique) — no repo parameter needed.
-// Returns (nil, nil) when the row does not exist.
 func (s *Store) GetQuestion(ctx context.Context, id int64) (*StoredQuestion, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, question, choices, correct_index, queued_at FROM questions WHERE id = ?`, id)
