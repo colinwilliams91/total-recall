@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/hooks"
 )
 
@@ -279,7 +280,11 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/path/to/repo", "main", "post-answer q", []string{"correct-a", "wrong-b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/path/to/repo", "main", "post-answer q",
+		[]cache.Choice{
+			{Text: "correct-a", IsCorrect: true, Position: 0},
+			{Text: "wrong-b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -314,7 +319,11 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 	t.Cleanup(func() { daemonBaseURL = origURL })
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/path/to/repo", "main", "post-skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/path/to/repo", "main", "post-skip q",
+		[]cache.Choice{
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

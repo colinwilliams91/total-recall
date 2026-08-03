@@ -118,9 +118,10 @@ const (
 
 type tickMsg struct{}
 type questionMsg struct {
-	id       int64
-	question string
-	choices  []string
+	id            int64
+	questionType  string
+	question      string
+	choices       []string
 }
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
@@ -186,14 +187,15 @@ func (m askModel) pollCmd() tea.Cmd {
 			return noQuestionMsg{}
 		}
 		var body struct {
-			ID       int64    `json:"id"`
-			Question string   `json:"question"`
-			Choices  []string `json:"choices"`
+			ID           int64    `json:"id"`
+			QuestionType string   `json:"question_type"`
+			Question     string   `json:"question"`
+			Choices      []string `json:"choices"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			return noQuestionMsg{}
 		}
-		return questionMsg{id: body.ID, question: body.Question, choices: body.Choices}
+		return questionMsg{id: body.ID, questionType: body.QuestionType, question: body.Question, choices: body.Choices}
 	}
 }
 
@@ -301,20 +303,20 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func postAnswer(id int64, answerIndex int, repo, branch string, client *http.Client) tea.Cmd {
+func postAnswer(id int64, selectedIndex int, repo, branch string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
-		body, _ := json.Marshal(map[string]any{"id": id, "answer_index": answerIndex})
-		u := daemonBaseURL + "/recall/answer?feedback=true&repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
+		body, _ := json.Marshal(map[string]any{"id": id, "selected_index": selectedIndex})
+		u := daemonBaseURL + "/recall/select?feedback=true&repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
 		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return feedbackMsg{}
 		}
 		defer resp.Body.Close()
 		var out struct {
-			OK          bool   `json:"ok"`
-			Correct     bool   `json:"correct"`
-			CorrectText string `json:"correct_text"`
-			Feedback    string `json:"feedback"`
+			OK           bool   `json:"ok"`
+			Correct      bool   `json:"correct"`
+			CorrectText  string `json:"correct_answer"`
+			Feedback     string `json:"feedback"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return feedbackMsg{}
@@ -330,7 +332,7 @@ func postAnswer(id int64, answerIndex int, repo, branch string, client *http.Cli
 func postSkip(id int64, repo, branch string, client *http.Client) tea.Cmd {
 	return func() tea.Msg {
 		body, _ := json.Marshal(map[string]any{"id": id, "skip": true})
-		u := daemonBaseURL + "/recall/answer?repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
+		u := daemonBaseURL + "/recall/select?repo=" + url.QueryEscape(repo) + "&branch=" + url.QueryEscape(branch)
 		resp, err := client.Post(u, "application/json", bytes.NewReader(body))
 		if err != nil {
 			return skipMsg{}

@@ -21,7 +21,12 @@ func TestDispatchLogsQueueEventWithoutQuestionBody(t *testing.T) {
 	adapter := New()
 	err := adapter.Dispatch(recall.Question{
 		Question: "What does @@ -a,b +c,d @@ mean?",
-		Choices:  []string{"a", "b", "c", "d"},
+		Choices: []recall.Choice{
+			{Text: "a"},
+			{Text: "b"},
+			{Text: "c"},
+			{Text: "d"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("dispatch failed: %v", err)
