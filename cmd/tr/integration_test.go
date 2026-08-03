@@ -969,7 +969,7 @@ func TestRecallAnswerUnknownID(t *testing.T) {
 
 // ── 4C MCP integration tests ─────────────────────────────────────────────────
 
-func TestMCPRecallNextReturnsCorrectIndex(t *testing.T) {
+func TestMCPRecallNextWithholdsCorrectIndex(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 

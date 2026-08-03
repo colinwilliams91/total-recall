@@ -553,6 +553,53 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	}
 }
 
+func TestSetFeedback(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback column question",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		t.Fatalf("SaveQuestion failed: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion failed: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("expected non-nil question")
+	}
+
+	// Set feedback — column should be populated.
+	if err := s.SetFeedback(ctx, claimed.ID, "the answer is A"); err != nil {
+		t.Fatalf("SetFeedback (set): %v", err)
+	}
+	db := openRawDB(t)
+	var fb sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT feedback FROM questions WHERE id = ?`, claimed.ID).Scan(&fb); err != nil {
+		t.Fatalf("raw query feedback: %v", err)
+	}
+	if !fb.Valid {
+		t.Fatal("expected feedback column non-NULL after SetFeedback")
+	}
+	if fb.String != "the answer is A" {
+		t.Fatalf("expected feedback %q, got %q", "the answer is A", fb.String)
+	}
+
+	// Clear feedback by setting empty — column should be NULL.
+	if err := s.SetFeedback(ctx, claimed.ID, ""); err != nil {
+		t.Fatalf("SetFeedback (clear): %v", err)
+	}
+	var fb2 sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT feedback FROM questions WHERE id = ?`, claimed.ID).Scan(&fb2); err != nil {
+		t.Fatalf("raw query feedback after clear: %v", err)
+	}
+	if fb2.Valid {
+		t.Fatalf("expected feedback column NULL after empty SetFeedback, got %q", fb2.String)
+	}
+}
+
 func TestSkipQuestionWritesEventAndStatus(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()

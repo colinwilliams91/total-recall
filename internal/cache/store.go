@@ -161,6 +161,11 @@ func Open() (*Store, error) {
 	// with an HTTP handler read, the second connection gets SQLITE_BUSY. Limiting
 	// to a single connection serializes all access through one handle, which is
 	// the recommended pattern for SQLite in Go.
+	//
+	// This also enforces exactly-once delivery in NextQuestion, whose
+	// SELECT-then-UPDATE pattern depends on a single-connection pool. Do not
+	// raise this value without first collapsing NextQuestion back to a single
+	// atomic UPDATE…RETURNING statement.
 	db.SetMaxOpenConns(1)
 
 	bg := context.Background()
@@ -193,7 +198,7 @@ func Open() (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("creating idx_choices_qid: %w", err)
 	}
-	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_qe_qid_time ON question_events(question_id, occurred_at DESC)`); err != nil {
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_qe_qid_time ON question_events(question_id, occurred_at DESC) WHERE event_type = 'queued'`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating idx_qe_qid_time: %w", err)
 	}
@@ -341,6 +346,12 @@ func (s *Store) NextQuestion(ctx context.Context, repo, branch, claimedBy string
 
 	// Pick the oldest queued question for this (repo, branch) pair, ordered by
 	// the 'queued' event's occurred_at (source of truth for queue order).
+	//
+	// Exactly-once delivery relies on db.SetMaxOpenConns(1) (see Open()): the
+	// SELECT-then-UPDATE pattern here is NOT a single atomic statement, so
+	// raising the pool size would let two concurrent transactions SELECT the
+	// same queued row and both claim it. Do not tune the pool size up without
+	// first collapsing this back to a single atomic UPDATE…RETURNING.
 	row := tx.QueryRowContext(ctx, `
 SELECT q.id
 FROM questions q
@@ -871,13 +882,17 @@ WHERE question_id = ? ORDER BY id ASC`, qs[i].ID)
 }
 
 // deriveCorrectIndex returns the position of the choice with IsCorrect=true,
-// or 0 if none. For free-text questions (zero choices) this returns 0; the
-// caller should branch on QuestionType before consulting this field.
+// or -1 if no choice has IsCorrect set. The -1 sentinel is intentional:
+// returning 0 for free-text or any "no correct row" case would silently
+// identify choices[0] as the correct answer at every caller that reads
+// CorrectIndex without branching on QuestionType. Callers MUST check
+// CorrectIndex >= 0 (or branch on QuestionType) before treating it as a
+// valid index into Choices.
 func deriveCorrectIndex(choices []Choice) int {
 	for _, c := range choices {
 		if c.IsCorrect {
 			return c.Position
 		}
 	}
-	return 0
+	return -1
 }

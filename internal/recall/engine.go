@@ -90,28 +90,28 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 	}
 
 	q := &Question{Question: rawQ.Question}
-	if len(rawQ.Choices) >= 2 {
-		q.Choices = make([]Choice, len(rawQ.Choices))
-		for i, text := range rawQ.Choices {
-			q.Choices[i] = Choice{Text: text, IsCorrect: i == 0}
-		}
-		// Shuffle mutates the slice order; the IsCorrect boolean stays attached
-		// to its row, so we don't need to track "where did index 0 land."
-		rand.Shuffle(len(q.Choices), func(i, j int) {
-			q.Choices[i], q.Choices[j] = q.Choices[j], q.Choices[i]
-		})
-		// Derive CorrectIndex for the wire / caller convenience.
-		for i, c := range q.Choices {
-			if c.IsCorrect {
-				q.CorrectIndex = i
-				break
-			}
-		}
-	} else {
-		// 0 or 1 choice: no shuffle, no correct-index tracking (defensive).
-		q.Choices = make([]Choice, len(rawQ.Choices))
-		for i, text := range rawQ.Choices {
-			q.Choices[i] = Choice{Text: text, IsCorrect: i == 0}
+	if len(rawQ.Choices) < 2 {
+		// The AI contract requires at least 2 choices for a multiple-choice
+		// question (see recall-engine spec). Anything less is malformed
+		// synthesis output — log and skip rather than persist a question
+		// with an unusable choices slice.
+		log.Printf("[recall] synthesis returned %d choices (need >=2), skipping", len(rawQ.Choices))
+		return nil, nil
+	}
+	q.Choices = make([]Choice, len(rawQ.Choices))
+	for i, text := range rawQ.Choices {
+		q.Choices[i] = Choice{Text: text, IsCorrect: i == 0}
+	}
+	// Shuffle mutates the slice order; the IsCorrect boolean stays attached
+	// to its row, so we don't need to track "where did index 0 land."
+	rand.Shuffle(len(q.Choices), func(i, j int) {
+		q.Choices[i], q.Choices[j] = q.Choices[j], q.Choices[i]
+	})
+	// Derive CorrectIndex for the wire / caller convenience.
+	for i, c := range q.Choices {
+		if c.IsCorrect {
+			q.CorrectIndex = i
+			break
 		}
 	}
 
