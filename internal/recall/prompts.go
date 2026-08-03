@@ -48,26 +48,28 @@ func SynthesisRequest(concepts []string, difficulty, model string) ai.Completion
 // FeedbackRequest builds the CompletionRequest used to generate post-answer feedback.
 // The user turn lists every choice with `← correct, chosen` / `← correct` /
 // `← chosen (incorrect)` annotations so the AI has full distractor context.
-func FeedbackRequest(question string, choices []string, correctIndex, answerIndex int, model string) ai.CompletionRequest {
+// selectedIndex is the user's pick (0-based into the post-shuffle choices
+// slice); correctIndex is the post-shuffle position of the IsCorrect=true row.
+func FeedbackRequest(question string, choices []Choice, selectedIndex, correctIndex int, model string) ai.CompletionRequest {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Question: %s\n\n", question)
 	b.WriteString("Choices:\n")
 	for i, c := range choices {
 		annotation := ""
 		switch {
-		case i == correctIndex && i == answerIndex:
+		case i == correctIndex && i == selectedIndex:
 			annotation = "  <- correct, chosen"
 		case i == correctIndex:
 			annotation = "  <- correct"
-		case i == answerIndex:
+		case i == selectedIndex:
 			annotation = "  <- chosen (incorrect)"
 		}
-		fmt.Fprintf(&b, "  [%d] %s%s\n", i+1, c, annotation)
+		fmt.Fprintf(&b, "  [%d] %s%s\n", i+1, c.Text, annotation)
 	}
-	if correctIndex == answerIndex {
+	if correctIndex == selectedIndex {
 		b.WriteString("\nThe developer answered correctly.\n")
 	} else {
-		fmt.Fprintf(&b, "\nThe developer chose option %d and was incorrect.\n", answerIndex+1)
+		fmt.Fprintf(&b, "\nThe developer chose option %d and was incorrect.\n", selectedIndex+1)
 	}
 	return ai.CompletionRequest{
 		Model:     model,

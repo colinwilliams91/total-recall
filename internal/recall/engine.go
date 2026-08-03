@@ -12,11 +12,23 @@ import (
 
 const defaultDifficulty = "intermediate"
 
+// Choice is one option of a multiple-choice recall question. IsCorrect is the
+// engine's correctness key for this choice (per the AI contract, exactly one
+// Choice per Question has IsCorrect=true after construction). The IsCorrect
+// boolean travels with its row through shuffles — the prior `correctIdx == i`
+// index-tracking arithmetic is gone.
+type Choice struct {
+	Text      string `json:"text"`
+	IsCorrect bool   `json:"is_correct,omitempty"`
+}
+
 // Question is a synthesized recall question with multiple-choice answers.
-// Choices are shuffled before delivery; CorrectIndex indicates which element is correct.
+// Choices are shuffled before delivery; CorrectIndex is derived from the
+// post-shuffle position of the IsCorrect=true Choice (presentation aid only —
+// the source of truth is the IsCorrect boolean on each row).
 type Question struct {
 	Question     string   `json:"question"`
-	Choices      []string `json:"choices"`
+	Choices      []Choice `json:"choices"`
 	CorrectIndex int      `json:"correct_index"`
 }
 
@@ -65,29 +77,45 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 		return nil, nil
 	}
 
-	var q Question
-	if err := json.Unmarshal([]byte(raw), &q); err != nil {
+	// AI contract returns {"question": "...", "choices": ["...","..."]} with
+	// choices[0] = correct answer. Wrap into typed []Choice with IsCorrect
+	// traveling on the row, then shuffle.
+	var rawQ struct {
+		Question string   `json:"question"`
+		Choices  []string `json:"choices"`
+	}
+	if err := json.Unmarshal([]byte(raw), &rawQ); err != nil {
 		log.Printf("[recall] synthesis parse failed (response: %.200s): %v", raw, err)
-		log.Printf("error type: %T", err)
 		return nil, nil
 	}
 
-	// Shuffle choices so the correct answer (index 0 per AI contract) lands at a
-	// random position, and record that position in CorrectIndex.
-	if len(q.Choices) >= 2 {
-		correctIdx := 0
+	q := &Question{Question: rawQ.Question}
+	if len(rawQ.Choices) >= 2 {
+		q.Choices = make([]Choice, len(rawQ.Choices))
+		for i, text := range rawQ.Choices {
+			q.Choices[i] = Choice{Text: text, IsCorrect: i == 0}
+		}
+		// Shuffle mutates the slice order; the IsCorrect boolean stays attached
+		// to its row, so we don't need to track "where did index 0 land."
 		rand.Shuffle(len(q.Choices), func(i, j int) {
-			if correctIdx == i {
-				correctIdx = j
-			} else if correctIdx == j {
-				correctIdx = i
-			}
 			q.Choices[i], q.Choices[j] = q.Choices[j], q.Choices[i]
 		})
-		q.CorrectIndex = correctIdx
+		// Derive CorrectIndex for the wire / caller convenience.
+		for i, c := range q.Choices {
+			if c.IsCorrect {
+				q.CorrectIndex = i
+				break
+			}
+		}
+	} else {
+		// 0 or 1 choice: no shuffle, no correct-index tracking (defensive).
+		q.Choices = make([]Choice, len(rawQ.Choices))
+		for i, text := range rawQ.Choices {
+			q.Choices[i] = Choice{Text: text, IsCorrect: i == 0}
+		}
 	}
 
-	return &q, nil
+	return q, nil
 }
 
 // GenerateFeedback calls the configured AI provider to produce a short prose
@@ -98,8 +126,8 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 // caller is expected to continue with empty feedback rather than fail the
 // answer record — feedback failure must never block the answer from being
 // stored.
-func (e *Engine) GenerateFeedback(ctx context.Context, question string, choices []string, correctIndex, answerIndex int, model string) string {
-	req := FeedbackRequest(question, choices, correctIndex, answerIndex, model)
+func (e *Engine) GenerateFeedback(ctx context.Context, question string, choices []Choice, selectedIndex, correctIndex int, model string) string {
+	req := FeedbackRequest(question, choices, selectedIndex, correctIndex, model)
 	raw, err := e.provider.Complete(ctx, req)
 	if err != nil {
 		log.Printf("[recall] feedback AI call failed: %v", err)

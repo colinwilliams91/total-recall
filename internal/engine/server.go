@@ -99,7 +99,7 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("POST /hooks/commit-msg", s.handleHook)
 	s.mux.HandleFunc("POST /hooks/pre-push", s.handleHook)
 	s.mux.HandleFunc("GET /recall/next", s.handleRecallNext)
-	s.mux.HandleFunc("POST /recall/answer", s.handleRecallAnswer)
+	s.mux.HandleFunc("POST /recall/select", s.handleRecallSelect)
 	s.mux.HandleFunc("GET /recall/stale", s.handleRecallStale)
 	s.mux.Handle("/mcp/", mcpHandler(s.mcpServer))
 }
@@ -188,7 +188,14 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		return
 	}
 
-	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, q.Choices, q.CorrectIndex); err != nil {
+	// Translate recall.Question → cache.SaveQuestion signature. Position is
+	// the post-shuffle slice index (the engine has already randomized display
+	// order; the cache stores that order in choices.position).
+	cacheChoices := make([]cache.Choice, len(q.Choices))
+	for i, c := range q.Choices {
+		cacheChoices[i] = cache.Choice{Text: c.Text, IsCorrect: c.IsCorrect, Position: i}
+	}
+	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice"); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -197,11 +204,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	}
 
 	if s.dispatcher != nil {
-		if err := s.dispatcher.Dispatch(recall.Question{
-			Question:     q.Question,
-			Choices:      q.Choices,
-			CorrectIndex: q.CorrectIndex,
-		}); err != nil {
+		if err := s.dispatcher.Dispatch(*q); err != nil {
 			log.Printf("[recall] dispatch error: %v", err)
 		}
 	}
@@ -225,33 +228,70 @@ func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	// Wire contract: deliver id, question_type, question, choices. The
+	// correctness key (correct_index / correct_answer) is WITHHELD at delivery
+	// and arrives only in the submit-response — fixes the leak where a
+	// client could inspect the delivery JSON to know which choice is correct
+	// before submitting.
+	choices := make([]string, len(q.Choices))
+	for i, c := range q.Choices {
+		choices[i] = c.Text
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":       q.ID,
-		"question": q.Question,
-		"choices":  q.Choices,
+		"id":            q.ID,
+		"question_type": q.QuestionType,
+		"question":      q.Question,
+		"choices":       choices,
 	})
 }
 
-func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
+// handleRecallSelect replaces the prior handleRecallAnswer. The user-side
+// field name is `selected_index` (per the lexical rule: "answer" is banned on
+// the user side). Skip is uniform across question types. Submit-response
+// sends BOTH `correct_index` (int) and `correct_answer` (string) — the
+// correctness key, withheld at delivery, is now revealed post-submission for
+// client convenience (MCP consumers can't rely on cross-call state).
+func (s *Server) handleRecallSelect(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID          int64 `json:"id"`
-		AnswerIndex *int  `json:"answer_index"`
-		Skip        bool  `json:"skip"`
+		ID            int64 `json:"id"`
+		SelectedIndex *int  `json:"selected_index"`
+		Skip          bool  `json:"skip"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	// Reject the legacy user-side field name with an explicit 400 — keeps the
+	// lexical rule visible at the wire boundary.
+	var rawFields map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&rawFields); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
+	if _, present := rawFields["answer_index"]; present {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answer_index is no longer accepted; use selected_index"})
+		return
+	}
+	// Re-decode from the parsed map into the typed struct. Use a synthesized
+	// JSON object so unknown fields are still tolerated (e.g. future MC-N
+	// `selected_indices` would silently pass through this MC-1 endpoint and
+	// be ignored — fine for the spec's MC-1-only boundary).
+	rewrapped, err := json.Marshal(rawFields)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := json.Unmarshal(rewrapped, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
 	if body.Skip {
 		if err := s.store.SkipQuestion(r.Context(), body.ID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "skipped": true})
 		return
 	}
-	if body.AnswerIndex == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answer_index is required"})
+	if body.SelectedIndex == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "selected_index is required"})
 		return
 	}
 	q, err := s.store.GetQuestion(r.Context(), body.ID)
@@ -263,20 +303,28 @@ func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "question not found"})
 		return
 	}
-	if *body.AnswerIndex < 0 || *body.AnswerIndex >= len(q.Choices) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answer_index out of range"})
+	if *body.SelectedIndex < 0 || *body.SelectedIndex >= len(q.Choices) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "selected_index out of range"})
 		return
 	}
-	correct := *body.AnswerIndex == q.CorrectIndex
-	answerText := q.Choices[*body.AnswerIndex]
-	correctText := q.Choices[q.CorrectIndex]
+	selectedChoice := q.Choices[*body.SelectedIndex]
+	correct := selectedChoice.IsCorrect
+	correctIndex := q.CorrectIndex
+	correctText := ""
+	if correctIndex >= 0 && correctIndex < len(q.Choices) {
+		correctText = q.Choices[correctIndex].Text
+	}
 
 	feedback := ""
 	if r.URL.Query().Get("feedback") == "true" && s.recallEngine != nil {
-		feedback = s.recallEngine.GenerateFeedback(r.Context(), q.Question, q.Choices, q.CorrectIndex, *body.AnswerIndex, s.cfg.AI.Model)
+		recallChoices := make([]recall.Choice, len(q.Choices))
+		for i, c := range q.Choices {
+			recallChoices[i] = recall.Choice{Text: c.Text, IsCorrect: c.IsCorrect}
+		}
+		feedback = s.recallEngine.GenerateFeedback(r.Context(), q.Question, recallChoices, *body.SelectedIndex, correctIndex, s.cfg.AI.Model)
 	}
 
-	if err := s.store.AnswerQuestion(r.Context(), body.ID, *body.AnswerIndex, answerText, correct, feedback); err != nil {
+	if err := s.store.SubmitSelection(r.Context(), body.ID, []int64{selectedChoice.ID}, feedback); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -286,10 +334,11 @@ func (s *Server) handleRecallAnswer(w http.ResponseWriter, r *http.Request) {
 		feedbackOut = feedback
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":           true,
-		"correct":      correct,
-		"correct_text": correctText,
-		"feedback":     feedbackOut,
+		"ok":             true,
+		"correct":        correct,
+		"correct_index":  correctIndex,
+		"correct_answer": correctText,
+		"feedback":       feedbackOut,
 	})
 }
 
