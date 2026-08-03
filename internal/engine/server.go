@@ -245,9 +245,7 @@ func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRecallSelect replaces the prior handleRecallAnswer. The user-side
-// field name is `selected_index` (per the lexical rule: "answer" is banned on
-// the user side). Skip is uniform across question types. Submit-response
+// Skip is uniform across question types. Submit-response
 // sends BOTH `correct_index` (int) and `correct_answer` (string) — the
 // correctness key, withheld at delivery, is now revealed post-submission for
 // client convenience (MCP consumers can't rely on cross-call state).
@@ -271,7 +269,7 @@ func (s *Server) handleRecallSelect(w http.ResponseWriter, r *http.Request) {
 	// Re-decode from the parsed map into the typed struct. Use a synthesized
 	// JSON object so unknown fields are still tolerated (e.g. future MC-N
 	// `selected_indices` would silently pass through this MC-1 endpoint and
-	// be ignored — fine for the spec's MC-1-only boundary).
+	// be ignored).
 	rewrapped, err := json.Marshal(rawFields)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -368,7 +366,8 @@ func (s *Server) handleRecallStale(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// After Shutdown returns, Start() will return http.ErrServerClosed.
+// Shutdown gracefully shuts down the HTTP server, waiting for in-flight requests to complete
+// or the context to expire, whichever comes first.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpSrv.Shutdown(ctx)
 }
