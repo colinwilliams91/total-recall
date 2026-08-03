@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Provide a unified audit-event log backing the `questions` lifecycle. Every transition (`queued`/`delivered`/`answered`/`skipped`) is recorded as a row with `event_type`, `occurred_at`, `actor`, and an extensible `payload` JSON column. The event log is the source of truth for ordering and audit; `questions.status` is a denormalized cache updated atomically with each event insert, updated in the same transaction. Future lifecycle events (`claimed`, `graded`, `resurfaced`, etc.) are row inserts, not `ALTER TABLE`.
+
+## Requirements
 
 ### Requirement: question_events table records lifecycle transitions as rows
 `store.Open()` SHALL create a `question_events` table with columns: `id INTEGER PRIMARY KEY AUTOINCREMENT`, `question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE`, `event_type TEXT NOT NULL`, `occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`, `actor TEXT`, `payload TEXT` (nullable JSON for future extension). A covering partial index `idx_qe_qid_time ON question_events(question_id, occurred_at DESC)` SHALL be created idempotently. Every lifecycle transition on a question SHALL insert exactly one row into `question_events` in the same transaction that updates the question's `status` cache column.
@@ -17,7 +21,7 @@
 The `question_events.event_type` column SHALL carry a CHECK constraint enforcing membership in `('queued','delivered','answered','skipped')`. Future lifecycle events (e.g., `'claimed'`, `'graded'`, `'resurfaced'`) SHALL be added to the CHECK constraint when those features land — no other schema migration is needed for new event types.
 
 #### Scenario: Inserting an unknown event_type fails
-- **WHEN** an `INSERT INTO question_events (question_id, event_type, ...) VALUES (?, 'graded', ...)` is attempted before `'graded'` is added to the CHECK
+- **WHEN** an `INSERT INTO question_events (question_id, event_type, ...)` is attempted before `'graded'` is added to the CHECK
 - **THEN** the insert fails the CHECK constraint and the transaction rolls back
 
 #### Scenario: Adding a new event_type is an additive schema change
@@ -70,7 +74,7 @@ When the user submits a selection, `(*Store).SubmitSelection` SHALL, in a single
 ---
 
 ### Requirement: The 'skipped' event SHALL be inserted atomically with the status transition
-When the user skips a question, `(*Store).SkipQuestion(ctx, id)` SHALL, in a single transaction, update the `questions` row to `status = 'skipped'` AND insert a `question_events` row with `event_type = 'skipped'`. No `selections` rows are inserted for a skip. "The user selected nothing" is encoded by `status = 'skipped'`, NOT by derivation from absent `selections` rows — the status column is the source of truth for the skip, dissolving the prior `answer = 'skip'` sentinel string.
+When the user skips a question, `(*Store).SkipQuestion(ctx, id)` SHALL, in a single transaction, update the `questions` row to `status = 'skipped'` AND insert a `question_events` row with `event_type = 'skipped'`. No `selections` rows are inserted. "The user selected nothing" is encoded by `status = 'skipped'`, NOT by derivation from absent `selections` rows — the status column is the source of truth for the skip, dissolving the prior `answer = 'skip'` sentinel string.
 
 #### Scenario: Successful skip submission
 - **WHEN** `SkipQuestion(ctx, id)` is called for an existing question
