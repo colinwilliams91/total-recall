@@ -205,8 +205,8 @@ func Open() (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// Fingerprint are lightweight metadata only — no raw diff text.
 // Save persists a batch of concept fingerprints to the cache, tagged with repo.
-// Fingerprints are lightweight metadata only — no raw diff text.
 type Fingerprint struct {
 	Concept string
 	Source  string
