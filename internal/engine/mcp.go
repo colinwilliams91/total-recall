@@ -13,7 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. Pass the current repository path as "repo" (the absolute path from git rev-parse --show-toplevel) AND the current branch as "branch" (from git rev-parse --abbrev-ref HEAD) so questions are scoped to active work. When unable to determine the branch (detached HEAD), the daemon returns no question — do not retry without a branch context. If a question is returned, present it to the user and record their answer with recall_answer. After recording an answer, tell the user whether they were correct (the response includes "correct": true/false and "correct_text"). If incorrect, provide a brief, direct explanation using your own knowledge — especially why the correct answer is right and why the chosen one doesn't fit. Do NOT call a separate AI tool for the explanation; the recall_answer response gives you everything you need. If the queue is empty, continue normally.`
+const recallWorkflowInstructions = `After any git commit in this project, call recall_next to check for a pending recall question. Pass the current repository path as "repo" (the absolute path from git rev-parse --show-toplevel) AND the current branch as "branch" (from git rev-parse --abbrev-ref HEAD) so questions are scoped to active work. When unable to determine the branch (detached HEAD), the daemon returns no question — do not retry without a branch context. If a question is returned, present it to the user and record their selection with recall_select (user-side field is "selected_index", NOT the older "answer_index" name). The recall_next response does NOT include the correctness key — it is withheld until the user submits. After recall_select returns, the response includes "correct": true/false, "correct_index", and "correct_answer" (the text of the correct choice). If incorrect, provide a brief, direct explanation using your own knowledge — especially why the correct answer is right and why the chosen one doesn't fit. Do NOT call a separate AI tool for the explanation; the recall_select response gives you everything you need. If the queue is empty, continue normally.`
 
 // repoFromToolInput dereferences an optional repo pointer, returning "" when
 // absent. MCP clients that omit repo get no dequeue (the store layer requires
@@ -67,13 +67,16 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 	})
 
 	// recall_next — atomically dequeues the next pending question for repo+branch.
+	// The correctness key is WITHHELD at delivery (no `correct_index` in the
+	// response) — it arrives only in the recall_select response after the
+	// user submits a selection.
 	type recallNextIn struct {
 		Repo   *string `json:"repo,omitempty"`
 		Branch *string `json:"branch,omitempty"`
 	}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "recall_next",
-		Description: "Dequeue the next pending recall question. Pass \"repo\" (absolute repo path) and \"branch\" (current git branch) to scope to the current repository and branch; both are required — the daemon returns null if either is missing. No global pool exists.",
+		Description: "Dequeue the next pending recall question. Pass \"repo\" (absolute repo path) and \"branch\" (current git branch) to scope to the current repository and branch; both are required — the daemon returns null if either is missing. No global pool exists. The response does NOT include the correctness key; it is withheld until the user submits via recall_select.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallNextIn) (*mcp.CallToolResult, any, error) {
 		if store == nil {
 			return textResult(`{"question":null}`), nil, nil
@@ -88,63 +91,74 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 		if q == nil {
 			return textResult(`{"question":null}`), nil, nil
 		}
+		choices := make([]string, len(q.Choices))
+		for i, c := range q.Choices {
+			choices[i] = c.Text
+		}
 		b, _ := json.Marshal(map[string]any{
 			"id":            q.ID,
+			"question_type": q.QuestionType,
 			"question":      q.Question,
-			"choices":       q.Choices,
-			"correct_index": q.CorrectIndex,
+			"choices":       choices,
 		})
 		return textResult(string(b)), nil, nil
 	})
 
-	// recall_answer — records the user's answer.
-	type recallAnswerIn struct {
-		ID          int64   `json:"id"`
-		AnswerIndex *int    `json:"answer_index"`
-		Skip        bool    `json:"skip"`
-		Repo        *string `json:"repo,omitempty"`
-		Branch      *string `json:"branch,omitempty"`
+	// recall_select — records the user's selection (renamed from recall_answer).
+	// User-side field is "selected_index" (NOT "answer_index"). Response
+	// includes both `correct_index` and `correct_answer` (the text of the
+	// correct choice) for stateless MCP consumer feedback generation.
+	type recallSelectIn struct {
+		ID            int64   `json:"id"`
+		SelectedIndex *int    `json:"selected_index"`
+		Skip          bool    `json:"skip"`
+		Repo          *string `json:"repo,omitempty"`
+		Branch        *string `json:"branch,omitempty"`
 	}
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "recall_answer",
-		Description: `Record the user's answer (or "skip") for a recall question. The optional "repo" is accepted for symmetry but the operation is ID-keyed.`,
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallAnswerIn) (*mcp.CallToolResult, any, error) {
+		Name:        "recall_select",
+		Description: `Record the user's selection (or "skip") for a recall question. User-side field is "selected_index" (NOT the older "answer_index" name). The optional "repo" and "branch" are accepted for symmetry but the operation is ID-keyed.`,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in recallSelectIn) (*mcp.CallToolResult, any, error) {
 		if store == nil {
-			return textResult(`{"ok":true}`), nil, nil
+			return textResult(`{"ok":true,"skipped":false}`), nil, nil
 		}
 		if in.Skip {
 			if err := store.SkipQuestion(ctx, in.ID); err != nil {
-				log.Printf("[mcp] recall_answer skip error: %v", err)
+				log.Printf("[mcp] recall_select skip error: %v", err)
 				return nil, nil, err
 			}
-			return textResult(`{"ok":true}`), nil, nil
+			return textResult(`{"ok":true,"skipped":true}`), nil, nil
 		}
-		if in.AnswerIndex == nil {
-			return nil, nil, fmt.Errorf("answer_index is required")
+		if in.SelectedIndex == nil {
+			return nil, nil, fmt.Errorf("selected_index is required")
 		}
 		q, err := store.GetQuestion(ctx, in.ID)
 		if err != nil {
-			log.Printf("[mcp] recall_answer get error: %v", err)
+			log.Printf("[mcp] recall_select get error: %v", err)
 			return nil, nil, err
 		}
 		if q == nil {
 			return nil, nil, fmt.Errorf("question %d not found", in.ID)
 		}
-		if *in.AnswerIndex < 0 || *in.AnswerIndex >= len(q.Choices) {
-			return nil, nil, fmt.Errorf("answer_index out of range")
+		if *in.SelectedIndex < 0 || *in.SelectedIndex >= len(q.Choices) {
+			return nil, nil, fmt.Errorf("selected_index out of range")
 		}
-		correct := *in.AnswerIndex == q.CorrectIndex
-		answerText := q.Choices[*in.AnswerIndex]
-		correctText := q.Choices[q.CorrectIndex]
-		if err := store.AnswerQuestion(ctx, in.ID, *in.AnswerIndex, answerText, correct, ""); err != nil {
-			log.Printf("[mcp] recall_answer error: %v", err)
+		selectedChoice := q.Choices[*in.SelectedIndex]
+		correct := selectedChoice.IsCorrect
+		correctIndex := q.CorrectIndex
+		correctText := ""
+		if correctIndex >= 0 && correctIndex < len(q.Choices) {
+			correctText = q.Choices[correctIndex].Text
+		}
+		if err := store.SubmitSelection(ctx, in.ID, []int64{selectedChoice.ID}, ""); err != nil {
+			log.Printf("[mcp] recall_select error: %v", err)
 			return nil, nil, err
 		}
 		b, _ := json.Marshal(map[string]any{
-			"ok":            true,
-			"correct":       correct,
-			"correct_index": q.CorrectIndex,
-			"correct_text":  correctText,
+			"ok":             true,
+			"correct":        correct,
+			"correct_index":  correctIndex,
+			"correct_answer": correctText,
 		})
 		return textResult(string(b)), nil, nil
 	})
@@ -301,14 +315,28 @@ func recentResourceHandler(store *cache.Store) func(context.Context, *mcp.ReadRe
 		}
 		items := make([]map[string]any, 0, len(answered))
 		for _, q := range answered {
+			choiceTexts := make([]string, len(q.Choices))
+			for i, c := range q.Choices {
+				choiceTexts[i] = c.Text
+			}
+			selectedIndices := make([]int, 0, len(q.Selections))
+			for _, s := range q.Selections {
+				for i, c := range q.Choices {
+					if c.ID == s.ChoiceID {
+						selectedIndices = append(selectedIndices, i)
+						break
+					}
+				}
+			}
 			item := map[string]any{
-				"id":            q.ID,
-				"question":      q.Question,
-				"choices":       q.Choices,
-				"correct_index": q.CorrectIndex,
-				"answer_index":  q.AnswerIndex,
-				"correct":       q.Correct,
-				"feedback":      q.Feedback,
+				"id":              q.ID,
+				"question_type":   q.QuestionType,
+				"status":          q.Status,
+				"question":        q.Question,
+				"choices":         choiceTexts,
+				"correct_index":   q.CorrectIndex,
+				"selected_indices": selectedIndices,
+				"feedback":        q.Feedback,
 			}
 			items = append(items, item)
 		}

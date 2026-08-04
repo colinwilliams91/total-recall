@@ -23,6 +23,17 @@ func setupCache(t *testing.T) *cache.Store {
 	return s
 }
 
+// buildChoices constructs a `[]cache.Choice` from raw text + a correct index.
+// Position is assigned sequentially (0..N-1). Used by all save-then-claim
+// tests below — the legacy []string signature is gone.
+func buildChoices(texts []string, correctIdx int) []cache.Choice {
+	out := make([]cache.Choice, len(texts))
+	for i, text := range texts {
+		out[i] = cache.Choice{Text: text, IsCorrect: i == correctIdx, Position: i}
+	}
+	return out
+}
+
 func TestOpenCreatesDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -141,9 +152,6 @@ func TestRecentConceptsScopedToRepo(t *testing.T) {
 	}
 }
 
-// TestRecentConceptsScopedToBranch verifies the branch-isolation invariant
-// (analogous to TestRecentConceptsScopedToRepo). Saving under (repo, "feature-X")
-// and querying (repo, "main") must return zero rows.
 func TestRecentConceptsScopedToBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
@@ -171,9 +179,6 @@ func TestRecentConceptsScopedToBranch(t *testing.T) {
 	}
 }
 
-// TestSaveRefusesEmptyRepoOrBranch exercises the Decision 3 store guard:
-// saving concepts with an empty repo or branch is a no-op (returns nil,
-// inserts zero rows).
 func TestSaveRefusesEmptyRepoOrBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
@@ -199,13 +204,10 @@ func TestSaveRefusesEmptyRepoOrBranch(t *testing.T) {
 	}
 }
 
-// TestRecentRefusesEmptyRepoOrBranch exercises the Decision 3 store guard
-// for reads: querying with an empty repo or branch returns (nil, nil).
 func TestRecentRefusesEmptyRepoOrBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	// Seed a real row first so we can assert the empty-arg call doesn't see it.
 	if err := s.Save(ctx, "/r", "main", []cache.Fingerprint{
 		{Concept: "real", Source: "code", Weight: 1.0},
 	}); err != nil {
@@ -228,16 +230,14 @@ func TestRecentRefusesEmptyRepoOrBranch(t *testing.T) {
 	}
 }
 
-// TestSaveQuestionRefusesEmptyRepoOrBranch exercises the Decision 3 store
-// guard for SaveQuestion.
 func TestSaveQuestionRefusesEmptyRepoOrBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "", "main", "q", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "", "main", "q", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion with empty repo: expected nil error, got %v", err)
 	}
-	if err := s.SaveQuestion(ctx, "/r", "", "q", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/r", "", "q", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion with empty branch: expected nil error, got %v", err)
 	}
 	depth, err := s.QueueDepth(ctx, "/r", "main")
@@ -253,7 +253,7 @@ func TestSaveQuestionAndClaim(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "What is a goroutine?", []string{"a", "b", "c"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "What is a goroutine?", buildChoices([]string{"a", "b", "c"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -269,6 +269,9 @@ func TestSaveQuestionAndClaim(t *testing.T) {
 	}
 	if len(q.Choices) != 3 {
 		t.Fatalf("expected 3 choices, got %d", len(q.Choices))
+	}
+	if q.Status != "delivered" {
+		t.Fatalf("expected status 'delivered', got %q", q.Status)
 	}
 }
 
@@ -289,7 +292,7 @@ func TestNextQuestionIdempotent(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "single question", []string{"x", "y"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "single question", buildChoices([]string{"x", "y"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -314,7 +317,7 @@ func TestNextQuestionRepoIsolation(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/x", "main", "X's question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/x", "main", "X's question", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion for repo X failed: %v", err)
 	}
 
@@ -338,11 +341,11 @@ func TestNextQuestionRepoIsolation(t *testing.T) {
 	}
 }
 
-func TestAnswerQuestion(t *testing.T) {
+func TestSubmitSelection(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "test question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "test question", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -353,9 +356,12 @@ func TestAnswerQuestion(t *testing.T) {
 	if q == nil {
 		t.Fatal("expected non-nil question")
 	}
-
-	if err := s.AnswerQuestion(ctx, q.ID, 0, "a", true, ""); err != nil {
-		t.Fatalf("AnswerQuestion failed: %v", err)
+	if len(q.Choices) == 0 {
+		t.Fatal("expected at least one choice")
+	}
+	// Pick the first (correct) choice.
+	if err := s.SubmitSelection(ctx, q.ID, []int64{q.Choices[0].ID}, ""); err != nil {
+		t.Fatalf("SubmitSelection failed: %v", err)
 	}
 }
 
@@ -384,7 +390,7 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 		t.Fatalf("expected initial depth 0, got %d", n)
 	}
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "q1", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "q1", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	n, err = s.QueueDepth(ctx, "/repo/test", "main")
@@ -411,10 +417,10 @@ func TestQueueDepthScopedToRepo(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/x", "main", "q1", []string{"a"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/x", "main", "q1", buildChoices([]string{"a"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion for repo X failed: %v", err)
 	}
-	if err := s.SaveQuestion(ctx, "/repo/y", "main", "q2", []string{"a"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/y", "main", "q2", buildChoices([]string{"a"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion for repo Y failed: %v", err)
 	}
 
@@ -451,8 +457,8 @@ func rawDBPath(t *testing.T) string {
 }
 
 // openRawDB opens a direct database/sql handle to the test memory.db for
-// column-level assertions not exposed by the cache.Store API (e.g. the raw
-// `answer` column). The handle is closed automatically via t.Cleanup.
+// column-level assertions not exposed by the cache.Store API. The handle is
+// closed automatically via t.Cleanup.
 func openRawDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", rawDBPath(t))
@@ -463,11 +469,16 @@ func openRawDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestSaveQuestionPersistsCorrectIndex(t *testing.T) {
+// TestSaveQuestionPersistsIsCorrectOnChoice validates the new schema: the
+// engine's correctness key is now a row property on the choices table, not a
+// positional reference into a JSON array.
+func TestSaveQuestionPersistsIsCorrectOnChoice(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "correct-index question", []string{"a", "b", "c"}, 2); err != nil {
+	// correct is index 2 ("c")
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "correct-index question",
+		buildChoices([]string{"a", "b", "c"}, 2), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -479,18 +490,21 @@ func TestSaveQuestionPersistsCorrectIndex(t *testing.T) {
 		t.Fatal("expected non-nil question")
 	}
 
-	q, err := s.GetQuestion(ctx, claimed.ID)
-	if err != nil {
-		t.Fatalf("GetQuestion failed: %v", err)
+	if claimed.CorrectIndex != 2 {
+		t.Fatalf("expected derived CorrectIndex 2, got %d", claimed.CorrectIndex)
 	}
-	if q == nil {
-		t.Fatal("expected non-nil from GetQuestion")
+	if len(claimed.Choices) != 3 {
+		t.Fatalf("expected 3 choices, got %d", len(claimed.Choices))
 	}
-	if q.CorrectIndex != 2 {
-		t.Fatalf("expected CorrectIndex 2, got %d", q.CorrectIndex)
+	if claimed.Choices[0].Text != "a" || claimed.Choices[1].Text != "b" || claimed.Choices[2].Text != "c" {
+		t.Fatalf("expected choices [a b c], got %v", claimed.Choices)
 	}
-	if len(q.Choices) != 3 || q.Choices[0] != "a" || q.Choices[1] != "b" || q.Choices[2] != "c" {
-		t.Fatalf("expected choices [a b c], got %v", q.Choices)
+	// Source of truth: IsCorrect on the row, not a position.
+	if !claimed.Choices[2].IsCorrect {
+		t.Fatal("expected choice[2].IsCorrect=true (the engine's key)")
+	}
+	if claimed.Choices[0].IsCorrect || claimed.Choices[1].IsCorrect {
+		t.Fatal("expected choice[0] and choice[1].IsCorrect=false")
 	}
 }
 
@@ -498,7 +512,8 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "full row question", []string{"x", "y", "z"}, 1); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "full row question",
+		buildChoices([]string{"x", "y", "z"}, 1), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -522,14 +537,11 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	if q.Question != "full row question" {
 		t.Fatalf("expected question %q, got %q", "full row question", q.Question)
 	}
-	if len(q.Choices) != 3 || q.Choices[0] != "x" || q.Choices[1] != "y" || q.Choices[2] != "z" {
-		t.Fatalf("expected choices [x y z], got %v", q.Choices)
+	if len(q.Choices) != 3 {
+		t.Fatalf("expected 3 choices, got %d", len(q.Choices))
 	}
 	if q.CorrectIndex != 1 {
 		t.Fatalf("expected CorrectIndex 1, got %d", q.CorrectIndex)
-	}
-	if q.QueuedAt.IsZero() {
-		t.Fatal("expected non-zero QueuedAt")
 	}
 
 	missing, err := s.GetQuestion(ctx, 99999)
@@ -541,11 +553,58 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	}
 }
 
-func TestSkipQuestionLeavesNulls(t *testing.T) {
+func TestSetFeedback(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skip me", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback column question",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		t.Fatalf("SaveQuestion failed: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion failed: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("expected non-nil question")
+	}
+
+	// Set feedback — column should be populated.
+	if err := s.SetFeedback(ctx, claimed.ID, "the answer is A"); err != nil {
+		t.Fatalf("SetFeedback (set): %v", err)
+	}
+	db := openRawDB(t)
+	var fb sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT feedback FROM questions WHERE id = ?`, claimed.ID).Scan(&fb); err != nil {
+		t.Fatalf("raw query feedback: %v", err)
+	}
+	if !fb.Valid {
+		t.Fatal("expected feedback column non-NULL after SetFeedback")
+	}
+	if fb.String != "the answer is A" {
+		t.Fatalf("expected feedback %q, got %q", "the answer is A", fb.String)
+	}
+
+	// Clear feedback by setting empty — column should be NULL.
+	if err := s.SetFeedback(ctx, claimed.ID, ""); err != nil {
+		t.Fatalf("SetFeedback (clear): %v", err)
+	}
+	var fb2 sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT feedback FROM questions WHERE id = ?`, claimed.ID).Scan(&fb2); err != nil {
+		t.Fatalf("raw query feedback after clear: %v", err)
+	}
+	if fb2.Valid {
+		t.Fatalf("expected feedback column NULL after empty SetFeedback, got %q", fb2.String)
+	}
+}
+
+func TestSkipQuestionWritesEventAndStatus(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skip me", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -560,41 +619,54 @@ func TestSkipQuestionLeavesNulls(t *testing.T) {
 		t.Fatalf("SkipQuestion failed: %v", err)
 	}
 
-	// Verify answer == "skip" via a direct query (RecentAnswered doesn't expose the answer column).
+	// Verify the question's status is 'skipped' via a direct query.
 	db := openRawDB(t)
-	var answer sql.NullString
-	if err := db.QueryRowContext(ctx, `SELECT answer FROM questions WHERE id = ?`, claimed.ID).Scan(&answer); err != nil {
-		t.Fatalf("raw query answer: %v", err)
+	var status string
+	if err := db.QueryRowContext(ctx, `SELECT status FROM questions WHERE id = ?`, claimed.ID).Scan(&status); err != nil {
+		t.Fatalf("raw query status: %v", err)
 	}
-	if !answer.Valid || answer.String != "skip" {
-		t.Fatalf("expected answer %q, got %v", "skip", answer)
+	if status != "skipped" {
+		t.Fatalf("expected status %q, got %q", "skipped", status)
 	}
 
-	// Verify nullable enriched fields via RecentAnswered.
+	// Verify a 'skipped' event row exists in question_events.
+	var eventType string
+	if err := db.QueryRowContext(ctx,
+		`SELECT event_type FROM question_events WHERE question_id = ? AND event_type = 'skipped'`,
+		claimed.ID).Scan(&eventType); err != nil {
+		t.Fatalf("raw query skipped event: %v", err)
+	}
+	if eventType != "skipped" {
+		t.Fatalf("expected event_type %q, got %q", "skipped", eventType)
+	}
+
+	// RecentAnswered MUST exclude skipped.
 	recent, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
-	if len(recent) != 1 {
-		t.Fatalf("expected 1 answered row, got %d", len(recent))
+	if len(recent) != 0 {
+		t.Fatalf("expected 0 answered rows (skipped excluded), got %d", len(recent))
 	}
-	row := recent[0]
-	if row.AnswerIndex != nil {
-		t.Fatalf("expected AnswerIndex nil for skip, got %v", row.AnswerIndex)
+	// RecentSkipped MUST include it.
+	skipped, err := s.RecentSkipped(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("RecentSkipped failed: %v", err)
 	}
-	if row.Correct != nil {
-		t.Fatalf("expected Correct nil for skip, got %v", row.Correct)
+	if len(skipped) != 1 {
+		t.Fatalf("expected 1 skipped row, got %d", len(skipped))
 	}
-	if row.Feedback != nil {
-		t.Fatalf("expected Feedback nil for skip, got %v", row.Feedback)
+	if skipped[0].Status != "skipped" {
+		t.Fatalf("expected status 'skipped', got %q", skipped[0].Status)
 	}
 }
 
-func TestAnswerQuestionWithFeedback(t *testing.T) {
+func TestSubmitSelectionWithFeedback(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback question",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -605,8 +677,10 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 		t.Fatal("expected non-nil question")
 	}
 
-	if err := s.AnswerQuestion(ctx, claimed.ID, 1, "b", false, "A is correct because..."); err != nil {
-		t.Fatalf("AnswerQuestion failed: %v", err)
+	// Pick the wrong choice (index 1)
+	wrongChoice := claimed.Choices[1]
+	if err := s.SubmitSelection(ctx, claimed.ID, []int64{wrongChoice.ID}, "A is correct because..."); err != nil {
+		t.Fatalf("SubmitSelection failed: %v", err)
 	}
 
 	recent, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
@@ -617,25 +691,26 @@ func TestAnswerQuestionWithFeedback(t *testing.T) {
 		t.Fatalf("expected 1 answered row, got %d", len(recent))
 	}
 	row := recent[0]
-	if row.Correct == nil {
-		t.Fatal("expected Correct non-nil")
-	}
-	if *row.Correct != false {
-		t.Fatalf("expected Correct *false, got %v", *row.Correct)
-	}
 	if row.Feedback == nil {
 		t.Fatal("expected Feedback non-nil")
 	}
 	if *row.Feedback != "A is correct because..." {
 		t.Fatalf("expected feedback %q, got %q", "A is correct because...", *row.Feedback)
 	}
+	if len(row.Selections) != 1 || row.Selections[0].ChoiceID != wrongChoice.ID {
+		t.Fatalf("expected single selection for wrongChoice.ID %d, got %+v", wrongChoice.ID, row.Selections)
+	}
+	if row.Status != "answered" {
+		t.Fatalf("expected status 'answered', got %q", row.Status)
+	}
 }
 
-func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
+func TestSubmitSelectionEmptyFeedbackStoresNull(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "empty feedback question", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "empty feedback question",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -646,8 +721,8 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 		t.Fatal("expected non-nil question")
 	}
 
-	if err := s.AnswerQuestion(ctx, claimed.ID, 0, "a", true, ""); err != nil {
-		t.Fatalf("AnswerQuestion failed: %v", err)
+	if err := s.SubmitSelection(ctx, claimed.ID, []int64{claimed.Choices[0].ID}, ""); err != nil {
+		t.Fatalf("SubmitSelection failed: %v", err)
 	}
 
 	recent, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
@@ -663,36 +738,41 @@ func TestAnswerQuestionEmptyFeedbackStoresNull(t *testing.T) {
 	}
 }
 
-func TestRecentAnsweredEnrichedFields(t *testing.T) {
+// TestRecentAnsweredExcludesSkippedAndSkipsGetIt validates the three-way
+// split between RecentAnswered, RecentSkipped, and RecentQuestions.
+func TestRecentAnsweredExcludesSkippedAndSkipsGetIt(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	// q1: correct with feedback (terminal-style)
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "terminal-style", []string{"a", "b"}, 0); err != nil {
+	// q1: correct, with feedback
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "terminal-style",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion q1: %v", err)
 	}
 	q1, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q1: %v", err)
 	}
-	if err := s.AnswerQuestion(ctx, q1.ID, 0, "a", true, "Good job!"); err != nil {
-		t.Fatalf("AnswerQuestion q1: %v", err)
+	if err := s.SubmitSelection(ctx, q1.ID, []int64{q1.Choices[0].ID}, "Good job!"); err != nil {
+		t.Fatalf("SubmitSelection q1: %v", err)
 	}
 
-	// q2: incorrect without feedback (MCP-style)
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "mcp-style", []string{"a", "b"}, 0); err != nil {
+	// q2: incorrect, no feedback
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "mcp-style",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion q2: %v", err)
 	}
 	q2, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
 	if err != nil {
 		t.Fatalf("NextQuestion q2: %v", err)
 	}
-	if err := s.AnswerQuestion(ctx, q2.ID, 1, "b", false, ""); err != nil {
-		t.Fatalf("AnswerQuestion q2: %v", err)
+	if err := s.SubmitSelection(ctx, q2.ID, []int64{q2.Choices[1].ID}, ""); err != nil {
+		t.Fatalf("SubmitSelection q2: %v", err)
 	}
 
 	// q3: skipped
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skipped-one", []string{"a", "b"}, 0); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skipped-one",
+		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
 		t.Fatalf("SaveQuestion q3: %v", err)
 	}
 	q3, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -703,68 +783,65 @@ func TestRecentAnsweredEnrichedFields(t *testing.T) {
 		t.Fatalf("SkipQuestion q3: %v", err)
 	}
 
-	recent, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
+	answered, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
 	if err != nil {
 		t.Fatalf("RecentAnswered failed: %v", err)
 	}
-	if len(recent) != 3 {
-		t.Fatalf("expected 3 answered rows, got %d", len(recent))
+	if len(answered) != 2 {
+		t.Fatalf("expected 2 answered rows (skip excluded), got %d", len(answered))
 	}
-
-	byQuestion := make(map[string]cache.StoredQuestion, len(recent))
-	for _, r := range recent {
-		byQuestion[r.Question] = r
-	}
-
-	for _, r := range recent {
-		if r.CorrectIndex != 0 {
-			t.Fatalf("expected CorrectIndex 0 for %q, got %d", r.Question, r.CorrectIndex)
+	for _, r := range answered {
+		if r.Status != "answered" {
+			t.Fatalf("expected status 'answered', got %q for %q", r.Status, r.Question)
+		}
+		if r.Question == "skipped-one" {
+			t.Fatal("RecentAnswered must not include skipped questions")
 		}
 	}
 
-	skip := byQuestion["skipped-one"]
-	if skip.AnswerIndex != nil {
-		t.Fatalf("expected AnswerIndex nil for skip, got %v", skip.AnswerIndex)
+	skipped, err := s.RecentSkipped(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("RecentSkipped failed: %v", err)
 	}
-	if skip.Correct != nil {
-		t.Fatalf("expected Correct nil for skip, got %v", skip.Correct)
+	if len(skipped) != 1 {
+		t.Fatalf("expected 1 skipped row, got %d", len(skipped))
 	}
-	if skip.Feedback != nil {
-		t.Fatalf("expected Feedback nil for skip, got %v", skip.Feedback)
-	}
-
-	mcp := byQuestion["mcp-style"]
-	if mcp.Feedback != nil {
-		t.Fatalf("expected Feedback nil for MCP-style, got %v", *mcp.Feedback)
-	}
-	if mcp.Correct == nil || *mcp.Correct != false {
-		t.Fatalf("expected Correct *false for MCP-style, got %v", mcp.Correct)
+	if skipped[0].Status != "skipped" {
+		t.Fatalf("expected status 'skipped', got %q", skipped[0].Status)
 	}
 
-	term := byQuestion["terminal-style"]
-	if term.Feedback == nil {
-		t.Fatal("expected Feedback non-nil for terminal-style")
+	all, err := s.RecentQuestions(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("RecentQuestions failed: %v", err)
 	}
-	if *term.Feedback != "Good job!" {
-		t.Fatalf("expected feedback %q, got %q", "Good job!", *term.Feedback)
+	if len(all) != 3 {
+		t.Fatalf("expected 3 terminal rows, got %d", len(all))
 	}
-	if term.Correct == nil || !*term.Correct {
-		t.Fatalf("expected Correct *true for terminal-style, got %v", term.Correct)
+	// Verify Status field distinguishes answered from skipped.
+	statusByQuestion := map[string]string{}
+	for _, r := range all {
+		statusByQuestion[r.Question] = r.Status
+	}
+	if statusByQuestion["terminal-style"] != "answered" {
+		t.Fatal("terminal-style should be 'answered'")
+	}
+	if statusByQuestion["mcp-style"] != "answered" {
+		t.Fatal("mcp-style should be 'answered'")
+	}
+	if statusByQuestion["skipped-one"] != "skipped" {
+		t.Fatal("skipped-one should be 'skipped'")
 	}
 }
 
-// TestAddColumnIfMissingMigration is removed in Y1 (cache-tenant-isolation).
-// The in-code migration path it tested is gone — fresh schemas are created
-// with the full final layout, and existing databases must be wiped manually
-// (see task 10.5 in the change). The test's "purge un-tagged legacy row"
-// behavior is no longer a thing.
-
-// Task 10.18: Cover the covering indexes idx_concepts_repo_branch_seen and
-// idx_questions_repo_branch_q exist after cache.Open(), defending against a
-// regression that drops the CREATE INDEX calls.
+// TestRepoIndexesExist validates the indexes that cache.Open() creates. The
+// prior idx_questions_repo_branch_q was tied to the implicit `delivered_at
+// IS NULL` predicate; the new design filters on `status = 'queued'` (no
+// covering index needed — `status` is a low-cardinality column and the repo
+// + branch filter is selective enough for the in-process SQLite cost).
+// The events index is the new hot path for queue ordering.
 func TestRepoIndexesExist(t *testing.T) {
 	s := setupCache(t)
-	_ = s // store is kept open; SQLite allows concurrent connections
+	_ = s
 
 	trHome := os.Getenv("TR_HOME")
 	if trHome == "" {
@@ -778,7 +855,7 @@ func TestRepoIndexesExist(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	for _, idx := range []string{"idx_concepts_repo_branch_seen", "idx_questions_repo_branch_q"} {
+	for _, idx := range []string{"idx_concepts_repo_branch_seen", "idx_choices_qid", "idx_qe_qid_time"} {
 		var name string
 		err := db.QueryRowContext(ctx,
 			`SELECT name FROM sqlite_master WHERE type='index' AND name = ?`, idx).Scan(&name)

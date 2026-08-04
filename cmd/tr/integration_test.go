@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -224,12 +225,13 @@ func TestRecallNextWithQuestion(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "What does DRY stand for?", []string{
-		"Don't Repeat Yourself",
-		"Don't Run Yaks",
-		"Digital Repository YAML",
-		"Deferred Runtime Yielding",
-	}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "What does DRY stand for?",
+		[]cache.Choice{
+		{Text: "Don't Repeat Yourself", IsCorrect: true, Position: 0},
+		{Text: "Don't Run Yaks", IsCorrect: false, Position: 1},
+		{Text: "Digital Repository YAML", IsCorrect: false, Position: 2},
+		{Text: "Deferred Runtime Yielding", IsCorrect: false, Position: 3},
+		}, ""); err != nil {
 		t.Fatalf("seed question: %v", err)
 	}
 
@@ -262,7 +264,11 @@ func TestRecallNextIdempotent(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "single question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "single question",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -284,7 +290,11 @@ func TestRecallAnswer(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "answerable question", []string{"choice a", "choice b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "answerable question",
+		[]cache.Choice{
+		{Text: "choice a", IsCorrect: true, Position: 0},
+		{Text: "choice b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -300,8 +310,8 @@ func TestRecallAnswer(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	answerBody := fmt.Sprintf(`{"id":%d,"answer_index":0}`, question.ID)
-	r2 := mustPOST(t, baseURL, "/recall/answer", []byte(answerBody))
+	answerBody := fmt.Sprintf(`{"id":%d,"selected_index":0}`, question.ID)
+	r2 := mustPOST(t, baseURL, "/recall/select", []byte(answerBody))
 	defer r2.Body.Close()
 
 	if r2.StatusCode != http.StatusOK {
@@ -322,7 +332,11 @@ func TestRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "skippable question", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "skippable question",
+		[]cache.Choice{
+		{Text: "x", IsCorrect: true, Position: 0},
+		{Text: "y", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -339,7 +353,7 @@ func TestRecallAnswerSkip(t *testing.T) {
 	resp.Body.Close()
 
 	skipBody := fmt.Sprintf(`{"id":%d,"skip":true}`, q.ID)
-	r2 := mustPOST(t, baseURL, "/recall/answer", []byte(skipBody))
+	r2 := mustPOST(t, baseURL, "/recall/select", []byte(skipBody))
 	defer r2.Body.Close()
 
 	if r2.StatusCode != http.StatusOK {
@@ -408,7 +422,7 @@ func TestDaemonHealthJSONContentType(t *testing.T) {
 func TestRecallAnswerInvalidBody(t *testing.T) {
 	_, _, baseURL := startTestDaemon(t)
 
-	resp := mustPOST(t, baseURL, "/recall/answer", []byte(`not json`))
+	resp := mustPOST(t, baseURL, "/recall/select", []byte(`not json`))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -420,7 +434,11 @@ func TestRecallNextRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's question",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed for repo X: %v", err)
 	}
 
@@ -579,7 +597,11 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "repo-param-symmetry q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "repo-param-symmetry q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -592,8 +614,8 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	body := fmt.Sprintf(`{"id":%d,"answer_index":0}`, q.ID)
-	r := mustPOST(t, baseURL, "/recall/answer?repo=/any/repo&feedback=false", []byte(body))
+	body := fmt.Sprintf(`{"id":%d,"selected_index":0}`, q.ID)
+	r := mustPOST(t, baseURL, "/recall/select?repo=/any/repo&feedback=false", []byte(body))
 	defer r.Body.Close()
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 with repo param, got %d", r.StatusCode)
@@ -616,7 +638,11 @@ func TestRecallNextBranchIsolation(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/x", "feature-A", "feature-A's q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "feature-A", "feature-A's q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -723,13 +749,22 @@ func TestRecallStaleEndpoint(t *testing.T) {
 
 	// Seed pending questions on two branches.
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A1", []string{"x"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A1",
+		[]cache.Choice{
+		{Text: "x", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed A1: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A2", []string{"x"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A2",
+		[]cache.Choice{
+		{Text: "x", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed A2: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/stale-test", "bugfix-B", "stale B1", []string{"x"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/stale-test", "bugfix-B", "stale B1",
+		[]cache.Choice{
+		{Text: "x", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed B1: %v", err)
 	}
 
@@ -807,7 +842,15 @@ func toolText(t *testing.T, result *mcp.CallToolResult) string {
 func seedAndClaim(t *testing.T, store *cache.Store, baseURL, question string, choices []string, correctIndex int) int64 {
 	t.Helper()
 	ctx := context.Background()
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", question, choices, correctIndex); err != nil {
+	cacheChoices := make([]cache.Choice, len(choices))
+	for i, text := range choices {
+		cacheChoices[i] = cache.Choice{
+			Text:      text,
+			IsCorrect: i == correctIndex,
+			Position:  i,
+		}
+	}
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", question, cacheChoices, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
@@ -830,8 +873,8 @@ func TestRecallAnswerWithFeedbackTrue(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	id := seedAndClaim(t, store, baseURL, "feedback-true q", []string{"a", "b"}, 0)
 
-	body := fmt.Sprintf(`{"id":%d,"answer_index":0}`, id)
-	resp := mustPOST(t, baseURL, "/recall/answer?feedback=true", []byte(body))
+	body := fmt.Sprintf(`{"id":%d,"selected_index":0}`, id)
+	resp := mustPOST(t, baseURL, "/recall/select?feedback=true", []byte(body))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -841,7 +884,7 @@ func TestRecallAnswerWithFeedbackTrue(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	for _, field := range []string{"correct", "correct_text", "feedback"} {
+	for _, field := range []string{"correct", "correct_answer", "feedback"} {
 		if _, ok := result[field]; !ok {
 			t.Fatalf("expected %q field in response, got %v", field, result)
 		}
@@ -852,8 +895,8 @@ func TestRecallAnswerCorrectEvaluation(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	id := seedAndClaim(t, store, baseURL, "correct eval q", []string{"right", "wrong"}, 0)
 
-	body := fmt.Sprintf(`{"id":%d,"answer_index":0}`, id)
-	resp := mustPOST(t, baseURL, "/recall/answer?feedback=true", []byte(body))
+	body := fmt.Sprintf(`{"id":%d,"selected_index":0}`, id)
+	resp := mustPOST(t, baseURL, "/recall/select?feedback=true", []byte(body))
 	defer resp.Body.Close()
 
 	var result struct {
@@ -871,13 +914,13 @@ func TestRecallAnswerIncorrectEvaluation(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	id := seedAndClaim(t, store, baseURL, "incorrect eval q", []string{"right", "wrong"}, 0)
 
-	body := fmt.Sprintf(`{"id":%d,"answer_index":1}`, id)
-	resp := mustPOST(t, baseURL, "/recall/answer?feedback=true", []byte(body))
+	body := fmt.Sprintf(`{"id":%d,"selected_index":1}`, id)
+	resp := mustPOST(t, baseURL, "/recall/select?feedback=true", []byte(body))
 	defer resp.Body.Close()
 
 	var result struct {
 		Correct     bool   `json:"correct"`
-		CorrectText string `json:"correct_text"`
+		CorrectText string `json:"correct_answer"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -894,8 +937,8 @@ func TestRecallAnswerOutOfRange(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	id := seedAndClaim(t, store, baseURL, "out-of-range q", []string{"a", "b", "c"}, 0)
 
-	body := fmt.Sprintf(`{"id":%d,"answer_index":99}`, id)
-	resp := mustPOST(t, baseURL, "/recall/answer?feedback=true", []byte(body))
+	body := fmt.Sprintf(`{"id":%d,"selected_index":99}`, id)
+	resp := mustPOST(t, baseURL, "/recall/select?feedback=true", []byte(body))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -907,16 +950,16 @@ func TestRecallAnswerOutOfRange(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if result.Error != "answer_index out of range" {
-		t.Fatalf("expected error %q, got %q", "answer_index out of range", result.Error)
+	if result.Error != "selected_index out of range" {
+		t.Fatalf("expected error %q, got %q", "selected_index out of range", result.Error)
 	}
 }
 
 func TestRecallAnswerUnknownID(t *testing.T) {
 	_, _, baseURL := startTestDaemon(t)
 
-	body := `{"id":99999,"answer_index":0}`
-	resp := mustPOST(t, baseURL, "/recall/answer?feedback=true", []byte(body))
+	body := `{"id":99999,"selected_index":0}`
+	resp := mustPOST(t, baseURL, "/recall/select?feedback=true", []byte(body))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -926,11 +969,16 @@ func TestRecallAnswerUnknownID(t *testing.T) {
 
 // ── 4C MCP integration tests ─────────────────────────────────────────────────
 
-func TestMCPRecallNextReturnsCorrectIndex(t *testing.T) {
+func TestMCPRecallNextWithholdsCorrectIndex(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp next q", []string{"a", "b", "c"}, 2); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp next q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: false, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		{Text: "c", IsCorrect: true, Position: 2},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -950,12 +998,20 @@ func TestMCPRecallNextReturnsCorrectIndex(t *testing.T) {
 	if err := json.Unmarshal([]byte(toolText(t, result)), &m); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	idx, ok := m["correct_index"]
-	if !ok {
-		t.Fatal("expected correct_index field in MCP response")
+	// The correctness key MUST NOT be in the delivery response — it is
+	// withheld until after the user submits via recall_select (delivery leak
+	// fix; see design.md Decision "wire contract — full break").
+	if _, present := m["correct_index"]; present {
+		t.Fatal("correct_index MUST NOT be in the delivery response (delivery leak)")
 	}
-	if idx != float64(2) {
-		t.Fatalf("expected correct_index 2, got %v", idx)
+	// The question_type discriminator is now delivered.
+	if m["question_type"] != "multiple_choice" {
+		t.Fatalf("expected question_type=multiple_choice, got %v", m["question_type"])
+	}
+	// The choices are still delivered (the user needs them to pick).
+	choices, ok := m["choices"].([]any)
+	if !ok || len(choices) != 3 {
+		t.Fatalf("expected 3 choices in delivery, got %v", m["choices"])
 	}
 }
 
@@ -963,7 +1019,11 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp answer q", []string{"right", "wrong"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp answer q",
+		[]cache.Choice{
+		{Text: "right", IsCorrect: true, Position: 0},
+		{Text: "wrong", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -984,18 +1044,18 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	id := int64(next["id"].(float64))
 
 	answerResult, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_answer",
-		Arguments: map[string]any{"id": id, "answer_index": 0, "skip": false},
+		Name:      "recall_select",
+		Arguments: map[string]any{"id": id, "selected_index": 0, "skip": false},
 	})
 	if err != nil {
-		t.Fatalf("CallTool recall_answer: %v", err)
+		t.Fatalf("CallTool recall_select: %v", err)
 	}
 
 	var m map[string]any
 	if err := json.Unmarshal([]byte(toolText(t, answerResult)), &m); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	for _, field := range []string{"ok", "correct", "correct_index", "correct_text"} {
+	for _, field := range []string{"ok", "correct", "correct_index", "correct_answer"} {
 		if _, ok := m[field]; !ok {
 			t.Fatalf("expected %q field in MCP response, got %v", field, m)
 		}
@@ -1009,7 +1069,11 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp skip q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp skip q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1030,11 +1094,11 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 	id := int64(next["id"].(float64))
 
 	skipResult, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_answer",
-		Arguments: map[string]any{"id": id, "answer_index": 0, "skip": true},
+		Name:      "recall_select",
+		Arguments: map[string]any{"id": id, "selected_index": 0, "skip": true},
 	})
 	if err != nil {
-		t.Fatalf("CallTool recall_answer skip: %v", err)
+		t.Fatalf("CallTool recall_select skip: %v", err)
 	}
 
 	var m map[string]any
@@ -1051,19 +1115,27 @@ func TestRecallRecentEnriched(t *testing.T) {
 	ctx := context.Background()
 
 	// Answer one question correctly (terminal-style with feedback).
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-correct", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-correct",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed q1: %v", err)
 	}
 	q1, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
 	if err != nil {
 		t.Fatalf("claim q1: %v", err)
 	}
-	if err := store.AnswerQuestion(ctx, q1.ID, 0, "a", true, "Nice!"); err != nil {
+	if err := store.SubmitSelection(ctx, q1.ID, []int64{q1.Choices[0].ID}, "Nice!"); err != nil {
 		t.Fatalf("answer q1: %v", err)
 	}
 
 	// Skip one question.
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-skip", []string{"x", "y"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-skip",
+		[]cache.Choice{
+		{Text: "x", IsCorrect: true, Position: 0},
+		{Text: "y", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed q2: %v", err)
 	}
 	q2, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -1086,43 +1158,31 @@ func TestRecallRecentEnriched(t *testing.T) {
 	if err := json.Unmarshal([]byte(rr.Contents[0].Text), &rows); err != nil {
 		t.Fatalf("parse recent: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
+	// recall://recent uses RecentAnswered — skip is EXCLUDED. The new schema
+	// separates RecentAnswered (terminal answered only) from RecentSkipped.
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (skip excluded by RecentAnswered), got %d", len(rows))
 	}
 
-	byQuestion := make(map[string]map[string]any, len(rows))
-	for _, r := range rows {
-		byQuestion[r["question"].(string)] = r
+	row := rows[0]
+	byQuestion := row["question"].(string)
+	if byQuestion != "recent-correct" {
+		t.Fatalf("expected recent-correct row, got %q", byQuestion)
 	}
-
-	// Correct row: correct_index, answer_index, correct, feedback all populated.
-	correct := byQuestion["recent-correct"]
-	if correct["correct_index"] == nil {
+	// New wire shape: correct_index is the engine's key, selected_indices is
+	// the user's pick (plural for forward-compat with multi-select).
+	if row["correct_index"] == nil {
 		t.Fatal("expected correct_index in recent-correct row")
 	}
-	if correct["answer_index"] == nil {
-		t.Fatal("expected answer_index in recent-correct row")
+	selIdx, ok := row["selected_indices"].([]any)
+	if !ok || len(selIdx) != 1 || selIdx[0] != float64(0) {
+		t.Fatalf("expected selected_indices=[0], got %v", row["selected_indices"])
 	}
-	if correct["correct"] == nil {
-		t.Fatal("expected correct in recent-correct row")
-	}
-	if correct["feedback"] == nil {
+	if row["feedback"] == nil {
 		t.Fatal("expected feedback non-nil in recent-correct row")
 	}
-
-	// Skip row: answer_index, correct, feedback nil; correct_index populated.
-	skip := byQuestion["recent-skip"]
-	if skip["correct_index"] == nil {
-		t.Fatal("expected correct_index in recent-skip row")
-	}
-	if skip["answer_index"] != nil {
-		t.Fatalf("expected answer_index nil in skip row, got %v", skip["answer_index"])
-	}
-	if skip["correct"] != nil {
-		t.Fatalf("expected correct nil in skip row, got %v", skip["correct"])
-	}
-	if skip["feedback"] != nil {
-		t.Fatalf("expected feedback nil in skip row, got %v", skip["feedback"])
+	if row["status"] != "answered" {
+		t.Fatalf("expected status=answered, got %v", row["status"])
 	}
 }
 
@@ -1136,10 +1196,18 @@ func TestMCPRecallNextRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's MCP question", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's MCP question",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y's MCP question", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y's MCP question",
+		[]cache.Choice{
+		{Text: "c", IsCorrect: true, Position: 0},
+		{Text: "d", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
@@ -1174,13 +1242,22 @@ func TestMCPRecallStatusRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X depth q", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X depth q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q2", []string{"a"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q2",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		}, ""); err != nil {
 		t.Fatalf("seed Y2: %v", err)
 	}
 
@@ -1207,7 +1284,11 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "MCP repo answer q", []string{"right", "wrong"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "MCP repo answer q",
+		[]cache.Choice{
+		{Text: "right", IsCorrect: true, Position: 0},
+		{Text: "wrong", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1225,11 +1306,11 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 	id := int64(next["id"].(float64))
 
 	answerResult, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_answer",
-		Arguments: map[string]any{"id": id, "answer_index": 0, "skip": false, "repo": "/repo/x", "branch": "main"},
+		Name:      "recall_select",
+		Arguments: map[string]any{"id": id, "selected_index": 0, "skip": false, "repo": "/repo/x", "branch": "main"},
 	})
 	if err != nil {
-		t.Fatalf("CallTool recall_answer with repo: %v", err)
+		t.Fatalf("CallTool recall_select with repo: %v", err)
 	}
 
 	var m map[string]any
@@ -1249,10 +1330,18 @@ func TestMCPQueueResourceRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)
 	ctx := context.Background()
 
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X queue q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X queue q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
-	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y queue q", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y queue q",
+		[]cache.Choice{
+		{Text: "c", IsCorrect: true, Position: 0},
+		{Text: "d", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
@@ -1286,26 +1375,34 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	ctx := context.Background()
 
 	// Answer one question for repo X.
-	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X answered q", []string{"a", "b"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X answered q",
+		[]cache.Choice{
+		{Text: "a", IsCorrect: true, Position: 0},
+		{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	qX, err := store.NextQuestion(ctx, "/repo/x", "main", "test")
 	if err != nil {
 		t.Fatalf("claim X: %v", err)
 	}
-	if err := store.AnswerQuestion(ctx, qX.ID, 0, "a", true, ""); err != nil {
+	if err := store.SubmitSelection(ctx, qX.ID, []int64{qX.Choices[0].ID}, ""); err != nil {
 		t.Fatalf("answer X: %v", err)
 	}
 
 	// Answer one question for repo Y.
-	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y answered q", []string{"c", "d"}, 0); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y answered q",
+		[]cache.Choice{
+		{Text: "c", IsCorrect: true, Position: 0},
+		{Text: "d", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 	qY, err := store.NextQuestion(ctx, "/repo/y", "main", "test")
 	if err != nil {
 		t.Fatalf("claim Y: %v", err)
 	}
-	if err := store.AnswerQuestion(ctx, qY.ID, 0, "c", true, ""); err != nil {
+	if err := store.SubmitSelection(ctx, qY.ID, []int64{qY.Choices[0].ID}, ""); err != nil {
 		t.Fatalf("answer Y: %v", err)
 	}
 
@@ -1394,5 +1491,126 @@ func TestRepoInstallsIntoCommonGitdirInWorktree(t *testing.T) {
 	mainPostCommit := filepath.Join(mainHooksDir, "post-commit")
 	if _, err := os.Stat(mainPostCommit); os.IsNotExist(err) {
 		t.Fatalf("expected post-commit hook in main repo's .git/hooks/ (%s), not found", mainPostCommit)
+	}
+}
+
+
+// ── 11. Schema-refactor specific tests ─────────────────────────────────────────
+
+// TestRecallNextDeliveryOmitsCorrectnessKey validates the delivery leak fix:
+// the GET /recall/next response MUST NOT contain the correctness key
+// (correct_index) — it is withheld until the user submits. A client that
+// inspects delivery JSON must not learn the answer.
+func TestRecallNextDeliveryOmitsCorrectnessKey(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	ctx := context.Background()
+
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "delivery-leak test",
+		[]cache.Choice{
+			{Text: "wrong-a", IsCorrect: false, Position: 0},
+			{Text: "right", IsCorrect: true, Position: 1},
+		}, ""); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+
+	if strings.Contains(string(body), "correct_index") {
+		t.Fatalf("delivery response must not contain correct_index: %s", body)
+	}
+	if strings.Contains(string(body), "correct_answer") {
+		t.Fatalf("delivery response must not contain correct_answer: %s", body)
+	}
+	_ = ctx
+}
+
+// TestSubmitSelectionAndSkipAtomicity exercises the terminal-state guards on
+// SubmitSelection and SkipQuestion. Once a question is in a terminal state
+// (answered or skipped), subsequent submits and skips must be rejected — no
+// rows are written, the status is unchanged.
+func TestSubmitSelectionAndSkipAtomicity(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "atomicity test",
+		[]cache.Choice{
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	q, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil || q == nil {
+		t.Fatalf("NextQuestion failed: %v", err)
+	}
+
+	if err := s.SubmitSelection(ctx, q.ID, []int64{q.Choices[0].ID}, ""); err != nil {
+		t.Fatalf("first submit: %v", err)
+	}
+
+	if err := s.SubmitSelection(ctx, q.ID, []int64{q.Choices[1].ID}, ""); err == nil {
+		t.Fatal("expected second submit to be rejected, got nil error")
+	}
+
+	if err := s.SkipQuestion(ctx, q.ID); err == nil {
+		t.Fatal("expected skip on answered question to be rejected, got nil error")
+	}
+
+	answered, err := s.RecentAnswered(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("RecentAnswered: %v", err)
+	}
+	if len(answered) != 1 {
+		t.Fatalf("expected 1 answered, got %d", len(answered))
+	}
+	if len(answered[0].Selections) != 1 {
+		t.Fatalf("expected 1 selection, got %d", len(answered[0].Selections))
+	}
+	if answered[0].Selections[0].ChoiceID != q.Choices[0].ID {
+		t.Fatal("selection should reference the first (originally chosen) choice, not the late attempt")
+	}
+}
+
+// TestSkipTerminalGuardSimilarForSkipped verifies the symmetric guard: once
+// skipped, a question cannot be answered afterwards.
+func TestSkipTerminalGuardSimilarForSkipped(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skip-then-answer test",
+		[]cache.Choice{
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
+		}, ""); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	q, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil || q == nil {
+		t.Fatalf("NextQuestion failed: %v", err)
+	}
+
+	if err := s.SkipQuestion(ctx, q.ID); err != nil {
+		t.Fatalf("skip: %v", err)
+	}
+
+	if err := s.SubmitSelection(ctx, q.ID, []int64{q.Choices[0].ID}, ""); err == nil {
+		t.Fatal("expected submit-after-skip to be rejected, got nil error")
+	}
+
+	skipped, err := s.RecentSkipped(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("RecentSkipped: %v", err)
+	}
+	if len(skipped) != 1 {
+		t.Fatalf("expected 1 skipped, got %d", len(skipped))
+	}
+	if len(skipped[0].Selections) != 0 {
+		t.Fatalf("expected zero selections on skipped question, got %d", len(skipped[0].Selections))
 	}
 }

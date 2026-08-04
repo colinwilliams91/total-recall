@@ -28,7 +28,12 @@ func (m *mockProvider) Complete(_ context.Context, req ai.CompletionRequest) (st
 }
 
 func TestFeedbackRequestCorrectCase(t *testing.T) {
-	req := recall.FeedbackRequest("What is caching?", []string{"A", "B", "C"}, 1, 1, "test-model")
+	choices := []recall.Choice{
+		{Text: "A"},
+		{Text: "B"},
+		{Text: "C"},
+	}
+	req := recall.FeedbackRequest("What is caching?", choices, 1, 1, "test-model")
 
 	if !strings.Contains(req.UserTurn, "<- correct, chosen") {
 		t.Fatalf("expected user turn to contain %q, got %q", "<- correct, chosen", req.UserTurn)
@@ -39,7 +44,12 @@ func TestFeedbackRequestCorrectCase(t *testing.T) {
 }
 
 func TestFeedbackRequestIncorrectCase(t *testing.T) {
-	req := recall.FeedbackRequest("What is caching?", []string{"A", "B", "C"}, 0, 2, "test-model")
+	choices := []recall.Choice{
+		{Text: "A"},
+		{Text: "B"},
+		{Text: "C"},
+	}
+	req := recall.FeedbackRequest("What is caching?", choices, 2, 0, "test-model")
 
 	if !strings.Contains(req.UserTurn, "[1] A  <- correct") {
 		t.Fatalf("expected correct-choice annotation, got %q", req.UserTurn)
@@ -53,7 +63,8 @@ func TestFeedbackRequestIncorrectCase(t *testing.T) {
 }
 
 func TestFeedbackRequestTokenBudget(t *testing.T) {
-	req := recall.FeedbackRequest("q", []string{"a", "b"}, 0, 0, "m")
+	choices := []recall.Choice{{Text: "a"}, {Text: "b"}}
+	req := recall.FeedbackRequest("q", choices, 0, 0, "m")
 
 	if req.MaxTokens != 150 {
 		t.Fatalf("expected MaxTokens 150, got %d", req.MaxTokens)
@@ -68,7 +79,8 @@ func TestGenerateFeedbackDegradation(t *testing.T) {
 	provider := &mockProvider{err: errors.New("timeout")}
 	engine := recall.New(provider, s)
 
-	got := engine.GenerateFeedback(context.Background(), "q", []string{"a", "b"}, 0, 0, "m")
+	choices := []recall.Choice{{Text: "a"}, {Text: "b"}}
+	got := engine.GenerateFeedback(context.Background(), "q", choices, 0, 0, "m")
 	if got != "" {
 		t.Fatalf("expected empty string on AI error, got %q", got)
 	}
