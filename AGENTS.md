@@ -45,6 +45,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **OpenSpec**: repo uses spec-driven development. Specs: `openspec/specs/`. Changes: `openspec/changes/`. Config: `openspec/config.yaml`
 - **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `tr repo` time
 - **Keep adapters thin**: Core Go Engine is authoritative; hooks, MCP, and presentation are thin clients
+- **Don't include** return types or examples in docstrings/comments because it can drift on implementation changes. The code should be self-documenting to an extent. Docstrings should focus on the "why" and "what" rather than the "how".
 
 ## Testing
 

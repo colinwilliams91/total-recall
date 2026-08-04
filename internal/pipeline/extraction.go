@@ -22,8 +22,7 @@ type ConceptFingerprint struct {
 }
 
 // ExtractConcepts derives concept fingerprints from a staged Git diff using the AI provider.
-// On AI failure or parse failure it logs the error and returns an empty slice (not an error),
-// so the pipeline continues gracefully without crashing.
+// Pipeline logs error and continues gracefully on AI or parsing failure.
 func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model string) ([]ConceptFingerprint, error) {
 	req := ExtractionRequest(diff, model)
 	raw, err := provider.Complete(ctx, req)

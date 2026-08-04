@@ -10,7 +10,7 @@ import (
 	"github.com/colinwilliams91/total-recall/internal/cache"
 )
 
-const defaultDifficulty = "intermediate"
+const defaultDifficulty = "intermediate" // TODO: this default diverges from the config default "adaptive" (shouldn't)
 
 // Choice is one option of a multiple-choice recall question. IsCorrect is the
 // engine's correctness key for this choice (per the AI contract, exactly one
@@ -53,7 +53,7 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 	if repo == "" || branch == "" {
 		return nil, nil
 	}
-	rows, err := e.store.Recent(ctx, repo, branch, 20)
+	rows, err := e.store.Recent(ctx, repo, branch, 20) // TODO: hardcoded 20 concepts, knob for adaptive recall/difficulty
 	if err != nil {
 		return nil, err
 	}

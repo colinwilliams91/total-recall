@@ -131,8 +131,7 @@ type Store struct {
 }
 
 // Open opens (or creates) the memory store at $TR_HOME/memory.db, or
-// ~/.tr/memory.db when TR_HOME is unset. Only memory.db is supported — the
-// legacy concepts.db migration is removed. Returns a non-nil *Store on success.
+// ~/.tr/memory.db when TR_HOME is unset. Returns a non-nil *Store on success.
 //
 // MIGRATION: this version reshapes the `questions` table (drops the prior
 // `correct_index`, `answer_index`, `choices` JSON, `answer`, `correct`,
@@ -328,11 +327,7 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 
 // NextQuestion atomically claims the oldest queued question for the (repo,
 // branch) pair. It transitions status 'queued' → 'delivered' and inserts a
-// 'delivered' question_events row in a single transaction. Both repo and
-// branch are required; empty values return (nil, nil) without touching the
-// store. Returns (nil, nil) when no queued question exists for the pair.
-// The returned StoredQuestion is joined with its choices (in position order)
-// and its derived CorrectIndex.
+// 'delivered' question_events row in a single transaction.
 func (s *Store) NextQuestion(ctx context.Context, repo, branch, claimedBy string) (*StoredQuestion, error) {
 	if repo == "" || branch == "" {
 		return nil, nil
@@ -389,10 +384,7 @@ LIMIT 1`, repo, branch)
 	return q, nil
 }
 
-// GetQuestion fetches a single question by ID joined with its choices. The
-// returned StoredQuestion's CorrectIndex is derived from the choice with
-// is_correct=1 (presentation aid only). ID-keyed — no repo or branch filter.
-// Returns (nil, nil) when the row does not exist.
+// GetQuestion fetches a single question by ID joined with its choices.
 func (s *Store) GetQuestion(ctx context.Context, id int64) (*StoredQuestion, error) {
 	return selectQuestion(ctx, s.db, id)
 }
@@ -400,10 +392,9 @@ func (s *Store) GetQuestion(ctx context.Context, id int64) (*StoredQuestion, err
 // SubmitSelection records the user's picks for a question. In a single
 // transaction it inserts one selections row per choiceID, transitions the
 // question's status to 'answered', and inserts an 'answered' question_events
-// row. The transaction is guarded by the current status (must be
-// 'delivered'); if the question is already in a terminal state, the submit
-// is rejected and no rows are written. ID-keyed — no repo/branch parameter.
-// feedback is the AI-generated explanation text (empty string → null in DB).
+// row. The transaction is guarded by the current status (must be 'delivered');
+// if the question is already in a terminal state, the submit is rejected and no rows are written.
+// Feedback is the AI-generated explanation text (empty string → null in DB).
 func (s *Store) SubmitSelection(ctx context.Context, questionID int64, selectedChoiceIDs []int64, feedback string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
