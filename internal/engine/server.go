@@ -137,9 +137,12 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// Extract the diff from the payload (pre-commit hook sends it as a string).
+	// Extract the diff and commit message from the payload. pre-commit sends
+	// {diff}; commit-msg sends {message, diff}. The message is present only
+	// for commit-msg events — pre-commit fires before the commit is created.
 	var payload struct {
-		Diff string `json:"diff"`
+		Diff    string `json:"diff"`
+		Message string `json:"message"`
 	}
 	if err := json.Unmarshal(env.Payload, &payload); err != nil || payload.Diff == "" {
 		log.Printf("[pipeline] no diff in hook payload for %s — skipping", env.Hook)
@@ -179,7 +182,23 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	if s.recallEngine == nil {
 		return
 	}
-	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.Recall.Difficulty, s.cfg.AI.Model)
+
+	// Load recent concepts (with weights, sources, timestamps) for synthesis.
+	// The just-saved fingerprints are included in this fetch — they give the
+	// AI the freshest context for counterfactual, codebase-anchored questions.
+	recentRows, err := s.store.Recent(ctx, env.Repo, env.Branch, 20)
+	if err != nil {
+		log.Printf("[recall] recent concepts load error: %v", err)
+		return
+	}
+
+	snippet := truncateDiffSnippet(payload.Diff)
+	synth := recall.SynthesisContext{
+		Concepts:    recentRows,
+		CommitMsg:   payload.Message,
+		DiffSnippet: snippet,
+	}
+	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.Recall.Difficulty, s.cfg.AI.Model, synth)
 	if err != nil {
 		log.Printf("[recall] synthesize error: %v", err)
 		return
@@ -208,6 +227,21 @@ func (s *Server) runPipeline(env HookEnvelope) {
 			log.Printf("[recall] dispatch error: %v", err)
 		}
 	}
+}
+
+// synthesisDiffSnippetMaxChars bounds the diff snippet carried into the
+// synthesis user turn. Enough for the AI to ask "why is *this* await
+// necessary?" without busting the synthesis token budget.
+const synthesisDiffSnippetMaxChars = 500
+
+// truncateDiffSnippet trims a diff to at most synthesisDiffSnippetMaxChars,
+// appending a truncation marker when the original exceeds the budget. The
+// caller (runPipeline) passes the result as SynthesisContext.DiffSnippet.
+func truncateDiffSnippet(diff string) string {
+	if len(diff) <= synthesisDiffSnippetMaxChars {
+		return diff
+	}
+	return diff[:synthesisDiffSnippetMaxChars] + "\n[… truncated …]"
 }
 
 func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
