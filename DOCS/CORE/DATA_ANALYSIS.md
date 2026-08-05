@@ -51,7 +51,9 @@ Your quiz generation system should intentionally emulate these patterns.
 
 # This Gives You Your Prompting Strategy
 
-Your future question-generation prompts should encourage:
+> **Status: wired.** The `assets/prompts/question-generation-policy.md` policy doc is now loaded by the `assets` package and injected into the synthesis system prompt. Concept weights, sources, commit messages, and diff snippets reach the synthesis user turn via `SynthesisContext` — the "contextualize by the Incremental Analysis Pipeline" recommendation below is implemented.
+
+Your question-generation prompts should encourage:
 
 ## GOOD PROMPTS
 

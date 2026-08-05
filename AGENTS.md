@@ -41,7 +41,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 - **No CGo**: SQLite is `modernc.org/sqlite`. Do not introduce `mattn/go-sqlite3` or any CGo dependency
 - **Conventional commits**
-- **Prompt assets** live under `assets/prompts/` — runtime cognition assets loaded dynamically, not static docs
+- **Prompt assets** live under `assets/prompts/` — loaded by the `assets` package at Engine init via `//go:embed` with optional `$TR_HOME/prompts/` runtime override (edit markdown + restart daemon to tune; no recompile)
 - **OpenSpec**: repo uses spec-driven development. Specs: `openspec/specs/`. Changes: `openspec/changes/`. Config: `openspec/config.yaml`
 - **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `tr repo` time
 - **Keep adapters thin**: Core Go Engine is authoritative; hooks, MCP, and presentation are thin clients
