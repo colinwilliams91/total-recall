@@ -28,7 +28,7 @@ Rules:
 - The first choice must be the correct answer
 - Wrong answers must be plausible but clearly incorrect to someone who understands the concept
 - Keep the question concise and directly related to one of the provided concepts
-- Do not reference the specific codebase or project — make the question about the concept itself`
+- Protect the intellectual property of the developer's codebase; do not copy or expose any code snippets in the question or answers, but instead derive the question from the concept metadata and commit context to maximize relevancy.`
 
 	// synthesisSystemTmpl is the legacy template used verbatim when the policy
 	// asset fails to load. Preserves the pre-enrichment behavior so a missing
@@ -44,7 +44,7 @@ Rules:
 - The first choice must be the correct answer
 - Wrong answers must be plausible but clearly incorrect to someone who understands the concept
 - Keep the question concise and directly related to one of the provided concepts
-- Do not reference the specific codebase or project — make the question about the concept itself`
+- Protect the intellectual property of the developer's codebase; do not copy or expose any code snippets in the question or answers, but instead derive the question from the concept metadata and commit context to maximize relevancy.`
 
 	feedbackSystemTmpl = `You are a technical recall assistant giving immediate feedback after a developer answers a quiz question. Be direct, concise, and informative. Do not use markdown, asterisks, bullet points, or headers. Write in plain prose. Maximum 3 sentences.
 
