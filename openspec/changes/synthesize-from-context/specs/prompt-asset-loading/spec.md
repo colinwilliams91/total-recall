@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: `internal/assets.Load` resolves prompt-asset markdown files with `//go:embed` default and runtime `$TR_HOME/prompts/` override
-The `internal/assets` package SHALL expose `Load(name string) (PromptAsset, error)` which resolves a named prompt asset (`<name>.md`) by checking `$TR_HOME/prompts/<name>.md` first when `$TR_HOME` is set; if absent, returning the `//go:embed`-ed default `assets/prompts/<name>.md`; if both unavailable, returning a `Source == "fallback"` sentinel `PromptAsset` with empty `Body`. Loaded assets SHALL be cached via `sync.Once` keyed by name so per-invocation reads do not re-stat the filesystem.
+### Requirement: `assets.Load` resolves prompt-asset markdown files with `//go:embed` default and runtime `$TR_HOME/prompts/` override
+The `assets` package SHALL expose `Load(name string) (PromptAsset, error)` which resolves a named prompt asset (`<name>.md`) by checking `$TR_HOME/prompts/<name>.md` first when `$TR_HOME` is set; if absent, returning the `//go:embed`-ed default `assets/prompts/<name>.md`; if both unavailable, returning a `Source == "fallback"` sentinel `PromptAsset` with empty `Body`. Loaded assets SHALL be cached via `sync.Once` keyed by name so per-invocation reads do not re-stat the filesystem.
 
 #### Scenario: Embedded default returned when override is absent
 - **WHEN** `Load("question-generation-policy")` is called and `$TR_HOME` is unset
@@ -18,7 +18,7 @@ The `internal/assets` package SHALL expose `Load(name string) (PromptAsset, erro
 ---
 
 ### Requirement: YAML front-matter is parsed via string splitting, no YAML dependency introduced
-`internal/assets` SHALL extract `name` and `description` keys from a leading `---\n...\n---` front-matter block by splitting on lines and matching `key: value` for the two known keys. The front-matter block is excluded from `Body`. A missing or malformed front-matter block is non-fatal — the asset is returned with empty `Name`/`Description` and `Body` containing the full file content. No YAML library is added as a dependency.
+The `assets` package SHALL extract `name` and `description` keys from a leading `---\n...\n---` front-matter block by splitting on lines and matching `key: value` for the two known keys. The front-matter block is excluded from `Body`. A missing or malformed front-matter block is non-fatal — the asset is returned with empty `Name`/`Description` and `Body` containing the full file content. No YAML library is added as a dependency.
 
 #### Scenario: Standard front matter parses correctly
 - **WHEN** an asset file begins with `---\nname: generate-quiz-question\ndescription: Generate short quiz question...\n---\n## Goals\n` content
@@ -39,11 +39,11 @@ The `internal/assets` package SHALL expose `Load(name string) (PromptAsset, erro
 ---
 
 ### Requirement: Prompt-asset directory structure is `assets/prompts/` for embedded defaults and `$TR_HOME/prompts/` for overrides
-The embedded defaults SHALL live at `assets/prompts/<name>.md` in the repository, accessible to `//go:embed` from the `internal/assets` package. The runtime override directory SHALL be `$TR_HOME/prompts/<name>.md` when `TR_HOME` is set (honoring the existing `TR_HOME` test-isolation convention from the `tr-home-override` capability). Override files MUST be plain markdown; no subdirectory layout is enforced beyond the `prompts/` subdir.
+The embedded defaults SHALL live at `assets/prompts/<name>.md` in the repository, accessible to `//go:embed` from the `assets` package (located at the repository root so the embed path resolves correctly — Go's `//go:embed` directive does not permit `..` in paths, so the loader package lives at `assets/` rather than `internal/assets/`). The runtime override directory SHALL be `$TR_HOME/prompts/<name>.md` when `TR_HOME` is set (honoring the existing `TR_HOME` test-isolation convention from the `tr-home-override` capability). Override files MUST be plain markdown; no subdirectory layout is enforced beyond the `prompts/` subdir.
 
 #### Scenario: Embedded asset path resolves at build time
-- **WHEN** `internal/assets` is compiled
-- **THEN** the `//go:embed` directive captures every `.md` file under `assets/prompts/` into the binary; `go test ./internal/assets/...` confirms the bundle contains `question-generation-policy.md`
+- **WHEN** the `assets` package is compiled
+- **THEN** the `//go:embed` directive captures every `.md` file under `assets/prompts/` into the binary; `go test ./assets/...` confirms the bundle contains `question-generation-policy.md`
 
 #### Scenario: Override directory honors `$TR_HOME`
 - **WHEN** `TR_HOME=/scratch/.tr` is set and `/scratch/.tr/prompts/question-generation-policy.md` exists
@@ -56,7 +56,7 @@ The embedded defaults SHALL live at `assets/prompts/<name>.md` in the repository
 ---
 
 ### Requirement: Prompt-asset loading is idempotent and cached per process
-The first `assets.Load(name)` call SHALL resolve and parse the asset; subsequent calls SHALL return the cached `PromptAsset` value without re-reading disk or re-parsing markdown. Caching MUST be implemented with `sync.Once` per asset name. The cache SHALL live for the lifetime of the process — there is no file-watching eviction; restarting the daemon is the cache invalidation mechanism.
+The first `assets.Load(name)` call SHALL resolve and parse the asset; subsequent calls SHALL return the cached `PromptAsset` value without re-reading disk or re-parsing markdown. Caching MUST be implemented with a package-level mutex-guarded map keyed by asset name. The cache SHALL live for the lifetime of the process — there is no file-watching eviction; restarting the daemon is the cache invalidation mechanism.
 
 #### Scenario: Repeated calls return the same value instance
 - **WHEN** `Load("question-generation-policy")` is called 10 times in sequence
