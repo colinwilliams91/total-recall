@@ -249,8 +249,8 @@ func TestSynthesisRequestMaxTokensAndJSON(t *testing.T) {
 	}
 	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", "m")
 
-	if req.MaxTokens != 512 {
-		t.Fatalf("expected MaxTokens 512, got %d", req.MaxTokens)
+	if req.MaxTokens != 1024 {
+		t.Fatalf("expected MaxTokens 1024, got %d", req.MaxTokens)
 	}
 	if !req.JSON {
 		t.Fatal("expected JSON true for synthesis request")

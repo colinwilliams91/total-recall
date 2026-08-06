@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	synthesisMaxTokens = 512
+	synthesisMaxTokens = 1024
 	feedbackMaxTokens  = 150
 
 	// formatContract is the trailing section appended after the policy doc body
