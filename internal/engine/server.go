@@ -258,7 +258,6 @@ func (s *Server) handleRecallNext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q == nil {
-		log.Printf("[recall] no pending questions for repo=%q branch=%q", repo, branch)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

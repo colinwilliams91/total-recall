@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -569,26 +568,17 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 	}
 }
 
-// Task 10.3: repo-move advisory is logged on empty dequeue for non-empty repo.
-func TestRecallNextRepoMoveAdvisory(t *testing.T) {
+// Empty-queue dequeue returns 204 (the wire-level signal). The prior
+// "repo-move advisory" log line was removed — it fired on every empty-queue
+// poll (tr ask polls every 400ms for 15s, producing ~37 log lines per
+// invocation). The 204 response is the only signal the client needs.
+func TestRecallNextEmptyQueueReturns204(t *testing.T) {
 	_, _, baseURL := startTestDaemon(t)
-
-	var logBuf bytes.Buffer
-	origOut := log.Writer()
-	log.SetOutput(&logBuf)
-	defer log.SetOutput(origOut)
 
 	resp := mustGET(t, baseURL, "/recall/next?repo=/moved/repo&branch=main")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
-	}
-
-	if !strings.Contains(logBuf.String(), "no pending questions for repo") {
-		t.Fatalf("expected repo-move advisory in log, got:\n%s", logBuf.String())
-	}
-	if !strings.Contains(logBuf.String(), "/moved/repo") {
-		t.Fatalf("expected repo path in advisory, got:\n%s", logBuf.String())
 	}
 }
 
