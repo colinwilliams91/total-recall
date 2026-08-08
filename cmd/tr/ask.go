@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/colinwilliams91/total-recall/internal/ai"
 	"github.com/colinwilliams91/total-recall/internal/hooks"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -145,7 +146,8 @@ type askModel struct {
 	feedbackResult feedbackMsg
 	skipped        bool
 	advisory       string
-	httpClient     *http.Client
+	httpClient     *http.Client // 3s — polls /recall/next (local DB read) and skip POSTs
+	feedbackClient *http.Client // matches ai.DefaultHTTPTimeout — POST /recall/select?feedback=true triggers a synchronous AI call through the daemon
 	repo           string
 	branch         string
 }
@@ -155,12 +157,13 @@ func newAskModel(timeout time.Duration, repo, branch string) askModel {
 		timeout = defaultTimeout
 	}
 	return askModel{
-		state:      stateThinking,
-		started:    time.Now(),
-		timeout:    timeout,
-		httpClient: &http.Client{Timeout: 3 * time.Second},
-		repo:       repo,
-		branch:     branch,
+		state:          stateThinking,
+		started:        time.Now(),
+		timeout:        timeout,
+		httpClient:     &http.Client{Timeout: 3 * time.Second},
+		feedbackClient: &http.Client{Timeout: ai.DefaultHTTPTimeout},
+		repo:           repo,
+		branch:         branch,
 	}
 }
 
@@ -261,7 +264,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			m.state = stateFeedback
-			return m, postAnswer(m.question.id, idx, m.repo, m.branch, m.httpClient)
+			return m, postAnswer(m.question.id, idx, m.repo, m.branch, m.feedbackClient)
 		}
 		return m, nil
 	}
