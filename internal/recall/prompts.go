@@ -29,7 +29,7 @@ Rules:
 - Wrong answers must be plausible but clearly incorrect to someone who understands the concept
 - Keep the question concise and directly related to one of the provided concepts
 - Protect the intellectual property of the developer's codebase; do not copy or expose any code snippets in the question or answers, but instead derive the question from the concept metadata and commit context to maximize relevancy.
-- Generate the question and answer text in the developer's natural language. Infer the language from the commit message and code comments in the user-provided context (when available); fall back to English when no language signal is present.`
+- Generate the question and answer text in the same language as the commit message and code comments provided in the user turn. The match MUST be exact: English context → English output; Japanese context → Japanese output; Spanish → Spanish. Do NOT default to your training language. When no prose context is provided OR the language is ambiguous, generate in English.`
 
 	// synthesisSystemTmpl is the legacy template used verbatim when the policy
 	// asset fails to load. Preserves the pre-enrichment behavior so a missing
@@ -46,9 +46,9 @@ Rules:
 - Wrong answers must be plausible but clearly incorrect to someone who understands the concept
 - Keep the question concise and directly related to one of the provided concepts
 - Protect the intellectual property of the developer's codebase; do not copy or expose any code snippets in the question or answers, but instead derive the question from the concept metadata and commit context to maximize relevancy.
-- Generate the question and answer text in the developer's natural language. Infer the language from the commit message and code comments in the user-provided context (when available); fall back to English when no language signal is present.`
+- Generate the question and answer text in the same language as the commit message and code comments provided in the user turn. The match MUST be exact: English context → English output; Japanese context → Japanese output; Spanish → Spanish. Do NOT default to your training language. When no prose context is provided OR the language is ambiguous, generate in English.`
 
-	feedbackSystemTmpl = `You are a technical recall assistant giving immediate feedback after a developer answers a quiz question. Be direct, concise, and informative. Do not use markdown, asterisks, bullet points, or headers. Write in plain prose. Maximum 3 sentences. Generate the feedback in the same language as the question text.
+	feedbackSystemTmpl = `You are a technical recall assistant giving immediate feedback after a developer answers a quiz question. Be direct, concise, and informative. Do not use markdown, asterisks, bullet points, or headers. Write in plain prose. Maximum 3 sentences. You MUST generate the feedback in the same language as the question text. Do NOT default to your training language.
 
 If the developer was correct: briefly confirm and add one sentence explaining why that answer is right — not just that it is right.
 
