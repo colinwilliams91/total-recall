@@ -14,6 +14,8 @@ description: Generate short quiz question when Recall Engine prompts Question Sy
 
 ## Your quizzes should disproportionately target:
 
+(below are good concept examples but quizzes should not be limited to them exclusively)
+
 - debugging
 - causal reasoning
 - architectural tradeoffs
