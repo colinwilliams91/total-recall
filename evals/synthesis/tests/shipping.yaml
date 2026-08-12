@@ -1,0 +1,59 @@
+description: 'open/closed principle (shipping.go)'
+vars:
+  concepts: [{"concept":"open/closed principle","source":"code","weight":0.8}]
+  commit_msg: 'feat: add shipping carrier selection by order priority'
+  context_desc: 'open/closed principle (weight 0.8, source code)'
+  commit_msg_lang: 'feat: add shipping carrier selection by order priority'
+  diff: |
+    package shipping
+    
+    // Order is a value object passed through the shipping pipeline.
+    // It carries line items, destination, and the priority the customer
+    // paid for. There is no shared interface across shipping methods today
+    // — the carrier choice in Ship() must be extended whenever a new
+    // carrier is added to the business.
+    type Order struct {
+    	Items     []LineItem
+    	Destination string
+    	Priority  string // "standard" | "express" | "overnight"
+    }
+    
+    type LineItem struct {
+    	SKU   string
+    	Qty   int
+    	Price float64
+    }
+    
+    // Total computes the order subtotal. Tax and shipping are added by
+    // the caller, not here — keeping the value object pure.
+    func (o Order) Total() float64 {
+    	var sum float64
+    	for _, item := range o.Items {
+    		sum += item.Price * float64(item.Qty)
+    	}
+    	return sum
+    }
+    
+    // Ship decides the carrier based on the order's priority string.
+    // Each branch inlines its own label format and tracking URL scheme;
+    // adding a new carrier (e.g., "drone") requires modifying this
+    // switch AND the Priority string union — there is no carrier
+    // abstraction to slot a new implementation into.
+    func Ship(o Order) (label string, trackingURL string) {
+    	switch o.Priority {
+    	case "standard":
+    		// USPS ground: 5-7 day, cheap, nationwide.
+    		return "USPS-" + o.Destination, "https://track.usps.com/" + o.Destination
+    	case "express":
+    		// FedEx 2Day: premium pricing, guaranteed 2 business days.
+    		return "FEDEX-" + o.Destination, "https://fedex.com/track?q=" + o.Destination
+    	case "overnight":
+    		// UPS Next Day: highest tier, expensive, has a hard cutoff at 3pm local.
+    		return "UPS-NDA-" + o.Destination, "https://ups.com/track?dest=" + o.Destination
+    	default:
+    		// Unknown priority falls back to standard, but we've silently
+    		// swallowed the misconfiguration — the caller never learns the
+    		// priority was invalid.
+    		return "USPS-" + o.Destination, "https://track.usps.com/" + o.Destination
+    	}
+    }

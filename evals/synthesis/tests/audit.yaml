@@ -1,0 +1,78 @@
+description: 'event sourcing pattern (audit.go)'
+vars:
+  concepts: [{"concept":"event sourcing pattern","source":"code","weight":0.9}]
+  commit_msg: 'feat: add append-only event ledger with projection filter'
+  context_desc: 'event sourcing pattern (weight 0.9, source code)'
+  commit_msg_lang: 'feat: add append-only event ledger with projection filter'
+  diff: |
+    package audit
+    
+    // Event is the immutable record of something that happened in the
+    // system. Each event carries the actor who initiated it, the
+    // timestamp, and a structured payload. Events are append-only —
+    // nothing ever edits or deletes a past event; the audit trail is
+    // built by replaying them in order.
+    type Event struct {
+    	ID        int64
+    	Actor     string
+    	Action    string
+    	Timestamp int64
+    	Payload   map[string]any
+    }
+    
+    // Ledger is the domain object that owns the event list. It enforces
+    // the append-only invariant and provides projection queries for
+    // callers (e.g., "what did this actor do in the last hour?").
+    type Ledger struct {
+    	events []Event
+    }
+    
+    // Append validates and records a new event. The validation is
+    // domain policy: an event with no actor is refused, an action
+    // outside the known vocabulary is refused. Both checks live here,
+    // not in the storage layer — the ledger owns the business rules.
+    func (l *Ledger) Append(e Event) error {
+    	if e.Actor == "" {
+    		return ErrInvalidEvent
+    	}
+    	if !isKnownAction(e.Action) {
+    		return ErrUnknownAction
+    	}
+    	l.events = append(l.events, e)
+    	return nil
+    }
+    
+    // ReplayFilter returns every event matching the predicate, in
+    // append order. Used by projection builders (e.g., to reconstruct
+    // the current state of an entity from its event history). The
+    // predicate runs against the immutable event, never mutating it.
+    func (l *Ledger) ReplayFilter(keep func(Event) bool) []Event {
+    	var out []Event
+    	for _, e := range l.events {
+    		if keep(e) {
+    			out = append(out, e)
+    		}
+    	}
+    	return out
+    }
+    
+    func isKnownAction(action string) bool {
+    	switch action {
+    	case "create", "update", "delete", "login", "logout":
+    		return true
+    	}
+    	return false
+    }
+    
+    var (
+    	ErrInvalidEvent  = errInvalid{}
+    	ErrUnknownAction = errUnknown{}
+    )
+    
+    type errInvalid struct{}
+    
+    func (errInvalid) Error() string { return "audit: event missing actor" }
+    
+    type errUnknown struct{}
+    
+    func (errUnknown) Error() string { return "audit: action outside known vocabulary" }

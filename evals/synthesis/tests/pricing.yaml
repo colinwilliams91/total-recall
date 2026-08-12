@@ -1,0 +1,45 @@
+description: 'open/closed principle (pricing.go)'
+vars:
+  concepts: [{"concept":"open/closed principle","source":"code","weight":0.8}]
+  commit_msg: 'feat: add per-kind price calculator for the catalogue'
+  context_desc: 'open/closed principle (weight 0.8, source code)'
+  commit_msg_lang: 'feat: add per-kind price calculator for the catalogue'
+  diff: |
+    package pricing
+    
+    // Product kinds the calculator currently recognises. Adding a new
+    // kind requires modifying Calculate — see the switch below.
+    const (
+    	KindBook   = "book"
+    	KindMusic  = "music"
+    	KindVideo  = "video"
+    )
+    
+    // Product is the value object priced by Calculate.
+    type Product struct {
+    	Kind  string
+    	Price float64
+    }
+    
+    // Calculate applies per-kind pricing rules. Each branch knows the
+    // business rule for its kind; the switch must be extended whenever
+    // the catalogue grows. There is no shared abstraction across kinds
+    // today — each branch inlines its own discount structure.
+    func Calculate(p Product) float64 {
+    	switch p.Kind {
+    	case KindBook:
+    		// Books: 10% off over $20 (bulk reading incentive).
+    		if p.Price > 20 {
+    			return p.Price * 0.9
+    		}
+    		return p.Price
+    	case KindMusic:
+    		// Music: flat $0.99 single-track pricing regardless of list price.
+    		return 0.99
+    	case KindVideo:
+    		// Video: 25% off during the (hardcoded) launch window.
+    		return p.Price * 0.75
+    	default:
+    		return p.Price
+    	}
+    }
