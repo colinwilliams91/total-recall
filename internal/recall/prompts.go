@@ -10,7 +10,7 @@ import (
 
 const (
 	synthesisMaxTokens = 1024
-	feedbackMaxTokens  = 150
+	feedbackMaxTokens  = 512
 
 	// formatContract is the trailing section appended after the policy doc body
 	// in the composed system turn. It carries the JSON shape directive and the
