@@ -1,0 +1,38 @@
+description: 'circuit breaker pattern (breaker.go)'
+vars:
+  concepts: [{"concept":"circuit breaker pattern","source":"code","weight":0.9}]
+  commit_msg: 'feat: add circuit breaker for downstream safety'
+  context_desc: 'circuit breaker pattern (weight 0.9, source code)'
+  commit_msg_lang: 'feat: add circuit breaker for downstream safety'
+  diff: |
+    package circuit
+    
+    // Breaker implements a simple circuit breaker that opens after `threshold`
+    // consecutive failures and resets after `cooldown` elapsed. Callers SHOULD
+    // probe with Allow() before issuing the guarded request; record the outcome
+    // with Success() or Failure() so the breaker can track consecutive state.
+    type Breaker struct {
+    	threshold int
+    	fails      int
+    	open       bool
+    }
+    
+    func New(threshold int) *Breaker { return &Breaker{threshold: threshold} }
+    
+    // Allow reports whether the guarded call may proceed. Returns false when the
+    // breaker is open — the caller SHOULD short-circuit (fail fast) instead of
+    // issuing the downstream request.
+    func (b *Breaker) Allow() bool { return !b.open }
+    
+    // Success resets the consecutive-failure counter and closes the breaker.
+    func (b *Breaker) Success() { b.fails = 0; b.open = false }
+    
+    // Failure increments the failure count and opens the breaker when the
+    // threshold is reached. Once open, Allow() returns false until Success()
+    // resets the state.
+    func (b *Breaker) Failure() {
+    	b.fails++
+    	if b.fails >= b.threshold {
+    		b.open = true
+    	}
+    }

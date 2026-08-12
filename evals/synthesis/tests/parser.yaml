@@ -1,0 +1,74 @@
+description: 'visitor pattern (parser.go)'
+vars:
+  concepts: [{"concept":"visitor pattern","source":"code","weight":0.9}]
+  commit_msg: 'feat: add AST visitor pattern for compiler front-end'
+  context_desc: 'visitor pattern (weight 0.9, source code)'
+  commit_msg_lang: 'feat: add AST visitor pattern for compiler front-end'
+  diff: |
+    package parser
+    
+    // ASTNode is the base of the abstract syntax tree. Every concrete
+    // node type embeds this struct, giving the tree a uniform shape
+    // that the visitor can walk without knowing each node's specific
+    // type. This is the classic visitor pattern as applied to compiler
+    // front-ends: the algorithm (lint rules, code generation, pretty-
+    // printing) lives in the Visitor, not on the nodes themselves.
+    type ASTNode struct {
+    	Loc   int // source line where the node begins
+    	Depth int // nesting level (0 = top-level)
+    }
+    
+    // Visitor is the double-dispatch interface. Each concrete node
+    // calls the matching VisitXxx method, passing itself — the
+    // visitor then does its work without the node needing to know
+    // which algorithm is running against the tree.
+    type Visitor interface {
+    	VisitLiteral(*LiteralNode)
+    	VisitBinary(*BinaryNode)
+    	VisitCall(*CallNode)
+    }
+    
+    // LiteralNode represents a constant value in the source — numbers,
+    // strings, booleans. It is a leaf in the tree; it has no children.
+    type LiteralNode struct {
+    	ASTNode
+    	Value any
+    }
+    
+    func (l *LiteralNode) Accept(v Visitor) { v.VisitLiteral(l) }
+    
+    // BinaryNode represents a binary expression — operand, operator,
+    // operand. Both children are themselves nodes (arbitrary nesting).
+    // The node doesn't know or care whether it's an arithmetic op, a
+    // comparison, or a logical AND — the operator is just a string at
+    // this layer; semantic interpretation is the visitor's job.
+    type BinaryNode struct {
+    	ASTNode
+    	Left     Node
+    	Right    Node
+    	Operator string
+    }
+    
+    func (b *BinaryNode) Accept(v Visitor) { v.VisitBinary(b) }
+    
+    // CallNode represents a function invocation — a callee and its
+    // positional arguments. The args are nodes (so nested calls build
+    // up linearly), and the callee itself is a node too (so higher-
+    // order calls like map(fn)(xs) get the right recursive shape).
+    type CallNode struct {
+    	ASTNode
+    	Callee Node
+    	Args   []Node
+    }
+    
+    func (c *CallNode) Accept(v Visitor) { v.VisitCall(c) }
+    
+    // Node is the uniform interface every AST element satisfies. The
+    // double-dispatch shape — Accept(v) calling v.VisitXxx(self) —
+    // protects the tree from needing to know which algorithm runs
+    // against it. Adding a new pass (a new visitor) does NOT touch the
+    // node types; adding a new node type DOES touch every existing
+    // visitor (the pattern's known trade-off).
+    type Node interface {
+    	Accept(Visitor)
+    }
