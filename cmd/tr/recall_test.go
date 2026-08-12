@@ -203,7 +203,7 @@ func TestSynthesisRequestFallbackNoPolicy(t *testing.T) {
 	}
 	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", "m")
 
-	if !strings.Contains(req.System, "You are a technical recall assistant") {
+	if !strings.Contains(req.System, "You are a software development quizzing assistant") {
 		t.Fatalf("expected fallback template in system turn, got %q", req.System)
 	}
 	if strings.Contains(req.System, "## Format contract") {
