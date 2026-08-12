@@ -6,11 +6,12 @@ import (
 	"log"
 	"math/rand/v2"
 
+	"github.com/colinwilliams91/total-recall/assets"
 	"github.com/colinwilliams91/total-recall/internal/ai"
 	"github.com/colinwilliams91/total-recall/internal/cache"
 )
 
-const defaultDifficulty = "intermediate" // TODO: this default diverges from the config default "adaptive" (shouldn't)
+const defaultDifficulty = "intermediate"
 
 // Choice is one option of a multiple-choice recall question. IsCorrect is the
 // engine's correctness key for this choice (per the AI contract, exactly one
@@ -32,32 +33,43 @@ type Question struct {
 	CorrectIndex int      `json:"correct_index"`
 }
 
-// Engine synthesizes recall questions by pulling recent concepts from the
-// cache and prompting the AI provider.
+// SynthesisContext carries the enriched inputs for a single synthesis call:
+// the recent concept rows (with weights, sources, and timestamps), the commit
+// message, and a short diff snippet. All fields are transient — they ride
+// from runPipeline to Synthesize and never touch the SQLite store.
+type SynthesisContext struct {
+	Concepts    []cache.ConceptRow
+	CommitMsg   string
+	DiffSnippet string
+}
+
+// Engine synthesizes recall questions by prompting the AI provider with
+// concepts and context loaded from the cache and the hook envelope.
 type Engine struct {
 	provider ai.Provider
 	store    *cache.Store
+	policy   assets.PromptAsset
 }
 
-// New creates an Engine.  Both provider and store must be non-nil.
+// New creates an Engine. Both provider and store must be non-nil. The
+// question-generation-policy prompt asset is loaded once at construction;
+// a missing or corrupt asset falls back to SourceFallback and Synthesize
+// uses the legacy inline template.
 func New(provider ai.Provider, store *cache.Store) *Engine {
-	return &Engine{provider: provider, store: store}
+	policy, err := assets.Load("question-generation-policy")
+	if err != nil {
+		log.Printf("[recall] policy asset load: %v", err)
+	}
+	return &Engine{provider: provider, store: store, policy: policy}
 }
 
-// Synthesize loads recent concepts for repo+branch from the cache and asks the
-// AI to generate a recall question. Both repo and branch are required; the
-// method returns (nil, nil) (not an error) when either is empty. It also
-// returns (nil, nil) (not an error) when the concept cache is empty for the
-// (repo, branch) pair, or when the AI call or JSON parse fails.
-func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model string) (*Question, error) {
+// Synthesize asks the AI to generate a recall question from the enriched
+// SynthesisContext. Both repo and branch are required.
+func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model string, synth SynthesisContext) (*Question, error) {
 	if repo == "" || branch == "" {
 		return nil, nil
 	}
-	rows, err := e.store.Recent(ctx, repo, branch, 20) // TODO: hardcoded 20 concepts, knob for adaptive recall/difficulty
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
+	if len(synth.Concepts) == 0 {
 		return nil, nil
 	}
 
@@ -65,12 +77,7 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 		difficulty = defaultDifficulty
 	}
 
-	concepts := make([]string, len(rows))
-	for i, r := range rows {
-		concepts[i] = r.Concept
-	}
-
-	req := SynthesisRequest(concepts, difficulty, model)
+	req := SynthesisRequest(synth.Concepts, synth.CommitMsg, synth.DiffSnippet, e.policy.Body, difficulty, model)
 	raw, err := e.provider.Complete(ctx, req)
 	if err != nil {
 		log.Printf("[recall] synthesis AI call failed: %v", err)
@@ -91,10 +98,6 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 
 	q := &Question{Question: rawQ.Question}
 	if len(rawQ.Choices) < 2 {
-		// The AI contract requires at least 2 choices for a multiple-choice
-		// question (see recall-engine spec). Anything less is malformed
-		// synthesis output — log and skip rather than persist a question
-		// with an unusable choices slice.
 		log.Printf("[recall] synthesis returned %d choices (need >=2), skipping", len(rawQ.Choices))
 		return nil, nil
 	}

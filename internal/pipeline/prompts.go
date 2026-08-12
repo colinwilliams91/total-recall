@@ -9,7 +9,7 @@ import (
 
 const (
 	extractionMaxDiffChars = 8000
-	extractionMaxTokens    = 512
+extractionMaxTokens = 1024
 
 	extractionSystem = `You are a technical concept extractor. Analyze the provided Git diff and identify the most important technical concepts, design patterns, or software engineering principles demonstrated by the changes.
 

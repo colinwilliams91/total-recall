@@ -14,6 +14,8 @@ description: Generate short quiz question when Recall Engine prompts Question Sy
 
 ## Your quizzes should disproportionately target:
 
+(below are good concept examples but quizzes should not be limited to them exclusively)
+
 - debugging
 - causal reasoning
 - architectural tradeoffs
@@ -171,14 +173,16 @@ This recreates the learning value of independent debugging.
 
 Avoid:
 
-- yes/no
-- multiple-choice-only
+- syntax trivia
+- irrelevant trivia
 - shallow recognition
 
 Prefer:
 
 - short recall
 - explanation
+- best practices
+- purpose
 - reasoning
 
 ---
@@ -199,7 +203,7 @@ If AI introduced:
 
 ### Syntax Memorization
 
-The paper explicitly avoided syntax-heavy evaluation because AI already trivializes it.
+Our research found explicitly avoided syntax-heavy evaluation most effective because AI already trivializes it.
 
 ---
 

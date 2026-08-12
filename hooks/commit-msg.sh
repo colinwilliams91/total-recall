@@ -17,14 +17,16 @@ TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "")"
 
 if command -v python3 >/dev/null 2>&1; then
     MSG_JSON="$(cat "${COMMIT_MSG_FILE}" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+    DIFF_JSON="$(git diff --cached 2>/dev/null | head -c 32768 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
 else
     MSG_JSON='"<python3 required for message encoding>"'
+    DIFF_JSON='""'
 fi
 
 curl --silent --max-time "${HOOK_TIMEOUT}" \
     --request POST \
     --header "Content-Type: application/json" \
-    --data "{\"hook\":\"commit-msg\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"message\":${MSG_JSON}}}" \
+    --data "{\"hook\":\"commit-msg\",\"repo\":\"${REPO}\",\"branch\":\"${BRANCH}\",\"timestamp\":\"${TIMESTAMP}\",\"payload\":{\"message\":${MSG_JSON},\"diff\":${DIFF_JSON}}}" \
     "${DAEMON_URL}/hooks/commit-msg" >/dev/null 2>&1 \
     || printf "[total-recall] Daemon not running at %s — skipping recall check. Start with 'tr serve'.\n" "${DAEMON_URL}" >&2
 

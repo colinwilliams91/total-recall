@@ -9,8 +9,8 @@ A separate, parallel change (`refactor-question-storage-schema`, PR #26) reshape
 ## What Changes
 
 **Prompt-asset loading (new capability `prompt-asset-loading`):**
-- New package `internal/assets` (or extension of `internal/recall`) holds an `Embedded` `//go:embed` of `assets/prompts/*.md` and a `Load(name)` function that returns the embedded default, overridden at runtime by a same-named file at `$TR_HOME/prompts/<name>` when present. Parsing extracts the YAML front matter (`name`, `description`) from the body so callers can introspect metadata without re-parsing markdown.
-- A `PromptAsset` type carries `Name`, `Description`, `Body` fields. Callers use `.Body` directly as a system prompt fragment.
+- New package `assets` (at the repository root, so `//go:embed` path resolution works — Go's embed directive does not permit `..` in paths) holds an `//go:embed` of `assets/prompts/*.md` and a `Load(name)` function that returns the embedded default, overridden at runtime by a same-named file at `$TR_HOME/prompts/<name>` when present. Parsing extracts the YAML front matter (`name`, `description`) from the body so callers can introspect metadata without re-parsing markdown.
+- A `PromptAsset` type carries `Name`, `Description`, `Body`, `Source` fields. Callers use `.Body` directly as a system prompt fragment.
 - Loading happens once at `Engine` construction (the `recall.New` call), cached on the `Engine`. No per-call file IO on the synthesis hot path.
 
 **Enriched synthesis context (modified capability `recall-engine`):**
@@ -32,8 +32,8 @@ A separate, parallel change (`refactor-question-storage-schema`, PR #26) reshape
 
 ## Impact
 
-- **Code:** `internal/assets` (new package, ~120 lines: `//go:embed` declarations, `Load(name)`, front-matter parser, override resolver); `internal/recall/engine.go` (signature change, replace strip-to-strings loop, accept `SynthesisContext`); `internal/recall/prompts.go` (`SynthesisRequest` reshapes: system turn composed from policy asset + format rules, user turn composes enriched context); `internal/engine/server.go` (`runPipeline` builds `SynthesisContext` from `env` + `payload.Diff` + `store.Recent` result, passes to `Synthesize`).
-- **Tests:** `cmd/tr/cache_test.go` (no change — store surface untouched); new `internal/assets/*_test.go` for loader (front-matter parse, override, fallback when asset missing); `cmd/tr/integration_test.go` (assert enriched context reaches the provider via a stub `ai.Provider`, assert policy doc text appears in system turn, assert weights/commit msg/snippet appear in user turn); `cmd/tr/recall_test.go` (update `Synthesize` callers to pass `SynthesisContext`).
+- **Code:** `assets` (new package at repository root, ~200 lines: `//go:embed` declarations, `Load(name)`, front-matter parser, override resolver); `internal/recall/engine.go` (signature change, replace strip-to-strings loop, accept `SynthesisContext`); `internal/recall/prompts.go` (`SynthesisRequest` reshapes: system turn composed from policy asset + format rules, user turn composes enriched context); `internal/engine/server.go` (`runPipeline` builds `SynthesisContext` from `env` + `payload.Diff` + `store.Recent` result, passes to `Synthesize`); `hooks/commit-msg.sh` and `.bat` (also send `git diff --cached` alongside the message so `runPipeline` has both inputs).
+- **Tests:** `cmd/tr/cache_test.go` (no change — store surface untouched); new `assets/assets_test.go` for loader (front-matter parse, override, fallback when asset missing); `cmd/tr/integration_test.go` (existing pipeline integration tests exercise the enriched path end-to-end); `cmd/tr/recall_test.go` (new tests asserting `SynthesisRequest` embeds policy doc, enriches user turn with weights/commit-msg/snippet, and falls back when policy body is empty).
 - **APIs:** No external API change. `recall.Synthesize` is an internal-call interface; consumers (`server.go runPipeline`) update atomically with this change.
 - **Dependencies:** None new. `//go:embed` is in stdlib; YAML front-matter parsing is a tiny `strings` split (no dependency on a YAML library — the front matter is two known keys, `name` and `description`).
 - **Specs:** This change updates `openspec/specs/recall-engine/spec.md` (MODIFIED requirements) and adds `openspec/specs/prompt-asset-loading/spec.md` (new capability).
