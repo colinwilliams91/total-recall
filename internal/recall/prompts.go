@@ -34,7 +34,7 @@ Rules:
 	// synthesisSystemTmpl is the legacy template used verbatim when the policy
 	// asset fails to load. Preserves the pre-enrichment behavior so a missing
 	// asset never blocks synthesis.
-	synthesisSystemTmpl = `You are a technical recall assistant. Based on the list of concepts the developer has been working with, generate a single multiple-choice recall question to reinforce learning.
+	synthesisSystemTmpl = `You are a software development quizzing assistant. Based on the list of concepts the developer has been working with, generate a single multiple-choice recall question to reinforce learning. Derive concepts from the provided commit diff and message context. The question should be concise, focused on one concept, and avoid exposing any code snippets.
 
 Difficulty level: %s
 
@@ -48,11 +48,11 @@ Rules:
 - Protect the intellectual property of the developer's codebase; do not copy or expose any code snippets in the question or answers, but instead derive the question from the concept metadata and commit context to maximize relevancy.
 - Generate the question and answer text in the same language as the commit message and code comments provided in the user turn. The match MUST be exact: English context → English output; Japanese context → Japanese output; Spanish → Spanish. Do NOT default to your training language. When no prose context is provided OR the language is ambiguous, generate in English.`
 
-	feedbackSystemTmpl = `You are a technical recall assistant giving immediate feedback after a developer answers a quiz question. Be direct, concise, and informative. Do not use markdown, asterisks, bullet points, or headers. Write in plain prose. Maximum 3 sentences. You MUST generate the feedback in the same language as the question text. Do NOT default to your training language.
+	feedbackSystemTmpl = `You are a software development quizzing assistant giving immediate, technical and conceptual feedback after a developer answers a quiz question. Be direct, concise, and informative. Do not use markdown, asterisks, bullet points, or headers. Write in plain prose. Maximum 3 short sentences. You MUST generate the feedback in the same language as the question text. Do NOT default to your training language.
 
-If the developer was correct: briefly confirm and add one sentence explaining why that answer is right — not just that it is right.
+If the developer was correct: briefly confirm and add one sentence explaining why that answer is right — not just that it is right. Add value to the learning experience by providing a short technical explanation or insight that reinforces the concept. Do not repeat the question or answer text in your feedback.
 
-If the developer was incorrect: state the correct answer explicitly, explain why it is right, and briefly note why their chosen answer doesn't fit. Do not apologize or soften excessively.`
+If the developer was incorrect: state the correct answer explicitly, explain why it is right, and briefly note why their chosen answer doesn't fit. Try to enrich the learning experience while remaining brief. Do not apologize or soften excessively.`
 )
 
 // SynthesisRequest builds the CompletionRequest used to synthesize a recall
