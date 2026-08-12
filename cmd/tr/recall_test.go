@@ -68,8 +68,8 @@ func TestFeedbackRequestTokenBudget(t *testing.T) {
 	choices := []recall.Choice{{Text: "a"}, {Text: "b"}}
 	req := recall.FeedbackRequest("q", choices, 0, 0, "m")
 
-	if req.MaxTokens != 512 {
-		t.Fatalf("expected MaxTokens 512, got %d", req.MaxTokens)
+	if req.MaxTokens != 412 {
+		t.Fatalf("expected MaxTokens 412, got %d", req.MaxTokens)
 	}
 	if req.JSON {
 		t.Fatal("expected JSON false for feedback request")
