@@ -40,3 +40,6 @@ scripts/e2e/output/
 
 # E2E test scratch repo
 scripts/e2e/scratch/
+
+# Promptfoo eval output
+evals/**/latest-results.json
