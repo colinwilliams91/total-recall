@@ -89,14 +89,14 @@ func askCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-		am, ok := finalModel.(askModel)
-		if !ok {
+			am, ok := finalModel.(askModel)
+			if !ok {
+				return nil
+			}
+			if out := renderPostAltScreen(am); out != "" {
+				fmt.Print(out)
+			}
 			return nil
-		}
-		if out := renderPostAltScreen(am); out != "" {
-			fmt.Print(out)
-		}
-		return nil
 		},
 	}
 
@@ -119,10 +119,10 @@ const (
 
 type tickMsg struct{}
 type questionMsg struct {
-	id            int64
-	questionType  string
-	question      string
-	choices       []string
+	id           int64
+	questionType string
+	question     string
+	choices      []string
 }
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
@@ -146,8 +146,8 @@ type askModel struct {
 	feedbackResult feedbackMsg
 	skipped        bool
 	advisory       string
-	httpClient     *http.Client // 3s — polls /recall/next (local DB read) and skip POSTs
-	feedbackClient *http.Client // matches ai.DefaultHTTPTimeout — POST /recall/select?feedback=true triggers a synchronous AI call through the daemon
+	httpClient     *http.Client
+	feedbackClient *http.Client
 	repo           string
 	branch         string
 }
@@ -261,7 +261,7 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-		if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
+	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
 			m.state = stateFeedback
 			return m, postAnswer(m.question.id, idx, m.repo, m.branch, m.feedbackClient)
@@ -316,10 +316,10 @@ func postAnswer(id int64, selectedIndex int, repo, branch string, client *http.C
 		}
 		defer resp.Body.Close()
 		var out struct {
-			OK           bool   `json:"ok"`
-			Correct      bool   `json:"correct"`
-			CorrectText  string `json:"correct_answer"`
-			Feedback     string `json:"feedback"`
+			OK          bool   `json:"ok"`
+			Correct     bool   `json:"correct"`
+			CorrectText string `json:"correct_answer"`
+			Feedback    string `json:"feedback"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return feedbackMsg{}
