@@ -38,10 +38,14 @@ Every commit is a learning opportunity.
 
 ## Setup
 
-**Prerequisite:** Git 2.5+ (2015) for linked worktree support (`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature).
+**Prerequisites:**
+- Git 2.5+ (2015) for linked worktree support¹.
+- Go 1.25.5+ to install binary -- or see below for non-Go install path.
+- LLM access via API key or local.
+
+**1. Install the binary (one-time, user-level).**
 
 ```sh
-# 1. Install the binary (one-time, user-level).
 go install github.com/colinwilliams91/total-recall@latest
 ```
 
@@ -79,17 +83,15 @@ tr repo
 
 Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
-### Non-Go install path
+### Non-Go install path¹
 
 Without Go: download the release archive from GitHub Releases, extract, place `tr` (or `tr.exe`) on PATH manually. Same downstream flow.
-
----
 
 ## Configuration
 
 Total Recall uses two config files with clear separation of concerns:
 
-### Inspect the resolved config
+**Inspect the resolved config**
 
 ```sh
 tr config --show
@@ -136,10 +138,14 @@ The group with in optimal intersection of *lowest* Completion Time and *highest*
 
 ## Contributing
 - I strongly believe in the sharing of knowledge, transparent information and FOSS.
+- _Learning_ is what will distinguish us from the robots. 🥲
 - Contributions are welcome!
 - Please see [CONTRIBUTING.md](DOCS/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `tr init` test.
 
 ---
+
+#### Footnotes
+¹ <sup>`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature</sup>
 
 <img src="https://img.shields.io/liberapay/receives/colin-williams-dev.svg?logo=liberapay">
 

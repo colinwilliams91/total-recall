@@ -1,0 +1,47 @@
+description: 'token bucket rate limiting (tokenbucket.go)'
+vars:
+  concepts: [{"concept":"token bucket rate limiting","source":"code","weight":0.9}]
+  commit_msg: 'feat: add token bucket rate limiter for downstream backpressure'
+  context_desc: 'token bucket rate limiting (weight 0.9, source code)'
+  commit_msg_lang: 'feat: add token bucket rate limiter for downstream backpressure'
+  diff: |
+    package ratelimit
+    
+    // TokenBucket implements a classic rate limiter using the token bucket
+    // algorithm. Tokens accrue at `rate` per second up to `capacity`; each
+    // request consumes one token. When the bucket is empty, requests are
+    // rejected (caller MUST back off or queue, not busy-wait).
+    //
+    // The bucket is NOT safe for concurrent use without external locking.
+    // Callers requiring goroutine-safe rate limiting SHOULD wrap Allow()
+    // in a mutex or swap to a channel-based implementation.
+    type TokenBucket struct {
+    	rate     float64
+    	capacity float64
+    	tokens   float64
+    	last     float64
+    	now      func() float64
+    }
+    
+    func New(rate, capacity float64, now func() float64) *TokenBucket {
+    	return &TokenBucket{rate: rate, capacity: capacity, tokens: capacity, now: now}
+    }
+    
+    // Allow returns true if a token is available, consuming it. Returns
+    // false when the bucket is empty — the caller SHOULD apply backpressure
+    // rather than retrying immediately, to avoid stampeding the downstream.
+    func (b *TokenBucket) Allow() bool {
+    	now := b.now()
+    	elapsed := now - b.last
+    	b.last = now
+    
+    	b.tokens += elapsed * b.rate
+    	if b.tokens > b.capacity {
+    		b.tokens = b.capacity
+    	}
+    	if b.tokens < 1 {
+    		return false
+    	}
+    	b.tokens--
+    	return true
+    }

@@ -1,0 +1,65 @@
+description: 'dependency inversion principle (inventory.go)'
+vars:
+  concepts: [{"concept":"dependency inversion principle","source":"code","weight":0.9}]
+  commit_msg: 'feat: add stock reservation service with repository abstraction'
+  context_desc: 'dependency inversion principle (weight 0.9, source code)'
+  commit_msg_lang: 'feat: add stock reservation service with repository abstraction'
+  diff: |
+    package inventory
+    
+    // StockItem is the value object the repository persists. We use a
+    // repository pattern here to decouple the domain from the storage
+    // backend — the caller codes against the Repository interface, not
+    // a concrete SQL or in-memory implementation. Adding a new backend
+    // (e.g., Redis cache, Postgres) means implementing the interface,
+    // not modifying the domain logic that depends on it.
+    type StockItem struct {
+    	SKU      string
+    	Quantity int
+    	Location string
+    }
+    
+    // Repository is the port the domain depends on. The inversion is
+    // deliberate: the domain layer owns the interface, the
+    // infrastructure layer (sqlRepo, memoryRepo) implements it. This
+    // is the dependency inversion principle applied at the module
+    // boundary — high-level policy (stock rules) does not import
+    // low-level detail (database driver).
+    type Repository interface {
+    	Get(sku string) (*StockItem, error)
+    	Save(item StockItem) error
+    	List() ([]StockItem, error)
+    }
+    
+    // ReservationService is a domain service that coordinates a
+    // multi-step reservation across the repository. It depends only on
+    // the Repository abstraction, not the concrete implementation.
+    type ReservationService struct {
+    	repo Repository
+    }
+    
+    func NewReservationService(repo Repository) *ReservationService {
+    	return &ReservationService{repo: repo}
+    }
+    
+    // Reserve decrements quantity for a SKU. The business rule is that
+    // a reservation MUST NOT leave the stock negative — callers
+    // needing oversell semantics wrap this in a higher-level policy
+    // rather than weakening the invariant here.
+    func (s *ReservationService) Reserve(sku string, qty int) error {
+    	item, err := s.repo.Get(sku)
+    	if err != nil {
+    		return err
+    	}
+    	if item.Quantity < qty {
+    		return ErrInsufficientStock
+    	}
+    	item.Quantity -= qty
+    	return s.repo.Save(*item)
+    }
+    
+    var ErrInsufficientStock = errStock{}
+    
+    type errStock struct{}
+    
+    func (errStock) Error() string { return "insufficient stock for reservation" }

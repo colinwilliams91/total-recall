@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Total Recall synthesis prompt quality'
+
+# The provider (provider.js) ignores this prompt string entirely — it reads
+# the test vars and composes the real production prompt via cmd/promptgen.
+prompts:
+  - '{{commit_msg}}'
+
+providers:
+  - id: file://provider.js
+    label: embedded-policy
+  - id: file://provider.js
+    label: variant-policy
+    config:
+      policy: evals/synthesis/policies/variant.md
+
+# Grading provider used for llm-rubric assertions. Pinned explicitly so scores
+# are stable across runs (same model grades every case). Uses OpenRouter with
+# the same key as the synthesis provider.
+defaultTest:
+  options:
+    provider: file://grader.js
+    retries: 2
+  assert:
+    - type: is-json
+      value:
+        type: object
+        required: [question, choices]
+        properties:
+          question: { type: string }
+          choices: { type: array, minItems: 2 }
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        return d.choices.length >= 2 && typeof d.question === 'string' && d.question.length > 10;
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        return d.choices.every(c => typeof c === 'string' && c.length > 1);
+    - type: llm-rubric
+      value: |
+        The question is conceptual and counterfactual — it asks WHY, what
+        would break if, what tradeoff exists, or what invariant is preserved.
+        It is NOT syntax trivia, rote API recall, a variable-name memory test,
+        or a "what does this function do" question. It does not copy code.
+    - type: llm-rubric
+      value: |
+        The provided concepts are: {{context_desc}}.
+        The question topic must be directly relevant to these concepts and
+        commit context. It must NOT be restricted to the policy doc's example
+        topics (exponential backoff, jitter, thundering herd, async) unless
+        those concepts were actually provided.
+    - type: llm-rubric
+      value: |
+        The question and all answer choices must be written in the same
+        language as this commit message: {{commit_msg_lang}}. The commit
+        message provided here is the authoritative language signal. If it is
+        English, the question MUST be in English.
+
+tests:
+  - file://tests/audit.yaml
+  - file://tests/breaker.yaml
+  - file://tests/inventory.yaml
+  - file://tests/parser.yaml
+  - file://tests/pricing.yaml
+  - file://tests/shipping.yaml
+  - file://tests/tokenbucket.yaml
