@@ -2,6 +2,21 @@
 	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
 </p>
 
+<p align="center">
+    <a href="https://github.com/colinwilliams91/total-recall/actions/workflows/ci.yml">
+        <img src="https://github.com/colinwilliams91/total-recall/actions/workflows/ci.yml/badge.svg" alt="CI">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/releases/latest">
+        <img src="https://img.shields.io/github/v/release/colinwilliams91/total-recall" alt="Latest Release">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/colinwilliams91/total-recall" alt="License">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/blob/main/go.mod">
+        <img src="https://img.shields.io/github/go-mod/go-version/colinwilliams91/total-recall" alt="Go Version">
+    </a>
+</p>
+
 > _AI coding assistants make us faster while we slowly forget the fundamentals._
 >
 > _Total-Recall reinforces software engineering knowledge through short, diff-aware quizzes triggered by your normal Git workflow._

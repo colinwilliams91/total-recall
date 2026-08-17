@@ -1,92 +1,83 @@
+# Contributing
 
-### Build
+## *Quickstart 30 seconds*
+==--
+```sh
+go install ./cmd/tr
+tr init          # setup anywhere
+tr repo          # inside a git repo
+tr serve         # persist in 2nd terminal
+```
+==--
+## Build
 
-Using Make:
+The Makefile wraps everything:
 
 ```sh
-make build
+make build       # → bin/tr.exe (Windows) or bin/tr (Linux/macOS)
+make install     # → $GOPATH/bin
+make tidy        # go mod tidy — sync dependencies
+make lint        # golangci-lint (must be installed separately)
+make clean       # remove the bin/ directory
 ```
-
-Produces `tr.exe` (Windows) or `bin/tr` (Linux/macOS).
 
 Or directly with Go:
 
 ```sh
 go build -o bin/tr.exe ./cmd/tr
-```
-
-Install to your $GOPATH/bin:
-
-```sh
-make install
-# or
 go install ./cmd/tr
 ```
 
-#### ENV
-
-- The daemon will run on `localhost:7331` by default, and the config file is located at `~/.tr/config.yaml`.
-- You can override the config file location with `--config <path>`.
-- The init should walk you through the config setup and create the file if it does not exist.
-- BYOK for the lightweight AI inference pipeline.
-**USE YOUR LOCAL MACHINE ENV VARIABLES FOR API KEYS AND EXTRA SECURITY**. Total Recall will not store your API keys in the repo config file.
-
----
-
-### Run
-
-After building:
+## Run
 
 ```sh
 ./bin/tr --help
+./bin/tr serve   # start the daemon on localhost:7331
 ```
 
 Available subcommands:
 
-| Command   |	Description |
-| --------- | ------------- |
-| --help    | Show the help/man page                |
-| serve     | Start the daemon on localhost:7331    |
-| init      | Configure user-level settings (AI provider, API key, model) |
-| repo      | Install hooks in a git repository     |
-| config    | Read/write config values              |
-| status    | Show daemon status and active config  |
-
-Example:
-
 ```sh
-./bin/tr serve
+--help           # Show the help/man page
+init             # Set Provider, API key, LLM -- User scope
+config           # Read/write config values
+repo             # Install git hooks -- Repo scope
+serve            # Start the daemon on localhost:7331
+status           # Show daemon status + active config
 ```
 
----
+**Environment**: the daemon binds `localhost:7331` and user config lives at `~/.tr/config.yaml`, deep-merged with the repo-level `.tr.yaml`. `tr init` walks you through setup and creates the config file if missing. BYOK — you supply your own API keys via local environment variables; Total Recall never stores them in repo config.
 
-### Test
+## Test
 
-#### E2E
+### Automated (Go-native)
 
-> You can run the E2E tests in `./scripts/e2e/` using PowerShell. These tests require the daemon to be running and will create a temporary Git repo for testing.
-> They will output an agent-first JSON log of the test run to `./scripts/e2e/output/` -- add that directory to the `.gitignore` if it is not already there.
-```sh
-./scripts/e2e/run-all.ps1
-```
-
-#### Unit
+No external runners. Tests live in `cmd/tr/*_test.go` and use three strategies: model isolation (pure `Update(msg)`/`View()` calls), headless integration (in-process daemon via `startTestDaemon`), and golden-file snapshots of TUI views.
 
 ```sh
-make test
-# or
-go test ./...
+go test ./...            # entire repo
+go test ./cmd/tr/...     # all tr CLI tests (the bulk of the suite)
 ```
 
-> Note: No test files exist yet — `go test open-source.` will complete with no tests run. The internal packages under `internal` only contain `doc.go` stubs at this stage.
-
----
-
-### Other Useful Commands
+Verify the full build pipeline before pushing:
 
 ```sh
-make tidy    # go mod tidy — sync dependencies
-make lint    # run golangci-lint (must be installed separately)
-make clean   # remove the bin/ directory
+go build ./... && go vet ./... && go test ./...
 ```
-Build and use the `--help` flag to explore more commands and options.
+
+Golden files live in `cmd/tr/testdata/*.golden`. After changing a TUI view, regenerate them:
+
+```sh
+$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/tr/...
+go test -run TestGolden ./cmd/tr/...   # re-run without the flag to verify
+```
+
+### Manual E2E
+
+One flow is still manual: `tr init`, because its `huh` TUI requires a real TTY. Run it with:
+
+```powershell
+.\scripts\e2e\manual-init.ps1
+```
+
+See `scripts/e2e/README.md` for what it covers and why it can't be automated yet.
