@@ -2,6 +2,21 @@
 	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
 </p>
 
+<p align="center">
+    <a href="https://github.com/colinwilliams91/total-recall/actions/workflows/ci.yml">
+        <img src="https://github.com/colinwilliams91/total-recall/actions/workflows/ci.yml/badge.svg" alt="CI">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/releases/latest">
+        <img src="https://img.shields.io/github/v/release/colinwilliams91/total-recall" alt="Latest Release">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/colinwilliams91/total-recall" alt="License">
+    </a>
+    <a href="https://github.com/colinwilliams91/total-recall/blob/main/go.mod">
+        <img src="https://img.shields.io/github/go-mod/go-version/colinwilliams91/total-recall" alt="Go Version">
+    </a>
+</p>
+
 > _AI coding assistants make us faster while we slowly forget the fundamentals._
 >
 > _Total-Recall reinforces software engineering knowledge through short, diff-aware quizzes triggered by your normal Git workflow._
@@ -45,45 +60,23 @@ Every commit is a learning opportunity.
 - Go 1.25.5+ to install binary -- or see below for non-Go install path.
 - LLM access via API key or local.
 
-**1. Install the binary (one-time, user-level).**
-
 ```sh
+# Install the binary    # (one-time, user-level)
 go install github.com/colinwilliams91/total-recall@latest
-```
 
-**2. Initialize user config (run from any directory; one-time, user-level):**
+# Init user config      # (run anywhere; one-time, user-level)
+tr init                 # creates `~/.tr/config.yaml` for conversation analysis & AI provider setup
 
-```sh
-tr init
-```
+# Start the daemon
+tr serve				# runs on `localhost:7331` & must be running for hooks & MCP
+tr status				# Check daemon status
 
-This creates `~/.tr/config.yaml` (your personal config, never committed) and prompts
-you about enabling conversation analysis and AI provider setup.
-
-**3. Start the daemon:**
-
-```sh
-tr serve
-```
-
-The daemon runs on `localhost:7331` and must be running for hooks and MCP to function.
-
-**Check daemon status:**
-
-```sh
-tr status
-```
-
-Prints `✓ Daemon running` (with config summary) or `✗ Daemon not running` (exits 1, for scripting).
-
-**4. Initialize a repo (adds `.tr.yaml`, installs Git hooks):**
-
-```sh
+# Init a repo
 cd your-project/
-tr repo
+tr repo					# adds project `.tr.yaml`, installs Git hooks
 ```
 
-Prompts you to select which Git hooks to enable (pre-commit, commit-msg, pre-push) and installs them into `.git/hooks/`. Re-run anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
+Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
 ### Non-Go install path¹
 
