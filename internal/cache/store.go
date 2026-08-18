@@ -449,7 +449,7 @@ func (s *Store) SubmitSelection(ctx context.Context, questionID int64, selectedC
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO question_events (question_id, event_type) VALUES (?, 'answered')`,
+		`INSERT INTO question_events (question_id, event_type, actor) VALUES (?, 'answered', 'user')`,
 		questionID); err != nil {
 		return fmt.Errorf("inserting answered event: %w", err)
 	}

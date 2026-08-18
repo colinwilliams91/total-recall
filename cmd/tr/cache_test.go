@@ -661,6 +661,37 @@ func TestSkipQuestionWritesEventAndStatus(t *testing.T) {
 	}
 }
 
+func TestSubmitSelectionWritesUserActor(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "answer me", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		t.Fatalf("SaveQuestion failed: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion failed: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("expected non-nil question")
+	}
+
+	if err := s.SubmitSelection(ctx, claimed.ID, nil, ""); err != nil {
+		t.Fatalf("SubmitSelection failed: %v", err)
+	}
+
+	db := openRawDB(t)
+	var actor sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT actor FROM question_events WHERE question_id = ? AND event_type = 'answered'`,
+		claimed.ID).Scan(&actor); err != nil {
+		t.Fatalf("raw query answered event: %v", err)
+	}
+	if !actor.Valid || actor.String != "user" {
+		t.Fatalf("expected answered event actor %q, got %q (valid=%v)", "user", actor.String, actor.Valid)
+	}
+}
+
 func TestSubmitSelectionWithFeedback(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
