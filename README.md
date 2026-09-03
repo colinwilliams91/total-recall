@@ -25,39 +25,11 @@
 
 _The cognitive retention layer for AI-assisted engineering. Four seconds per Git event is two letter-grades of skill retention saved._
 
-## Problem Statement
-
-**Aggressive adoption of AI assisted development tooling proves to have negative impacts on software engineering skill development _unless engineers stay "cognitively engaged"_.**
-
-> 84% of developers are using AI tools this year.
-- [Stack Overflow's developer survey 2025](https://survey.stackoverflow.co/2025/ai#sentiment-and-usage-ai-select-ai-select)
-
-> We find that AI use impairs conceptual understanding, code reading, and debugging abilities... For a 27-point quiz, this translates into a 17% score difference or 2 [letter] grade points.
-- [How AI Impacts Skill Formation](https://arxiv.org/pdf/2601.20245), arXiv - Cornell University
-	- Judy Hanwen Shen, Alex Tamkin
-
-> We found that using AI assistance led to a statistically significant decrease in mastery... AI may accelerate productivity while inhibiting skills formation.
-- [How AI assistance impacts the formation of coding skills](https://www.anthropic.com/research/AI-assistance-coding-skills)
-	- Anthropic Research Team
-
-Checkout [DATA.md](DOCS/DATA.md) for more information on the research findings.
-
-## Philosophy
-You're a software engineer.
-
-AI writes faster. You think deeper.
-
-Don't forget how to design good software.
-
-Hone software engineering while AI writes code.
-
-Every commit is a learning opportunity.
-
 ## Setup
 
 **Prerequisites:**
 - Git 2.5+ (2015) for linked worktree support¹.
-- Go 1.25.5+ to install binary -- or see below for non-Go install path.
+- Go 1.25.5+ to install binary -- _or see below for non-Go install path._
 - LLM access via API key or local.
 
 ```sh
@@ -69,9 +41,11 @@ tr init                 # creates `~/.tr/config.yaml` for conversation analysis 
 
 # Start the daemon
 tr serve				# runs on `localhost:7331` & must be running for hooks & MCP
+
+# New terminal
 tr status				# Check daemon status
 
-# Init a repo
+# Init in a repo
 cd your-project/
 tr repo					# adds project `.tr.yaml`, installs Git hooks
 ```
@@ -92,9 +66,35 @@ Total-Recall uses two config files with clear separation of concerns:
 tr config --show
 ```
 
-Prints every key annotated with its source (`user` / `repo` / `default`).
+Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
 Checkout [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+
+## Philosophy
+You're a software engineer.
+
+AI writes faster. You think deeper.
+
+Don't forget how to design good software.
+
+Every commit is a learning opportunity.
+
+## Problem Statement
+
+**Aggressive adoption of AI assisted development tooling proves to have negative impacts on software engineering skill development _unless engineers stay "cognitively engaged"_.**
+
+> 84% of developers are using AI tools this year.
+- [Stack Overflow's developer survey 2025](https://survey.stackoverflow.co/2025/ai#sentiment-and-usage-ai-select-ai-select)
+
+> We find that AI use impairs conceptual understanding, code reading, and debugging abilities... For a 27-point quiz, this translates into a 17% score difference or 2 [letter] grade points.
+- [How AI Impacts Skill Formation](https://arxiv.org/pdf/2601.20245), arXiv - Cornell University
+	- Judy Hanwen Shen, Alex Tamkin
+
+> We found that using AI assistance led to a statistically significant decrease in mastery... AI may accelerate productivity while inhibiting skills formation.
+- [How AI assistance impacts the formation of coding skills](https://www.anthropic.com/research/AI-assistance-coding-skills)
+	- Anthropic Research Team
+
+Checkout [DATA.md](DOCS/DATA.md) for more information on the research findings.
 
 ---
 ---
