@@ -29,7 +29,7 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 
 **Prerequisites:**
 - Git 2.5+ (2015) for linked worktree support¹.
-- Go 1.25.5+ to install binary -- _or see below for non-Go install path._
+- Go 1.25.5+ to install binary² -- _or see below for non-Go install path._
 - LLM access via API key or local.
 
 ```sh
@@ -52,7 +52,7 @@ tr repo					# adds project `.tr.yaml`, installs Git hooks
 
 Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
-### Non-Go install path¹
+### Non-Go install path²
 
 Without Go: download the release archive from GitHub Releases, extract, place `tr` (or `tr.exe`) on PATH manually. Same downstream flow.
 
@@ -108,7 +108,8 @@ Checkout [DATA.md](DOCS/DATA.md) for more information on the research findings.
 ---
 
 #### Footnotes
-¹ <sup>`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature</sup>
+¹ <sup>`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature</sup> \
+² <sup>`Go` is not actually required for installation</sup>
 
 <img src="https://img.shields.io/liberapay/receives/colin-williams-dev.svg?logo=liberapay">
 
