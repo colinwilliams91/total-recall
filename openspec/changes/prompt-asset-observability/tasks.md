@@ -41,7 +41,7 @@
 - [ ] 4.6 Tests:
   - [ ] 4.6.1 `TestAssetResetSingleOverride`: create one override, run `reset <name>`, assert file gone, stdout contains the restart advisory
   - [ ] 4.6.2 `TestAssetResetNoOverrideIsNoOp`: no override present, `reset <name>` exits 0 with the "nothing to reset" message
-  - 4.6.3 `TestAssetResetMultipleRequiresAllFlag`: two overrides, `reset` (no args) without `--all` refuses and exits non-zero; with `--all --force` both files are gone
+  - [ ] 4.6.3 `TestAssetResetMultipleRequiresAllFlag`: two overrides, `reset` (no args) without `--all` refuses and exits non-zero; with `--all --force` both files are gone
   - [ ] 4.6.4 `TestAssetResetNoTrHomeExits1`: `$TR_HOME` unset, exits 1 with the "TR_HOME not set" message
 
 ## 5. `tr asset sync [<name>]` (`cmd/tr/asset.go`)
@@ -63,6 +63,9 @@
 - [ ] 6.1 `AGENTS.md` — append to the existing Prompt assets line a brief mention of `tr asset list|reset|sync` and the override observability surface
 - [ ] 6.2 `DOCS/CORE/DATA_ANALYSIS.md` — no change; the existing "Status: wired" note from `synthesize-from-context` already covers the override mechanism; observability is an implementation detail
 - [ ] 6.3 Update `synthesize-from-context` design.md "Risk" section to cross-reference this change ("Override drift / silent rot mitigated by `prompt-asset-observability`").
+- [ ] 6.4 `README.md` — add one line in the Setup block mentioning `tr --help` (or `tr help`) lists all commands/flags. Help is pre-existing Cobra behavior (`tr --help`, `tr -h`, and `tr help` all work today); this is a docs-only line, no code change.
+- [ ] 6.5 `README.md` — add a short "Managing prompt-asset overrides" note covering `tr asset list|reset|sync`: what each does (`list` inspects resolved sources/ages, `reset` discards an override, `sync` re-baselines from the embedded default) and the reset/sync restart-advisory caveat (daemon restart required to pick up file mutations).
+- [ ] 6.6 `DOCS/CONTRIBUTING.md` — add an `asset` row to the "Available subcommands" list in the Run section so the per-command inventory stays current.
 
 ## 7. Final verification
 
