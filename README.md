@@ -34,7 +34,7 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 
 ```sh
 # Install the binary    # (one-time, user-level)
-go install github.com/colinwilliams91/total-recall@latest
+go install github.com/colinwilliams91/total-recall/cmd/tr@latest
 
 # Init user config      # (run anywhere; one-time, user-level)
 tr init                 # creates `~/.tr/config.yaml` for conversation analysis & AI provider setup
