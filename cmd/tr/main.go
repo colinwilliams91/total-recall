@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/colinwilliams91/total-recall/assets"
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/engine"
@@ -42,6 +43,7 @@ func main() {
 		configCmd(),
 		statusCmd(),
 		askCmd(),
+		assetCmd(),
 	)
 
 	if err := root.Execute(); err != nil {
@@ -59,6 +61,8 @@ func serveCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("loading config: %w", err)
 			}
+
+			assets.SetDriftThreshold(cfg.PromptAsset.DriftWarningDays)
 
 			provider, err := newProvider(cfg.AI)
 			if err != nil {

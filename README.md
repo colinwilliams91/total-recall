@@ -52,6 +52,20 @@ tr repo					# adds project `.tr.yaml`, installs Git hooks
 
 Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
+Run `tr --help` for the full command and flag reference.
+
+### Managing prompt-asset overrides
+
+Prompt assets (e.g. the question-generation policy) ship inside the binary but can be overridden at `$TR_HOME/prompts/<name>.md` — edit, restart the daemon, done. Total Recall ships observability and recovery for those overrides:
+
+```sh
+tr asset list						# resolved source, path & age of every prompt asset
+tr asset sync <name>				# re-baseline an override from the shipped default
+tr asset reset [<name>]				# remove an override (defaults take effect on next daemon restart)
+```
+
+`tr config --show` lists resolved prompt assets under its `prompt assets:` section. A startup `OVERRIDE WARNING` fires when an override is older than the shipped default by more than `prompt-asset.drift-warning-days` (default 90; `0` disables). `reset`/`sync` mutate files only — restart `tr serve` to pick up the change.
+
 ### Non-Go install path²
 
 Without Go: download the release archive from GitHub Releases, extract, place `tr` (or `tr.exe`) on PATH manually. Same downstream flow.

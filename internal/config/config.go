@@ -9,9 +9,10 @@ import (
 // UserConfig is loaded from ~/.tr/config.yaml.
 // It defines personal defaults that apply across all repositories.
 type UserConfig struct {
-	Privacy PrivacyConfig `yaml:"privacy"`
-	AI      AIConfig      `yaml:"ai"`
-	Recall  RecallConfig  `yaml:"recall"`
+	Privacy     PrivacyConfig     `yaml:"privacy"`
+	AI          AIConfig          `yaml:"ai"`
+	Recall      RecallConfig      `yaml:"recall"`
+	PromptAsset PromptAssetConfig `yaml:"prompt-asset,omitempty"`
 }
 
 // PrivacyConfig controls opt-in data processing features.
@@ -31,15 +32,15 @@ type AIConfig struct {
 // KnownProviders maps user-facing provider names to their default base URLs.
 // The adapter column is determined by which package handles each provider:
 //
-//	anthropic → internal/ai/anthropic (native Messages API)
-//	openai    → internal/ai/openai    (OpenAI Chat Completions API)
-//	ollama    → internal/ai/openai    (OpenAI-compatible)
-//	groq      → internal/ai/openai    (OpenAI-compatible)
-//  qwen      → internal/ai/openai    (OpenAI-compatible)
-//  minimax   → internal/ai/openai    (OpenAI-compatible)
-//  deepseek  → internal/ai/openai    (OpenAI-compatible)
-//	lm-studio → internal/ai/openai    (OpenAI-compatible)
-//	custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
+//		anthropic → internal/ai/anthropic (native Messages API)
+//		openai    → internal/ai/openai    (OpenAI Chat Completions API)
+//		ollama    → internal/ai/openai    (OpenAI-compatible)
+//		groq      → internal/ai/openai    (OpenAI-compatible)
+//	 qwen      → internal/ai/openai    (OpenAI-compatible)
+//	 minimax   → internal/ai/openai    (OpenAI-compatible)
+//	 deepseek  → internal/ai/openai    (OpenAI-compatible)
+//		lm-studio → internal/ai/openai    (OpenAI-compatible)
+//		custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
 //
 // For named presets, BaseURL in AIConfig is ignored — the registry value is used.
 // For "custom", AIConfig.BaseURL is required; ai.New returns ErrNoProvider if empty.
@@ -73,6 +74,13 @@ type RecallConfig struct {
 	MaxQuestions int    `yaml:"max_questions"`
 }
 
+// PromptAssetConfig controls prompt-asset override observability.
+// It is user-level only: a prompt-asset block in .tr.yaml is discarded with a
+// warning, consistent with privacy.* and ai.*.
+type PromptAssetConfig struct {
+	DriftWarningDays int `yaml:"drift-warning-days"`
+}
+
 // RepoConfig is loaded from .tr.yaml in the repository root.
 // It defines project-specific settings and optional per-repo recall overrides.
 // Privacy and AI keys are user-level only — they are discarded with a warning if present here.
@@ -82,8 +90,9 @@ type RepoConfig struct {
 	Presentation PresentationConfig `yaml:"presentation"`
 	Recall       *RecallConfig      `yaml:"recall,omitempty"`
 	// User-level only. If present in .tr.yaml, discarded with a warning.
-	Privacy *PrivacyConfig `yaml:"privacy,omitempty"`
-	AI      *AIConfig      `yaml:"ai,omitempty"`
+	Privacy     *PrivacyConfig     `yaml:"privacy,omitempty"`
+	AI          *AIConfig          `yaml:"ai,omitempty"`
+	PromptAsset *PromptAssetConfig `yaml:"prompt-asset,omitempty"`
 }
 
 // HooksConfig controls which Git hooks are active for the repository.
@@ -109,6 +118,7 @@ type Config struct {
 	Privacy      PrivacyConfig
 	AI           AIConfig
 	Recall       RecallConfig
+	PromptAsset  PromptAssetConfig
 	Hooks        HooksConfig
 	Mode         ModeConfig
 	Presentation PresentationConfig
@@ -125,6 +135,7 @@ type ConfigSources struct {
 	AIBaseURL                   string
 	RecallDifficulty            string
 	RecallMaxQuestions          string
+	PromptAssetDriftWarningDays string
 	HooksPreCommit              string
 	HooksCommitMsg              string
 	HooksPrePush                string
@@ -146,6 +157,9 @@ func DefaultUserConfig() UserConfig {
 		Recall: RecallConfig{
 			Difficulty:   "adaptive",
 			MaxQuestions: 1,
+		},
+		PromptAsset: PromptAssetConfig{
+			DriftWarningDays: 90,
 		},
 	}
 }

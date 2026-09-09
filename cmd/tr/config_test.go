@@ -300,3 +300,127 @@ func TestUserConfigPathAndDirFallbackWhenTRHomeUnset(t *testing.T) {
 		t.Fatalf("expected path %q, got %q", expectedPath, path)
 	}
 }
+
+// ── prompt-asset config + show section ────────────────────────────────────────
+
+// Task 2.5.3: DriftWarningDays defaults to 90 in DefaultUserConfig.
+func TestDefaultDriftWarningDaysIs90(t *testing.T) {
+	cfg := config.DefaultUserConfig()
+	if cfg.PromptAsset.DriftWarningDays != 90 {
+		t.Fatalf("expected default drift-warning-days 90, got %d", cfg.PromptAsset.DriftWarningDays)
+	}
+
+	merged := config.Merge(&cfg, nil)
+	if merged.Sources.PromptAssetDriftWarningDays != "[user]" {
+		t.Fatalf("expected [user] source for drift-warning-days, got %q", merged.Sources.PromptAssetDriftWarningDays)
+	}
+}
+
+// Spec scenario: a negative threshold is normalized to the 0 (disable)
+// sentinel at merge time, with the exact advisory log line.
+func TestMergeNormalizesNegativeDriftWarningDays(t *testing.T) {
+	user := config.DefaultUserConfig()
+	user.PromptAsset.DriftWarningDays = -10
+
+	var stderr bytes.Buffer
+	restore := captureStderr(&stderr)
+	merged := config.Merge(&user, nil)
+	restore()
+
+	if merged.PromptAsset.DriftWarningDays != 0 {
+		t.Fatalf("expected negative drift-warning-days normalized to 0, got %d", merged.PromptAsset.DriftWarningDays)
+	}
+	if !strings.Contains(stderr.String(), "[config] prompt-asset.drift-warning-days (-10) is negative — treated as 0 (warning disabled)") {
+		t.Fatalf("expected negative-threshold advisory on stderr, got:\n%s", stderr.String())
+	}
+}
+
+// Spec scenario: a prompt-asset block in .tr.yaml is user-level only — the
+// load layer warns and the merge layer discards it.
+func TestRepoPromptAssetBlockDiscardedWithWarning(t *testing.T) {
+	tmp := t.TempDir()
+	repoYaml := "prompt-asset:\n  drift-warning-days: 5\n"
+	if err := os.WriteFile(filepath.Join(tmp, ".tr.yaml"), []byte(repoYaml), 0o644); err != nil {
+		t.Fatalf("write .tr.yaml: %v", err)
+	}
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { os.Chdir(origWd) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	user := config.DefaultUserConfig()
+	var stderr bytes.Buffer
+	restore := captureStderr(&stderr)
+	repo, err := config.LoadRepoConfig()
+	if err != nil {
+		t.Fatalf("LoadRepoConfig: %v", err)
+	}
+	merged := config.Merge(&user, repo)
+	restore()
+
+	if merged.PromptAsset.DriftWarningDays != 90 {
+		t.Fatalf("expected repo prompt-asset block to be discarded (default 90 kept), got %d", merged.PromptAsset.DriftWarningDays)
+	}
+	if !strings.Contains(stderr.String(), "prompt-asset settings are user-level only") {
+		t.Fatalf("expected user-level-only warning on stderr, got:\n%s", stderr.String())
+	}
+}
+
+// Task 2.5.2: with $TR_HOME unset, the show section lists the asset as
+// embedded with no override path.
+func TestConfigShowEmbeddedDefault(t *testing.T) {
+	t.Setenv("TR_HOME", "")
+	user := config.DefaultUserConfig()
+	cfg := config.Merge(&user, nil)
+
+	var buf bytes.Buffer
+	config.Show(cfg, &buf)
+
+	output := buf.String()
+	if !strings.Contains(output, "prompt assets:") {
+		t.Fatalf("expected 'prompt assets:' section in show output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "question-generation-policy: <embedded>") {
+		t.Fatalf("expected embedded asset line, got:\n%s", output)
+	}
+	if !strings.Contains(output, "[embedded]") || !strings.Contains(output, ", embedded") {
+		t.Fatalf("expected embedded source tag and age, got:\n%s", output)
+	}
+	if !strings.Contains(output, "drift-warning-days: 90") {
+		t.Fatalf("expected prompt-asset config block in show output, got:\n%s", output)
+	}
+}
+
+// Task 2.5.1: with $TR_HOME set and an override present, the show section
+// lists the resolved override path with an [override] source tag.
+func TestConfigShowListsPromptAssets(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+	overridePath := filepath.Join(tmp, "prompts", "question-generation-policy.md")
+	if err := os.MkdirAll(filepath.Dir(overridePath), 0o755); err != nil {
+		t.Fatalf("mkdir prompts dir: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte("## Custom policy\n\nAlways ask about race conditions.\n"), 0o644); err != nil {
+		t.Fatalf("write override: %v", err)
+	}
+
+	user := config.DefaultUserConfig()
+	cfg := config.Merge(&user, nil)
+	var buf bytes.Buffer
+	config.Show(cfg, &buf)
+
+	output := buf.String()
+	if !strings.Contains(output, "prompt assets:") {
+		t.Fatalf("expected 'prompt assets:' section in show output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "question-generation-policy: "+overridePath) {
+		t.Fatalf("expected resolved override path in section, got:\n%s", output)
+	}
+	if !strings.Contains(output, "[override]") {
+		t.Fatalf("expected [override] source tag, got:\n%s", output)
+	}
+}
