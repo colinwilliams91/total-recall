@@ -212,6 +212,7 @@ func TestDetectShell(t *testing.T) {
 
 // TestShellWarning verifies the advisory strings for each shell kind.
 func TestShellWarning(t *testing.T) {
+	t.Setenv("GOBIN", "/custom/go/bin")
 	cases := []struct {
 		kind     shellKind
 		contains []string
@@ -228,5 +229,17 @@ func TestShellWarning(t *testing.T) {
 				t.Errorf("kind=%d: warning %q missing %q", tc.kind, w, s)
 			}
 		}
+	}
+}
+
+func TestShellWarningUsesGOBIN(t *testing.T) {
+	t.Setenv("GOBIN", "/custom/go/bin")
+
+	warning := shellWarning(shellBash)
+	if !strings.Contains(warning, "/custom/go/bin") {
+		t.Fatalf("expected warning to use GOBIN, got %q", warning)
+	}
+	if strings.Contains(warning, "GOPATH") {
+		t.Fatalf("expected warning not to suggest GOPATH when GOBIN is set, got %q", warning)
 	}
 }

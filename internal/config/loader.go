@@ -108,6 +108,12 @@ recall:
 
   # Maximum number of recall questions per commit (default: 1).
   max_questions: {{.Recall.MaxQuestions}}
+
+prompt-asset:
+  # Days after which a stale prompt-asset override triggers an
+  # "OVERRIDE WARNING" at daemon startup. 0 disables the warning.
+  # Manage overrides with: tr asset list | reset | sync
+  drift-warning-days: {{.PromptAsset.DriftWarningDays}}
 `))
 
 // writeUserConfig writes cfg to path using the self-documenting YAML template.
@@ -214,6 +220,12 @@ func warnRepoConfigSecrets(cfg *RepoConfig) {
 		fmt.Fprintln(os.Stderr,
 			"⚠  .tr.yaml contains a 'privacy' block — privacy settings are user-level only.\n"+
 				"   These values are being ignored. Remove the privacy block from .tr.yaml.")
+	}
+
+	if cfg.PromptAsset != nil {
+		fmt.Fprintln(os.Stderr,
+			"⚠  .tr.yaml contains a 'prompt-asset' block — prompt-asset settings are user-level only.\n"+
+				"   These values are being ignored. Move them to ~/.tr/config.yaml.")
 	}
 
 	if cfg.AI == nil {

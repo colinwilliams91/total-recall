@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -61,14 +62,44 @@ func detectShell() shellKind {
 }
 
 func shellWarning(s shellKind) string {
-	const prefix = "⚠  tr not found on PATH. Add $GOPATH/bin to PATH with: "
+	pathDir := goInstallDir()
+	const fallbackPathDir = "$(go env GOPATH)/bin"
+	if pathDir == "" {
+		pathDir = fallbackPathDir
+	}
+	prefix := fmt.Sprintf("⚠  tr not found on PATH. Add %s to PATH with: ", pathDir)
 	switch s {
 	case shellZsh:
-		return prefix + `echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc`
+		return prefix + fmt.Sprintf(`echo 'export PATH="$PATH:%s"' >> ~/.zshrc`, pathDir)
 	case shellPowerShell:
-		return prefix + `Add-Content $PROFILE 'set PATH="$PATH;$(go env GOPATH)/bin"'`
+		return prefix + fmt.Sprintf(`Add-Content $PROFILE '$env:Path = "$env:Path;%s"'`, pathDir)
 	default:
 		// bash + other (fish, nushell, etc.) — bash form is the most portable.
-		return prefix + `echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.bashrc`
+		return prefix + fmt.Sprintf(`echo 'export PATH="$PATH:%s"' >> ~/.bashrc`, pathDir)
 	}
+}
+
+// goInstallDir resolves the directory where go install places binaries.
+// GOBIN takes precedence; otherwise Go uses the first GOPATH entry's bin directory.
+func goInstallDir() string {
+	if dir := strings.TrimSpace(os.Getenv("GOBIN")); dir != "" {
+		return dir
+	}
+
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+
+	if output, err := exec.Command(goPath, "env", "GOBIN").Output(); err == nil {
+		if dir := strings.TrimSpace(string(output)); dir != "" {
+			return dir
+		}
+	}
+	if output, err := exec.Command(goPath, "env", "GOPATH").Output(); err == nil {
+		if paths := filepath.SplitList(strings.TrimSpace(string(output))); len(paths) > 0 && paths[0] != "" {
+			return filepath.Join(paths[0], "bin")
+		}
+	}
+	return ""
 }

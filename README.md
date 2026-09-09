@@ -36,6 +36,10 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 # Install the binary    # (one-time, user-level)
 go install github.com/colinwilliams91/total-recall/cmd/tr@latest
 
+# Verify the installed binary and its location
+command -v tr           # (this directory must be on your PATH)
+tr --version
+
 # Init user config      # (run anywhere; one-time, user-level)
 tr init                 # creates `~/.tr/config.yaml` for conversation analysis & AI provider setup
 
@@ -51,6 +55,20 @@ tr repo					# adds project `.tr.yaml`, installs Git hooks
 ```
 
 Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
+
+Run `tr --help` for the full command and flag reference.
+
+### Managing prompt-asset overrides
+
+Prompt assets (e.g. the question-generation policy) ship inside the binary but can be overridden at `~/.tr/prompts/<name>.md` (or `$TR_HOME/prompts/` when `TR_HOME` is set) — edit, restart the daemon, done. Total Recall ships observability and recovery for those overrides:
+
+```sh
+tr asset list						# resolved source, path & age of every prompt asset
+tr asset sync <name>				# re-baseline an override from the shipped default
+tr asset reset [<name>]				# remove an override (defaults take effect on next daemon restart)
+```
+
+`tr config --show` lists resolved prompt assets under its `prompt assets:` section. A startup `OVERRIDE WARNING` fires when an override is older than the shipped default by more than `prompt-asset.drift-warning-days` (default 90; `0` disables). `reset`/`sync` mutate files only — restart `tr serve` to pick up the change.
 
 ### Non-Go install path²
 

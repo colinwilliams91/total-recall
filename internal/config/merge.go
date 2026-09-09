@@ -1,5 +1,10 @@
 package config
 
+import (
+	"fmt"
+	"os"
+)
+
 const (
 	sourceUser    = "[user]"
 	sourceRepo    = "[repo]"
@@ -17,9 +22,10 @@ const (
 //   - A nil repo means no .tr.yaml was found; hook/mode/presentation sources are "default".
 func Merge(user *UserConfig, repo *RepoConfig) *Config {
 	cfg := &Config{
-		Privacy: user.Privacy,
-		AI:      user.AI,
-		Recall:  user.Recall,
+		Privacy:     user.Privacy,
+		AI:          user.AI,
+		Recall:      user.Recall,
+		PromptAsset: user.PromptAsset,
 		Sources: ConfigSources{
 			PrivacyConversationAnalysis: sourceUser,
 			AIProvider:                  sourceUser,
@@ -28,6 +34,7 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 			AIBaseURL:                   sourceUser,
 			RecallDifficulty:            sourceUser,
 			RecallMaxQuestions:          sourceUser,
+			PromptAssetDriftWarningDays: sourceUser,
 			HooksPreCommit:              sourceDefault,
 			HooksCommitMsg:              sourceDefault,
 			HooksPrePush:                sourceDefault,
@@ -35,6 +42,16 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 			PresentationTerminal:        sourceDefault,
 			PresentationMCP:             sourceDefault,
 		},
+	}
+
+	// A negative drift threshold is the user misexpressing "disable the
+	// warning"; normalize to the explicit 0 sentinel rather than letting the
+	// assets package clamp silently.
+	if cfg.PromptAsset.DriftWarningDays < 0 {
+		fmt.Fprintf(os.Stderr,
+			"[config] prompt-asset.drift-warning-days (%d) is negative — treated as 0 (warning disabled)\n",
+			user.PromptAsset.DriftWarningDays)
+		cfg.PromptAsset.DriftWarningDays = 0
 	}
 
 	if repo == nil {

@@ -44,6 +44,7 @@ config           # Read/write config values
 repo             # Install git hooks -- Repo scope
 serve            # Start the daemon on localhost:7331
 status           # Show daemon status + active config
+asset            # Inspect/manage prompt-asset overrides: list | reset | sync
 ```
 
 **Environment**: the daemon binds `localhost:7331` and user config lives at `~/.tr/config.yaml`, deep-merged with the repo-level `.tr.yaml`. `tr init` walks you through setup and creates the config file if missing. BYOK — you supply your own API keys via local environment variables; Total Recall never stores them in repo config.
