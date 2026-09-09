@@ -19,8 +19,19 @@ func resetCache(t *testing.T) {
 	cacheMu.Unlock()
 }
 
-func TestLoadEmbedded(t *testing.T) {
+// isolateHome points HOME/USERPROFILE at a temp dir and empties TR_HOME so
+// dataDir() resolves into the temp dir — tests that read the default data dir
+// never touch the real ~/.tr.
+func isolateHome(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("TR_HOME", "")
+}
+
+func TestLoadEmbedded(t *testing.T) {
+	isolateHome(t)
 	resetCache(t)
 
 	asset, err := Load("question-generation-policy")
@@ -75,6 +86,57 @@ func TestLoadOverride(t *testing.T) {
 	}
 }
 
+// The review follow-up fix: overrides load from the default data dir
+// (~/.tr) when TR_HOME is unset — the override mechanism is not gated on the
+// env var being set.
+func TestLoadOverrideFromDefaultDataDir(t *testing.T) {
+	isolateHome(t)
+	resetCache(t)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	overridePath := filepath.Join(home, ".tr", "prompts", "question-generation-policy.md")
+	if err := os.MkdirAll(filepath.Dir(overridePath), 0o755); err != nil {
+		t.Fatalf("mkdir override dir: %v", err)
+	}
+	overrideBody := "## Default-dir policy\n\nAlways ask about error handling.\n"
+	if err := os.WriteFile(overridePath, []byte(overrideBody), 0o644); err != nil {
+		t.Fatalf("write override: %v", err)
+	}
+
+	asset, err := Load("question-generation-policy")
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if asset.Source != SourceOverride {
+		t.Fatalf("expected Source=%q from default data dir, got %q", SourceOverride, asset.Source)
+	}
+	if asset.Path != overridePath {
+		t.Fatalf("expected Path=%q, got %q", overridePath, asset.Path)
+	}
+	if !strings.Contains(asset.Body, "Default-dir policy") {
+		t.Fatalf("expected override body from default data dir, got: %.200s", asset.Body)
+	}
+}
+
+// An unresolvable home dir means no override could exist; Load falls through
+// to the embedded default instead of failing.
+func TestLoadUnresolvableDataDirFallsBackToEmbedded(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("TR_HOME", "")
+	resetCache(t)
+
+	asset, err := Load("question-generation-policy")
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if asset.Source != SourceEmbedded {
+		t.Fatalf("expected Source=%q when data dir is unresolvable, got %q", SourceEmbedded, asset.Source)
+	}
+}
+
 func TestLoadOverrideMissingFallsBackToEmbedded(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TR_HOME", tmp)
@@ -90,7 +152,7 @@ func TestLoadOverrideMissingFallsBackToEmbedded(t *testing.T) {
 }
 
 func TestLoadMissing(t *testing.T) {
-	t.Setenv("TR_HOME", "")
+	isolateHome(t)
 	resetCache(t)
 
 	var buf strings.Builder
@@ -160,7 +222,7 @@ func TestParseFrontMatterUnknownKeysIgnored(t *testing.T) {
 }
 
 func TestLoadCachedAfterFirstCall(t *testing.T) {
-	t.Setenv("TR_HOME", "")
+	isolateHome(t)
 	resetCache(t)
 
 	first, err := Load("question-generation-policy")
@@ -307,7 +369,7 @@ func TestLoadWarnDisabledAtZeroThreshold(t *testing.T) {
 }
 
 func TestLoadEmbeddedIsSilent(t *testing.T) {
-	t.Setenv("TR_HOME", "")
+	isolateHome(t)
 	resetCache(t)
 
 	restore := captureLog(t)

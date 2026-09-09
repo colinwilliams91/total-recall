@@ -1,10 +1,11 @@
 // Package assets loads prompt-asset markdown files shipped under assets/prompts/
-// and overlays runtime overrides from $TR_HOME/prompts/. The canonical asset
-// today is question-generation-policy.md; future prompt assets follow the same
-// loader pattern.
+// and overlays runtime overrides from the Total Recall data dir's prompts/
+// directory ($TR_HOME when set, else ~/.tr). The canonical asset today is
+// question-generation-policy.md; future prompt assets follow the same loader
+// pattern.
 //
 // Embedded defaults ship inside the binary via //go:embed; a developer iterating
-// on question style drops a replacement at $TR_HOME/prompts/<name>.md and
+// on question style drops a replacement at <data-dir>/prompts/<name>.md and
 // restarts the daemon — no recompile. Loading is cached per-process so the
 // synthesis hot path pays no per-call IO.
 package assets
@@ -29,7 +30,7 @@ var embedFS embed.FS
 // Source identifies where a PromptAsset was loaded from.
 const (
 	SourceEmbedded = "embedded" // shipped inside the binary via //go:embed
-	SourceOverride = "$TR_HOME" // loaded from $TR_HOME/prompts/<name>.md
+	SourceOverride = "$TR_HOME" // loaded from the data dir's prompts/ slot ($TR_HOME when set, else ~/.tr)
 	SourceFallback = "fallback" // no source available; caller falls back to inline template
 )
 
@@ -72,11 +73,11 @@ var (
 	entries = make(map[string]PromptAsset)
 )
 
-// Load resolves a named prompt asset (<name>.md) by checking $TR_HOME/prompts/
-// first when $TR_HOME is set, then falling back to the //go:embed-ed default,
-// then returning a SourceFallback sentinel when neither is available. Results
-// are cached per-name so the first call pays the parse cost and subsequent calls
-// return the cached PromptAsset value.
+// Load resolves a named prompt asset (<name>.md) by checking the data dir's
+// prompts/ directory first ($TR_HOME when set, else ~/.tr), then falling back
+// to the //go:embed-ed default, then returning a SourceFallback sentinel when
+// neither is available. Results are cached per-name so the first call pays the
+// parse cost and subsequent calls return the cached PromptAsset value.
 //
 // A non-nil error is returned alongside the fallback sentinel when no source is
 // available; callers are expected to log and continue with their inline fallback
@@ -117,17 +118,43 @@ func resolve(name string) (PromptAsset, error) {
 	}
 }
 
+// dataDir returns the Total Recall data directory: $TR_HOME when set to a
+// non-empty value, else ~/.tr. This mirrors config.UserConfigDir and
+// cache.trDir — assets cannot import config (config imports assets for the
+// `tr config show` prompt-assets section), so the rule is restated here and
+// must stay in sync with those two.
+func dataDir() (string, bool) {
+	if env := os.Getenv("TR_HOME"); env != "" {
+		return env, true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", false
+	}
+	return filepath.Join(home, ".tr"), true
+}
+
+// overridePath returns the override slot for a named asset under the data
+// dir's prompts/ directory. The bool result is false when the data dir cannot
+// be resolved (no override could exist).
+func overridePath(name string) (string, bool) {
+	dir, ok := dataDir()
+	if !ok {
+		return "", false
+	}
+	return filepath.Join(dir, "prompts", name+".md"), true
+}
+
 // resolveQuiet resolves an asset without logging and without touching the
 // package cache. LoadAll uses it so inspection surfaces (`tr asset list`,
 // `tr config show`) read fresh disk state on every invocation.
 func resolveQuiet(name string) PromptAsset {
-	if trHome, ok := os.LookupEnv("TR_HOME"); ok && trHome != "" {
-		overridePath := filepath.Join(trHome, "prompts", name+".md")
-		if fi, err := os.Stat(overridePath); err == nil && !fi.IsDir() {
-			if b, err := os.ReadFile(overridePath); err == nil {
+	if path, ok := overridePath(name); ok {
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+			if b, err := os.ReadFile(path); err == nil {
 				asset := parseAsset(string(b))
 				asset.Source = SourceOverride
-				asset.Path = overridePath
+				asset.Path = path
 				asset.ModTime = fi.ModTime()
 				return asset
 			}
@@ -146,17 +173,16 @@ func resolveQuiet(name string) PromptAsset {
 }
 
 // LoadAll returns one resolved PromptAsset per distinct asset name across the
-// embedded defaults and the $TR_HOME/prompts/ override directory (when
-// TR_HOME is set). Overrides win on name collisions. Resolution is fresh on
-// every call — no package cache — so inspection surfaces always reflect the
-// current on-disk state.
+// embedded defaults and the data dir's prompts/ override directory. Overrides
+// win on name collisions. Resolution is fresh on every call — no package
+// cache — so inspection surfaces always reflect the current on-disk state.
 func LoadAll() []PromptAsset {
 	nameSet := make(map[string]struct{})
 	for _, name := range EmbeddedNames() {
 		nameSet[name] = struct{}{}
 	}
-	if trHome, ok := os.LookupEnv("TR_HOME"); ok && trHome != "" {
-		if dirEntries, err := os.ReadDir(filepath.Join(trHome, "prompts")); err == nil {
+	if dir, ok := dataDir(); ok {
+		if dirEntries, err := os.ReadDir(filepath.Join(dir, "prompts")); err == nil {
 			for _, de := range dirEntries {
 				if de.IsDir() || !strings.HasSuffix(de.Name(), ".md") {
 					continue

@@ -42,11 +42,22 @@ func writeOverrideFile(t *testing.T, trHome, name string) string {
 	return path
 }
 
+// isolateHome points HOME/USERPROFILE at a temp dir and empties TR_HOME so the
+// data-dir resolution lands in the temp dir — tests never touch the real ~/.tr.
+func isolateHome(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("TR_HOME", "")
+}
+
 // ── tr asset list ─────────────────────────────────────────────────────────────
 
-// Task 3.4.1: with TR_HOME unset, the canonical asset is listed as embedded.
+// Task 3.4.1: with no overrides in the data dir, the canonical asset is listed
+// as embedded.
 func TestAssetListNoOverrides(t *testing.T) {
-	t.Setenv("TR_HOME", "")
+	isolateHome(t)
 
 	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
 	if err != nil {
@@ -179,13 +190,54 @@ func TestAssetResetMultipleRequiresAllFlag(t *testing.T) {
 	}
 }
 
-// Task 4.6.4: reset with TR_HOME unset exits 1.
-func TestAssetResetNoTrHomeExits1(t *testing.T) {
+// The review follow-up: with TR_HOME unset, the commands operate on the
+// default data dir (~/.tr) — sync lands there and list sees it, proving the
+// CLI's data-dir resolution agrees with the assets package's.
+func TestAssetSyncUsesDefaultDataDir(t *testing.T) {
+	isolateHome(t)
+
+	out, err := runAssetCmd(t, syncAssetCmd(), []string{"question-generation-policy"}, nil)
+	if err != nil {
+		t.Fatalf("asset sync error: %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	expected := filepath.Join(home, ".tr", "prompts", "question-generation-policy.md")
+	if !strings.Contains(out, "synced question-generation-policy to "+expected) {
+		t.Fatalf("expected sync target under ~/.tr, got:\n%s", out)
+	}
+	if _, statErr := os.Stat(expected); statErr != nil {
+		t.Fatalf("expected override file at %s: %v", expected, statErr)
+	}
+
+	out, err = runAssetCmd(t, listAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("asset list error: %v", err)
+	}
+	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+expected) {
+		t.Fatalf("expected list to show the default-dir override, got:\n%s", out)
+	}
+
+	_, err = runAssetCmd(t, resetAssetCmd(), []string{"question-generation-policy"}, nil)
+	if err != nil {
+		t.Fatalf("asset reset error: %v", err)
+	}
+	if _, statErr := os.Stat(expected); !os.IsNotExist(statErr) {
+		t.Fatalf("expected reset to remove %s", expected)
+	}
+}
+
+// Reset/sync exit 1 when the data dir cannot be resolved at all (no home dir).
+func TestAssetResetUnresolvableDataDirExits1(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
 	t.Setenv("TR_HOME", "")
 
 	_, err := runAssetCmd(t, resetAssetCmd(), []string{"question-generation-policy"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "TR_HOME is not set; nothing to reset") {
-		t.Fatalf("expected TR_HOME unset error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "could not resolve the Total Recall data dir") {
+		t.Fatalf("expected data-dir resolution error, got: %v", err)
 	}
 }
 
@@ -262,12 +314,14 @@ func TestAssetSyncEmptyNoNameRefuses(t *testing.T) {
 	}
 }
 
-// Task 5.7.4: sync with TR_HOME unset exits 1.
-func TestAssetSyncNoTrHomeExits1(t *testing.T) {
+// Task 5.7.4: sync exits 1 when the data dir cannot be resolved at all.
+func TestAssetSyncUnresolvableDataDirExits1(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
 	t.Setenv("TR_HOME", "")
 
 	_, err := runAssetCmd(t, syncAssetCmd(), []string{"question-generation-policy"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "TR_HOME is not set; nothing to sync to") {
-		t.Fatalf("expected TR_HOME unset error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "could not resolve the Total Recall data dir") {
+		t.Fatalf("expected data-dir resolution error, got: %v", err)
 	}
 }

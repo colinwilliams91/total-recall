@@ -74,3 +74,11 @@
 - [x] 7.3 `go test ./...`
 - [x] 7.4 `openspec validate prompt-asset-observability`
 - [x] 7.5 Manual: `tr asset sync question-generation-policy` from a fresh `$TR_HOME`, edit the synced override, `tr asset list` shows `[override]` with correct age, `tr config show` shows the override in its new section, `tr asset reset` removes it, daemon restart picks up the change each time
+
+## 8. Data-dir resolution fix (review follow-up)
+
+- [x] 8.1 `assets` — `dataDir()`/`overridePath()` with the shared resolution rule (`$TR_HOME` when set non-empty, else `~/.tr`, mirroring `config.UserConfigDir`/`cache.trDir`); `resolve`/`resolveQuiet`/`LoadAll` consult the override slot unconditionally (no `TR_HOME` gate); unresolvable home falls through to embedded
+- [x] 8.2 `cmd/tr` — `asset reset`/`sync` resolve the data dir via `config.UserConfigDir()`; "TR_HOME is not set" errors replaced by `could not resolve the Total Recall data dir` (fires only when no home is available)
+- [x] 8.3 Tests — override loads from the default `~/.tr` data dir with `TR_HOME` unset; unresolvable-home fallback; CLI sync/list/reset round-trip on the default data dir; env-touching tests isolate `HOME`/`USERPROFILE`
+- [x] 8.4 Specs + docs — `prompt-asset-loading` and `cli-asset-commands` deltas restated in data-dir terms; AGENTS.md and README override-path wording updated
+- [x] 8.5 Verification — build/vet/test green; manual default-install e2e (no `TR_HOME`): sync → list → config show → reset all operate on `~/.tr/prompts/`

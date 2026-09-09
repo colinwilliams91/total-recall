@@ -56,7 +56,7 @@ Run `tr --help` for the full command and flag reference.
 
 ### Managing prompt-asset overrides
 
-Prompt assets (e.g. the question-generation policy) ship inside the binary but can be overridden at `$TR_HOME/prompts/<name>.md` — edit, restart the daemon, done. Total Recall ships observability and recovery for those overrides:
+Prompt assets (e.g. the question-generation policy) ship inside the binary but can be overridden at `~/.tr/prompts/<name>.md` (or `$TR_HOME/prompts/` when `TR_HOME` is set) — edit, restart the daemon, done. Total Recall ships observability and recovery for those overrides:
 
 ```sh
 tr asset list						# resolved source, path & age of every prompt asset

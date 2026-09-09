@@ -8,9 +8,21 @@ import (
 	"strings"
 
 	"github.com/colinwilliams91/total-recall/assets"
+	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// promptsDir returns the override slot directory: the Total Recall data dir's
+// prompts/ ($TR_HOME when set, else ~/.tr). The bool result is false when the
+// data dir cannot be resolved (no override could exist).
+func promptsDir() (string, bool) {
+	dir, err := config.UserConfigDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(dir, "prompts"), true
+}
 
 func assetCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -53,15 +65,15 @@ func resetAssetCmd() *cobra.Command {
 		Short: "Remove an override so the embedded default takes effect on next daemon restart",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			trHome := os.Getenv("TR_HOME")
-			if trHome == "" {
-				return fmt.Errorf("TR_HOME is not set; nothing to reset")
+			dir, ok := promptsDir()
+			if !ok {
+				return fmt.Errorf("could not resolve the Total Recall data dir (~/.tr) — nothing to reset")
 			}
 			if len(args) == 1 {
 				name := args[0]
-				return removeOverride(filepath.Join(trHome, "prompts", name+".md"), name)
+				return removeOverride(filepath.Join(dir, name+".md"), name)
 			}
-			return resetAllOverrides(trHome, all, force)
+			return resetAllOverrides(dir, all, force)
 		},
 	}
 
@@ -86,8 +98,7 @@ func removeOverride(path, name string) error {
 // resetAllOverrides removes override files in batch. Multi-file or non-TTY
 // batch removal requires --all; an interactive TTY additionally confirms
 // before touching anything unless --force is passed.
-func resetAllOverrides(trHome string, all, force bool) error {
-	dir := filepath.Join(trHome, "prompts")
+func resetAllOverrides(dir string, all, force bool) error {
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Println("no overrides to reset")
@@ -136,9 +147,9 @@ func syncAssetCmd() *cobra.Command {
 			}
 			name := args[0]
 
-			trHome := os.Getenv("TR_HOME")
-			if trHome == "" {
-				return fmt.Errorf("TR_HOME is not set; nothing to sync to")
+			dir, ok := promptsDir()
+			if !ok {
+				return fmt.Errorf("could not resolve the Total Recall data dir (~/.tr) — nothing to sync to")
 			}
 
 			embeddedBytes, ok := assets.Embedded(name)
@@ -146,7 +157,7 @@ func syncAssetCmd() *cobra.Command {
 				return fmt.Errorf("embedded asset %s not found", name)
 			}
 
-			target := filepath.Join(trHome, "prompts", name+".md")
+			target := filepath.Join(dir, name+".md")
 			if fi, err := os.Stat(target); err == nil && fi.Size() > 0 && !force {
 				return fmt.Errorf("%s exists and is non-empty — pass --force to overwrite, or 'tr asset reset %s' to start from defaults", target, name)
 			}

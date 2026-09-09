@@ -370,9 +370,12 @@ func TestRepoPromptAssetBlockDiscardedWithWarning(t *testing.T) {
 	}
 }
 
-// Task 2.5.2: with $TR_HOME unset, the show section lists the asset as
-// embedded with no override path.
+// Task 2.5.2: with no overrides in the data dir, the show section lists the
+// asset as embedded with no override path.
 func TestConfigShowEmbeddedDefault(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("TR_HOME", "")
 	user := config.DefaultUserConfig()
 	cfg := config.Merge(&user, nil)

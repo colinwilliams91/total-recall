@@ -65,6 +65,14 @@ The existing `tr config show` output lists config-source per key. A new section 
 **Alternatives considered:**
 - *A separate `tr asset status` command.* Rejected: `tr config show` is already where users debug "what is the daemon configured to do"; surfacing the override in a separate command forces a second command for a debugging session that should be one.
 
+### Decision: The override slot lives in the data dir, not literally `$TR_HOME/prompts/`
+
+`assets.Load` (as shipped by `synthesize-from-context`) only consulted `$TR_HOME/prompts/` when `TR_HOME` was explicitly set — a default install (`~/.tr`, no env var) could never read `~/.tr/prompts/`, silently disabling the override mechanism for exactly the users who never hear about `TR_HOME`. The resolution rule everywhere else in the codebase (`config.UserConfigDir`, `cache.trDir`) is: `$TR_HOME` when set to a non-empty value, else `~/.tr`. This change aligns the asset override slot with that rule: `<data-dir>/prompts/<name>.md`. `assets` restates the rule in its own `dataDir()` (it cannot import `config` — `config` imports `assets` for the show section); the CLI commands resolve via `config.UserConfigDir` directly. The `Source == "$TR_HOME"` tag is kept as the label for "the runtime-override slot, whichever directory backs it" — the resolved-path column printed next to it shows the actual location.
+
+**Alternatives considered:**
+- *Keep the `TR_HOME`-only gate and document it.* Rejected: the override mechanism is the product feature; gating it on an env var only power users set makes it dead code for default installs — and the observability commands added by this change would faithfully report that dead state.
+- *Rename the `SourceOverride` tag to `override` everywhere.* Rejected for now: the tag value is pinned by the shipped `synthesize-from-context` spec; renaming ripples across both changes' deltas. The path column already disambiguates. A label rename is a cheap follow-up if it bothers anyone.
+
 ## Risks / Trade-offs
 
 - **[Trade-off] `reset` and `sync` require a daemon restart to take effect.** Documented in command help text. Mitigation: the commands log a clear `[assets] restart 'tr serve' to pick up the change` advisory on success when a daemon is reachable.
