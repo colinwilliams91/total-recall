@@ -8,7 +8,7 @@ Total Recall is a single Go binary distributed via `go install` (or release arch
 
 | Layer | Owned by | Lifetime | Reads from | Writes to |
 |---|---|---|---|---|
-| **Binary** (`total-recall` / `tr.exe`) | One per user; on `$GOPATH/bin` or invoked by absolute path | Until re-install | Nothing at runtime (stateless) | Invoked for `init`, `serve`, `ask`, `config` |
+| **Binary** (`tr` / `tr.exe`) | One per user; on `$GOBIN`, or `$(go env GOPATH)/bin` when `$GOBIN` is unset | Until re-install | Nothing at runtime (stateless) | Invoked for `init`, `serve`, `ask`, `config` |
 | **User config** (`~/.tr/config.yaml`) | One per user | Until deleted | Runtime config loader | Written by `tr init`; never by hooks |
 | **User cache** (`~/.tr/memory.db`) | One per user | Until deleted | Daemon (read concepts); write concepts/answers | Daemon only |
 | **Repo config** (`.tr.yaml`) | One per repo | Until deleted | Runtime config loader | Written by `tr repo` |
@@ -68,33 +68,38 @@ The binary being on a worktree was a red herring. Only two facts mattered: *whic
 
 ```sh
 # 1. Binary install (one-time, user-level)
-go install github.com/colinwilliams91/total-recall@latest
-#   → places `total-recall` on $GOPATH/bin (user must add $GOPATH/bin to PATH once)
+go install github.com/colinwilliams91/total-recall/cmd/tr@latest
+#   → places `tr` in $GOBIN, or $(go env GOPATH)/bin when $GOBIN is unset
+#   → the selected install directory must already be on PATH
 
-# 2. User-level init (one-time, user-level)
+# 2. Verify the resolved binary
+command -v tr
+tr --version
+
+# 3. User-level init (one-time, user-level)
 tr init
 #   → prompts: conversation analysis opt-in, AI provider, API key, model
 #   → writes ~/.tr/config.yaml
 #   → prints next-step guidance: "Next: cd into your project and run tr repo."
 
-# 3. Start daemon (long-running terminal; keep alive)
+# 4. Start daemon (long-running terminal; keep alive)
 tr serve
 #   → binds localhost:7331
 #   → reads ~/.tr/config.yaml + ~/.tr/memory.db
 
-# 4. Per-repo init (run inside each repo you want recall in)
+# 5. Per-repo init (run inside each repo you want recall in)
 cd ~/projects/my-app
 tr repo
 #   → resolves .git/hooks via `git rev-parse --git-path hooks` (worktree-aware)
 #   → writes .tr.yaml with hook enablement
 #   → writes .git/hooks/{pre-commit,commit-msg,pre-push,post-commit} per selections
 
-# 5. Verify
+# 6. Verify
 tr status
 git commit -m "..."   # triggers installed hooks (NOT the binary)
 ```
 
-For a user without Go: download the release archive from GitHub Releases, extract, place on PATH manually. Same downstream flow.
+For a user without Go: download the release archive from GitHub Releases, extract, and place `tr` (or `tr.exe`) in a directory on PATH. The same downstream flow applies.
 
 ---
 
