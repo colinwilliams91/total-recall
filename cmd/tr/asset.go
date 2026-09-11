@@ -67,24 +67,37 @@ than the shipped policy by more than prompt-asset.drift-warning-days.`,
 	return cmd
 }
 
+// sourceInactive marks slot files that shadow no shipped asset: present on
+// disk, but never loaded by the engine. Presentation-only — the assets
+// package's Source vocabulary stays strictly about load origin.
+const sourceInactive = "inactive"
+
 func listAssetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List resolved prompt assets",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			shipped := make(map[string]struct{}, 8)
+			for _, name := range assets.EmbeddedNames() {
+				shipped[name] = struct{}{}
+			}
 			for _, asset := range assets.LoadAll() {
 				if asset.Source == assets.SourceFallback || asset.Path == "" {
 					continue
 				}
 				name := strings.TrimSuffix(filepath.Base(asset.Path), ".md")
+				source := asset.Source
+				if _, ok := shipped[name]; !ok {
+					source = sourceInactive
+				}
 				path := asset.Path
 				age := assets.Age(asset.ModTime)
 				if asset.Source == assets.SourceEmbedded {
 					path = "<embedded>"
 					age = "embedded"
 				}
-				fmt.Printf("%s\t%s\t%s\t%s\n", name, asset.Source, path, age)
+				fmt.Printf("%s\t%s\t%s\t%s\n", name, source, path, age)
 			}
 			return nil
 		},
@@ -194,7 +207,7 @@ func syncAssetCmd() *cobra.Command {
 
 			embeddedBytes, ok := assets.Embedded(name)
 			if !ok {
-				return fmt.Errorf("embedded asset %s not found", name)
+				return fmt.Errorf("embedded asset '%s' not found — run 'tr asset list' to see the available asset names", name)
 			}
 
 			target := filepath.Join(dir, name+".md")

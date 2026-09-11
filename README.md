@@ -60,7 +60,7 @@ Run `tr --help` for the full command and flag reference.
 
 ### Make it yours
 
-Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push ECS patterns, query plans, or your team's conventions? Drop in your own — no recompile. `tr asset list|sync|reset` manage the override; restart `tr serve` to pick up changes.
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push ECS patterns, query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync <name>` names the file for you); `tr asset list|reset` manage the slot; restart `tr serve` to pick up changes.
 
 **[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 

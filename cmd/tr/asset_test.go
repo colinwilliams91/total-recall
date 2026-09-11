@@ -159,6 +159,73 @@ func TestAssetSyncRejectsInvalidName(t *testing.T) {
 	}
 }
 
+// Task 2.3.1: slot files whose name matches no shipped asset list as
+// `inactive`; shipped-name overrides keep `$TR_HOME`.
+func TestAssetListTagsUnmanagedAsInactive(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+	overridePath := writeOverrideFile(t, tmp, "question-generation-policy")
+	orphanPath := writeOverrideFile(t, tmp, "my-experiment")
+
+	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("asset list error: %v", err)
+	}
+	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+overridePath) {
+		t.Fatalf("expected shipped-name override to keep $TR_HOME, got:\n%s", out)
+	}
+	if !strings.Contains(out, "my-experiment\tinactive\t"+orphanPath) {
+		t.Fatalf("expected orphan tagged inactive, got:\n%s", out)
+	}
+}
+
+// Task 2.3.2: no `inactive` tag appears when the slot holds nothing
+// unmanaged.
+func TestAssetListNoUnmanagedTag(t *testing.T) {
+	isolateHome(t)
+
+	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("asset list error: %v", err)
+	}
+	if strings.Contains(out, "inactive") {
+		t.Fatalf("expected no inactive tag without unmanaged files, got:\n%s", out)
+	}
+}
+
+// Task 2.3.3: sync with an unknown name exits 1 and points at the inventory.
+func TestAssetSyncUnknownNamePointsAtList(t *testing.T) {
+	t.Setenv("TR_HOME", t.TempDir())
+
+	_, err := runAssetCmd(t, syncAssetCmd(), []string{"ecs-policy"}, nil)
+	if err == nil {
+		t.Fatal("expected non-nil error for unknown asset")
+	}
+	if !strings.Contains(err.Error(), "embedded asset 'ecs-policy' not found") ||
+		!strings.Contains(err.Error(), "run 'tr asset list' to see the available asset names") {
+		t.Fatalf("expected teaching error, got: %v", err)
+	}
+}
+
+// Task 2.3.4: reset on an unmanaged name still removes it — reset is the
+// cleanup path for orphans.
+func TestAssetResetUnmanagedFileStillWorks(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+	orphanPath := writeOverrideFile(t, tmp, "my-experiment")
+
+	out, err := runAssetCmd(t, resetAssetCmd(), []string{"my-experiment"}, nil)
+	if err != nil {
+		t.Fatalf("expected reset of unmanaged file to succeed, got: %v", err)
+	}
+	if _, statErr := os.Stat(orphanPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected orphan file removed, stat err: %v", statErr)
+	}
+	if !strings.Contains(out, "[assets] removed override at "+orphanPath+"; restart 'tr serve' to pick up the change") {
+		t.Fatalf("expected restart advisory, got:\n%s", out)
+	}
+}
+
 // ── tr asset list ─────────────────────────────────────────────────────────────
 
 // Task 3.4.1: with no overrides in the data dir, the canonical asset is listed
@@ -212,8 +279,9 @@ func TestAssetListWithOverride(t *testing.T) {
 	}
 }
 
-// Task 3.4.3: with two overrides, both appear — one shadowing the embedded
-// default, one orphaned beyond the embedded set.
+// Task 3.4.3: with two slot files, both appear — one shadowing the embedded
+// default ($TR_HOME), one orphaned beyond the embedded set (inactive, per the
+// asset-slot-ux-clarity change).
 func TestAssetListMultipleOverrides(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TR_HOME", tmp)
@@ -227,8 +295,8 @@ func TestAssetListMultipleOverrides(t *testing.T) {
 	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+overridePath) {
 		t.Fatalf("expected overridden asset line, got:\n%s", out)
 	}
-	if !strings.Contains(out, "orphan-policy\t$TR_HOME\t"+orphanPath) {
-		t.Fatalf("expected orphan override line, got:\n%s", out)
+	if !strings.Contains(out, "orphan-policy\tinactive\t"+orphanPath) {
+		t.Fatalf("expected orphan tagged inactive, got:\n%s", out)
 	}
 	if strings.Count(strings.TrimRight(out, "\n"), "\n") != 1 {
 		t.Fatalf("expected exactly two asset lines, got:\n%s", out)
