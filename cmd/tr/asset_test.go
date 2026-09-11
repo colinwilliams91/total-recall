@@ -52,6 +52,113 @@ func isolateHome(t *testing.T) {
 	t.Setenv("TR_HOME", "")
 }
 
+// Task 3.2: the asset long help documents the override loop — what an
+// override is, list vs reset vs sync, and the restart caveat — reachable via
+// both `asset --help` and the root `help asset` form.
+func TestAssetLongHelpDocumentsOverrideLoop(t *testing.T) {
+	for _, args := range [][]string{{"asset", "--help"}, {"help", "asset"}} {
+		root := &cobra.Command{Use: "tr"}
+		root.AddCommand(assetCmd())
+		root.SetArgs(args)
+		root.SetOut(nil)
+
+		var buf bytes.Buffer
+		restore := captureStdout(&buf)
+		err := root.Execute()
+		restore()
+
+		if err != nil {
+			t.Fatalf("args %v: execute error: %v", args, err)
+		}
+		out := buf.String()
+		for _, want := range []string{
+			"prompts/ directory",
+			"sync <name>",
+			"reset [<name>]",
+			"restart 'tr serve'",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("args %v: expected help to contain %q, got:\n%s", args, want, out)
+			}
+		}
+	}
+}
+
+// Task 4.6.4's successor: the unresolvable-data-dir behavior is covered by
+// TestAssetResetUnresolvableDataDirExits1. The name-validation table lives
+// below (task 4.3).
+
+// Task 4.3: name validation accepts exactly single lowercase-hyphenated tokens.
+func TestValidateAssetName(t *testing.T) {
+	valid := []string{
+		"question-generation-policy",
+		"a",
+		"policy-2",
+		"question-generation-policy ", // surrounding whitespace is trimmed before the match
+		"  policy-2  ",
+	}
+	for _, name := range valid {
+		if err := validateAssetName(name); err != nil {
+			t.Errorf("expected %q to be accepted, got: %v", name, err)
+		}
+	}
+
+	invalid := map[string]string{
+		"":                 "empty",
+		"  ":               "whitespace only",
+		"../../sensitive":  "traversal",
+		"../prompts":       "parent traversal",
+		"policy.md":        "user-supplied .md suffix",
+		"Question Policy!": "spaces and punctuation",
+		"question_policy":  "underscore",
+		"question/policy":  "slash",
+		"po licy":          "inner whitespace",
+	}
+	for name, why := range invalid {
+		err := validateAssetName(name)
+		if err == nil {
+			t.Errorf("expected %q to be rejected (%s)", name, why)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid asset name '") || !strings.Contains(err.Error(), "e.g. 'question-generation-policy'") {
+			t.Errorf("expected teaching error for %q, got: %v", name, err)
+		}
+	}
+}
+
+// Task 4.3: reset with a traversal-shaped name exits 1 without touching any
+// path outside the override directory.
+func TestAssetResetRejectsInvalidName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+
+	_, err := runAssetCmd(t, resetAssetCmd(), []string{"../../sensitive"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid asset name '../../sensitive'") {
+		t.Fatalf("expected invalid-name refusal, got: %v", err)
+	}
+	// Nothing was removed: the prompts dir is untouched.
+	if entries, _ := os.ReadDir(filepath.Join(tmp, "prompts")); len(entries) != 0 {
+		t.Fatalf("expected no files touched, found: %v", entries)
+	}
+}
+
+// Task 4.3: sync rejects odd names (user-supplied .md suffix, spaces) with
+// exit 1 and writes nothing.
+func TestAssetSyncRejectsInvalidName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+
+	for _, name := range []string{"policy.md", "Question Policy!", "../prompts"} {
+		_, err := runAssetCmd(t, syncAssetCmd(), []string{name}, nil)
+		if err == nil || !strings.Contains(err.Error(), "invalid asset name") {
+			t.Errorf("expected %q to be refused, got: %v", name, err)
+		}
+	}
+	if entries, _ := os.ReadDir(filepath.Join(tmp, "prompts")); len(entries) != 0 {
+		t.Fatalf("expected no files written, found: %v", entries)
+	}
+}
+
 // ── tr asset list ─────────────────────────────────────────────────────────────
 
 // Task 3.4.1: with no overrides in the data dir, the canonical asset is listed

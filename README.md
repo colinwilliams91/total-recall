@@ -58,17 +58,11 @@ Re-run `tr repo` anytime to change hook selections or update hook scripts. Exist
 
 Run `tr --help` for the full command and flag reference.
 
-### Managing prompt-asset overrides
+### Make it yours
 
-Prompt assets (e.g. the question-generation policy) ship inside the binary but can be overridden at `~/.tr/prompts/<name>.md` (or `$TR_HOME/prompts/` when `TR_HOME` is set) — edit, restart the daemon, done. Total Recall ships observability and recovery for those overrides:
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push ECS patterns, query plans, or your team's conventions? Drop in your own — no recompile. `tr asset list|sync|reset` manage the override; restart `tr serve` to pick up changes.
 
-```sh
-tr asset list						# resolved source, path & age of every prompt asset
-tr asset sync <name>				# re-baseline an override from the shipped default
-tr asset reset [<name>]				# remove an override (defaults take effect on next daemon restart)
-```
-
-`tr config --show` lists resolved prompt assets under its `prompt assets:` section. A startup `OVERRIDE WARNING` fires when an override is older than the shipped default by more than `prompt-asset.drift-warning-days` (default 90; `0` disables). `reset`/`sync` mutate files only — restart `tr serve` to pick up the change.
+**[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
 ### Non-Go install path²
 
