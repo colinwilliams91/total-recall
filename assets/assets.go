@@ -259,6 +259,50 @@ func warnOnStaleOverride(overridePath, name string, modTime time.Time) {
 		overridePath, daysOld, name)
 }
 
+// UnmanagedNames returns the names of .md files in the override slot that do
+// not correspond to a shipped (embedded) asset, sorted. Such files are never
+// loaded — the engine only requests shipped names — so both classification
+// surfaces (the daemon's startup warning and `tr asset list`'s inactive tag)
+// share this primitive and can never drift. Empty when the slot is empty,
+// absent, or the data dir is unresolvable.
+func UnmanagedNames() []string {
+	dir, ok := dataDir()
+	if !ok {
+		return nil
+	}
+	dirEntries, err := os.ReadDir(filepath.Join(dir, "prompts"))
+	if err != nil {
+		return nil
+	}
+	shipped := make(map[string]struct{}, len(EmbeddedNames()))
+	for _, name := range EmbeddedNames() {
+		shipped[name] = struct{}{}
+	}
+
+	var unmanaged []string
+	for _, de := range dirEntries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".md") {
+			continue
+		}
+		name := strings.TrimSuffix(de.Name(), ".md")
+		if _, ok := shipped[name]; !ok {
+			unmanaged = append(unmanaged, name)
+		}
+	}
+	sort.Strings(unmanaged)
+	return unmanaged
+}
+
+// WarnUnmanagedOverrides logs one informational line per unmanaged
+// override-slot file at daemon startup. The warning never blocks startup and
+// never touches files; silent when there are none.
+func WarnUnmanagedOverrides() {
+	for _, name := range UnmanagedNames() {
+		log.Printf("[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset list')",
+			name+".md")
+	}
+}
+
 // Age renders a human-readable mtime-relative age ("2d old", "6mo old") for
 // display in `tr asset list` and `tr config show`. A zero mtime renders as
 // "unknown" — callers substitute "embedded" when the asset's source is the
