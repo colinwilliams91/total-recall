@@ -6,7 +6,7 @@
 
 ### 🎯 Recall quizzes on every commit
 
-Total Recall installs Git hooks that fire on your normal workflow — commit, push. The daemon reads the staged diff, caches the engineering concepts you're working with, and generates one short multiple-choice question about them. Four seconds per Git event; the question surfaces in your terminal via `tr ask`.
+Total Recall installs Git hooks that fire on your normal workflow — commit, push. The daemon reads the staged diff, caches the engineering concepts you're working with, and generates one short multiple-choice question about them. The question surfaces in your terminal via `tr ask`. Four seconds per Git event boosts your comprehension from C+ -> A+
 
 ```
 git commit -m "fix: handle retry jitter"   ──>   concept: exponential backoff
