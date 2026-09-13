@@ -41,7 +41,7 @@ command -v tr           # (this directory must be on your PATH)
 tr --version
 
 # Init user config      # (run anywhere; one-time, user-level)
-tr init                 # creates `~/.tr/config.yaml` for conversation analysis & AI provider setup
+tr init                 # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
 
 # Start the daemon
 tr serve				# runs on `localhost:7331` & must be running for hooks & MCP
