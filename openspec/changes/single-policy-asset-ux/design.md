@@ -37,6 +37,10 @@ FEATURES.md drops the plural vocabulary ("finite set of valid names", community 
 
 A stock stray file is now more likely (users copying shared docs around), and each one deserves exactly one honest signal — the `inactive` tag and the startup line. No docs beyond one sentence; not deleting the `asset-slot-ux-clarity` behavior just shipped.
 
+### Decision: `tr asset list` becomes `tr asset show` (add-on, user-directed)
+
+"List" sold an inventory; the slot has exactly one meaningful row. `show` is the status verb and rhymes with `tr config --show`. Renamed in code, help, teaching error, unmanaged-file warning, and every doc/artifact mention; the canonical spec requirement is retitled via this change's RENAMED operation, so the archive carries the rename into the canonical cleanly.
+
 ## Risks / Trade-offs
 
 - **[BREAKING, narrow] `tr asset reset --all` disappears.** Unreleased-in-docs surface; scripts passing `--all` on a modern build didn't exist — called out in the proposal Impact section and superseded in the delta.

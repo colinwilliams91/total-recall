@@ -2,17 +2,17 @@
 
 The drop-in slot works, but its UX leaves three ambiguities that surfaced during the FEATURES.md work:
 
-1. **Inert files look like success.** A `.md` file dropped into the slot that doesn't match a shipped asset name is listed by `tr asset list` with source `$TR_HOME`, exactly like a real override — but nothing ever loads it, so quizzes don't change. The worst ambiguity in the feature: silent no-op presented as active state.
+1. **Inert files look like success.** A `.md` file dropped into the slot that doesn't match a shipped asset name is listed by `tr asset show` with source `$TR_HOME`, exactly like a real override — but nothing ever loads it, so quizzes don't change. The worst ambiguity in the feature: silent no-op presented as active state.
 2. **The naming rule is invisible.** The file must exactly match a shipped asset's name (today: `question-generation-policy`), but nothing *says* that — neither at the CLI (`sync` refuses unknown names, but the error doesn't teach the way out) nor in the docs.
 3. **Wrong mental model invites confusion.** Users reasonably treat the slot as a workspace — put ideas in it — which is what makes extra files feel like they should work, forks feel like a limitation, and versioning feel "confined to git."
 
-The corrective reframe (agreed in exploration): **the slot is a deployment target, not a workspace.** One file per shipped asset; the filename is the address; ideas live in git or a policies folder; the slot holds the one active doc; swap = copy over the slot; `tr asset list` confirms what's active.
+The corrective reframe (agreed in exploration): **the slot is a deployment target, not a workspace.** One file per shipped asset; the filename is the address; ideas live in git or a policies folder; the slot holds the one active doc; swap = copy over the slot; `tr asset show` confirms what's active.
 
 ## What Changes
 
-- **`tr asset list` distinguishes active from unmanaged.** A file in the slot whose name shadows no shipped asset is listed with source `inactive` (new tag alongside `embedded` | `$TR_HOME` | `fallback`) — the path and age still print, so the file is explainable and cleanable, but nothing implies it's loaded.
-- **Daemon startup surfaces unmanaged files.** One log line per unmanaged file at daemon startup: `[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset list')`. Reload... restart-persisted noise for a file the user should either rename, remove, or consciously keep — consistent with the drift-warning observability style: informational, never blocking.
-- **`tr asset sync <unknown-name>` teaches the doorway.** Error message extended: `embedded asset '<name>' not found — run 'tr asset list' to see the available asset names`.
+- **`tr asset show` distinguishes active from unmanaged.** A file in the slot whose name shadows no shipped asset is listed with source `inactive` (new tag alongside `embedded` | `$TR_HOME` | `fallback`) — the path and age still print, so the file is explainable and cleanable, but nothing implies it's loaded.
+- **Daemon startup surfaces unmanaged files.** One log line per unmanaged file at daemon startup: `[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset show')`. Reload... restart-persisted noise for a file the user should either rename, remove, or consciously keep — consistent with the drift-warning observability style: informational, never blocking.
+- **`tr asset sync <unknown-name>` teaches the doorway.** Error message extended: `embedded asset '<name>' not found — run 'tr asset show' to see the available asset names`.
 - **Documentation rewrite (FEATURES.md + README tweak):** the explicit naming rule ("the filename is the address; it must match a name the binary ships; don't name files by hand — `sync` names them"), the deployment-target model (ideas and versioning live in git or a policies folder; the slot activates exactly one; swap = copy over; `sync`/`reset` are the operators), and the front-matter clarification (front-matter `name:` is descriptive metadata; the filename is the address).
 
 ## Capabilities
@@ -23,7 +23,7 @@ The corrective reframe (agreed in exploration): **the slot is a deployment targe
 
 ### Modified Capabilities
 
-- `cli-asset-commands`: `tr asset list` SHALL list unmanaged slot files with an `inactive` source tag instead of implying they are overrides; `sync`'s unknown-name error SHALL teach the way out. Captured as ADDED requirements (order-robust against the still-unarchived `prompt-asset-observability` change, which also carries `cli-asset-commands` deltas).
+- `cli-asset-commands`: `tr asset show` SHALL list unmanaged slot files with an `inactive` source tag instead of implying they are overrides; `sync`'s unknown-name error SHALL teach the way out. Captured as ADDED requirements (order-robust against the still-unarchived `prompt-asset-observability` change, which also carries `cli-asset-commands` deltas).
 - `prompt-asset-loading`: the daemon startup surface SHALL log unmanaged override-slot files. ADDED requirement for the same order-robustness reason; the archived `synthesize-from-context` delta is historical and untouched.
 
 ## Impact

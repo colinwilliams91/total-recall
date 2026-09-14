@@ -1,3 +1,11 @@
+## RENAMED Requirements
+
+### Requirement: `tr asset list` enumerates resolved prompt assets in plain text
+- **FROM**: `tr asset list` enumerates resolved prompt assets in plain text
+- **TO**: `tr asset show` enumerates resolved prompt assets in plain text
+
+The command name drops plurality now that the slot has exactly one meaningful entry ("show what is loaded" — status, not inventory). Name-only change; the body and scenarios carry verbatim.
+
 ## REMOVED Requirements
 
 ### Requirement: `tr asset reset [<name>]` removes an override file
@@ -8,7 +16,7 @@
 
 ### Requirement: `tr asset sync [<name>]` writes the canonical embedded content to an override slot
 **Reason**: The "no `<name>` argument SHALL be refused" contract (sync-all-as-destructive-restoration guard) is inverted: with exactly one shipped asset the argument was pure ceremony. Superseded by the ADDED sole-asset resolution semantics.
-**Migration**: `tr asset sync` with no argument resolves the sole shipped asset; explicit `<name>` arguments keep working unchanged, including the `--force` overwrite protection and the `tr asset list` teaching error.
+**Migration**: `tr asset sync` with no argument resolves the sole shipped asset; explicit `<name>` arguments keep working unchanged, including the `--force` overwrite protection and the `tr asset show` teaching error.
 
 ## ADDED Requirements
 
@@ -42,7 +50,7 @@
 ---
 
 ### Requirement: `tr asset sync [<name>]` re-baselines the sole shipped asset or an explicitly named one
-`tr asset sync` SHALL read the embedded bytes for a prompt asset (per the `//go:embed` pattern from `synthesize-from-context`) and write them to the data dir's `prompts/<name>.md` (the Total Recall data dir is `$TR_HOME` when set, else `~/.tr`). With no `<name>` argument, it SHALL resolve the sole shipped asset by enumeration and sync it — "you never type an asset name"; if zero or several shipped assets existed (a future-hypothetical in the shipped single-asset binary), it SHALL exit 1 with a message listing the shipped asset names to pick one. With an explicit `<name>` argument, it SHALL validate the name (`^[a-z0-9-]+$`, per the name-validation requirement) and operate on exactly that asset. When the target file exists and is non-empty, the command SHALL refuse with exit 1 and a message instructing `--force` to overwrite or `tr asset reset <name>` to start from defaults; with `--force`, the command SHALL overwrite the existing file. The command SHALL exit 1 with `could not resolve the Total Recall data dir` when the data dir cannot be resolved at all. When the embedded bytes for `<name>` are unavailable (corrupt build), the command SHALL exit 1 with `embedded asset '<name>' not found` and a pointer to `tr asset list`. On success, the command SHALL log `[assets] synced <name> to <path>; restart 'tr serve' to pick up the change`. The on-disk write is the only effect — the running daemon's in-memory cache is not touched; the daemon picks up the change at its next start.
+`tr asset sync` SHALL read the embedded bytes for a prompt asset (per the `//go:embed` pattern from `synthesize-from-context`) and write them to the data dir's `prompts/<name>.md` (the Total Recall data dir is `$TR_HOME` when set, else `~/.tr`). With no `<name>` argument, it SHALL resolve the sole shipped asset by enumeration and sync it — "you never type an asset name"; if zero or several shipped assets existed (a future-hypothetical in the shipped single-asset binary), it SHALL exit 1 with a message listing the shipped asset names to pick one. With an explicit `<name>` argument, it SHALL validate the name (`^[a-z0-9-]+$`, per the name-validation requirement) and operate on exactly that asset. When the target file exists and is non-empty, the command SHALL refuse with exit 1 and a message instructing `--force` to overwrite or `tr asset reset <name>` to start from defaults; with `--force`, the command SHALL overwrite the existing file. The command SHALL exit 1 with `could not resolve the Total Recall data dir` when the data dir cannot be resolved at all. When the embedded bytes for `<name>` are unavailable (corrupt build), the command SHALL exit 1 with `embedded asset '<name>' not found` and a pointer to `tr asset show`. On success, the command SHALL log `[assets] synced <name> to <path>; restart 'tr serve' to pick up the change`. The on-disk write is the only effect — the running daemon's in-memory cache is not touched; the daemon picks up the change at its next start.
 
 #### Scenario: No-arg sync creates the policy override
 - **WHEN** `tr asset sync` is invoked (no arguments) and `<data-dir>/prompts/question-generation-policy.md` does not exist
@@ -62,7 +70,7 @@
 
 #### Scenario: Sync with an unknown explicit name points at the inventory
 - **WHEN** `tr asset sync ecs-policy` is invoked and no shipped asset named `ecs-policy` exists
-- **THEN** exit 1 with `embedded asset 'ecs-policy' not found` and the `run 'tr asset list'` pointer; no file is touched
+- **THEN** exit 1 with `embedded asset 'ecs-policy' not found` and the `run 'tr asset show'` pointer; no file is touched
 
 #### Scenario: Sync when the data dir cannot be resolved
 - **WHEN** `tr asset sync [<name>]` is invoked and neither `TR_HOME` nor a home directory can be resolved

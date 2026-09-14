@@ -27,7 +27,7 @@ Every quiz is shaped by a markdown **policy doc** shipped inside the binary — 
 ```sh
 tr asset sync                # copies the shipped policy into the slot as your starting point
 # ...edit the file it places at ~/.tr/prompts/question-generation-policy.md then restart 'tr serve'
-tr asset list                # what's loaded: resolved source, path & age
+tr asset show                # what's loaded: resolved source, path & age
 tr asset reset               # remove the override — the shipped default returns on next daemon restart
 ```
 

@@ -15,7 +15,7 @@
 
 ## 3. Documentation — the singular truth
 
-- [ ] 3.1 `FEATURES.md` customization section → four-step walkthrough (`tr asset sync` → edit the file at the printed path → restart `tr serve` → `tr asset list` confirms); two-sentence naming rule ("One policy. One file. `sync` names it — never type an asset name. Anything else in the slot is listed `inactive` — present, ignored, cleanable with `tr asset reset <name>`."); keep the `/policies/` deployment-target blurb and the drift warning; delete the Community policy-sharing section, keeping one trust sentence ("a shared doc deploys by copying over the slot file — review what you import")
+- [ ] 3.1 `FEATURES.md` customization section → four-step walkthrough (`tr asset sync` → edit the file at the printed path → restart `tr serve` → `tr asset show` confirms); two-sentence naming rule ("One policy. One file. `sync` names it — never type an asset name. Anything else in the slot is listed `inactive` — present, ignored, cleanable with `tr asset reset <name>`."); keep the `/policies/` deployment-target blurb and the drift warning; delete the Community policy-sharing section, keeping one trust sentence ("a shared doc deploys by copying over the slot file — review what you import")
 - [ ] 3.2 `FEATURES.md` front-matter clarification trimmed to one clause (filename is how the asset is addressed)
 - [ ] 3.3 `README.md` teaser: drop the `<name>` from the sync hint ("`tr asset sync` names the file for you")
 - [ ] 3.4 `AGENTS.md` prompt-assets line + `assets/assets.go` package comment: singular phrasing (the shipped asset — the question-generation policy; no "future assets" promise)
@@ -26,4 +26,4 @@
 - [ ] 4.2 `go vet ./...`
 - [ ] 4.3 `go test ./...`
 - [ ] 4.4 `openspec validate single-policy-asset-ux`
-- [ ] 4.5 Manual e2e: fresh data dir → `tr asset sync` (no args) creates the override → edit → `tr asset list` shows `$TR_HOME` → `tr asset reset` (no args) removes it → `sync my-experiment` exits 1 with the name-validation + inventory error → `sync` again, edit, `sync --force` overwrites — every step argument-free unless a stray is being cleaned
+- [ ] 4.5 Manual e2e: fresh data dir → `tr asset sync` (no args) creates the override → edit → `tr asset show` shows `$TR_HOME` → `tr asset reset` (no args) removes it → `sync my-experiment` exits 1 with the name-validation + inventory error → `sync` again, edit, `sync --force` overwrites — every step argument-free unless a stray is being cleaned

@@ -78,7 +78,7 @@ Checkout [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 
 ### Make it yours
 
-Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync` starts the baseline file for you); `tr asset sync|list|reset` manage the slot; restart `tr serve` to pick up changes.
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync` starts the baseline file for you); `tr asset sync|show|reset` manage the slot; restart `tr serve` to pick up changes.
 
 **[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
