@@ -63,6 +63,7 @@ func serveCmd() *cobra.Command {
 			}
 
 			assets.SetDriftThreshold(cfg.PromptAsset.DriftWarningDays)
+			assets.WarnUnmanagedOverrides()
 
 			provider, err := newProvider(cfg.AI)
 			if err != nil {

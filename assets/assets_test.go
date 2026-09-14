@@ -438,6 +438,70 @@ func TestEmbeddedNamesAndBytes(t *testing.T) {
 	}
 }
 
+// Task 1.4: UnmanagedNames classifies slot files against shipped asset names.
+func TestUnmanagedNamesClassification(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+	writeOverrideWithAge(t, tmp, "question-generation-policy", 0)
+	writeOverrideWithAge(t, tmp, "my-experiment", 0)
+
+	got := UnmanagedNames()
+	if len(got) != 1 || got[0] != "my-experiment" {
+		t.Fatalf("expected [my-experiment], got %v", got)
+	}
+}
+
+// Task 1.4: the startup warning logs only orphan files, not shipped-name
+// overrides.
+func TestWarnUnmanagedOverridesLogsOrphans(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+	writeOverrideWithAge(t, tmp, "question-generation-policy", 0)
+	writeOverrideWithAge(t, tmp, "my-experiment", 0)
+
+	restore := captureLog(t)
+	WarnUnmanagedOverrides()
+	out := restore()
+
+	if !strings.Contains(out, `unmanaged file "my-experiment.md"`) {
+		t.Fatalf("expected unmanaged warning for the orphan, got: %s", out)
+	}
+	if strings.Contains(out, "question-generation-policy") {
+		t.Fatalf("expected no warning for the shipped-name override, got: %s", out)
+	}
+	if !strings.Contains(out, "run 'tr asset list'") {
+		t.Fatalf("expected the list pointer in the warning, got: %s", out)
+	}
+}
+
+// Task 1.4: empty, absent, and unresolvable slots are silent.
+func TestWarnUnmanagedOverridesSilent(t *testing.T) {
+	cases := []struct {
+		name string
+		env  func(t *testing.T)
+	}{
+		{"no slot dir", func(t *testing.T) { t.Setenv("TR_HOME", t.TempDir()) }},
+		{"unset data dir", func(t *testing.T) { isolateHome(t) }},
+		{"unresolvable home", func(t *testing.T) {
+			t.Setenv("HOME", "")
+			t.Setenv("USERPROFILE", "")
+			t.Setenv("TR_HOME", "")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.env(t)
+			// An empty slot dir exists but holds nothing.
+			restore := captureLog(t)
+			WarnUnmanagedOverrides()
+			out := restore()
+			if strings.Contains(out, "unmanaged file") {
+				t.Fatalf("expected silence, got: %s", out)
+			}
+		})
+	}
+}
+
 func TestAgeHumanized(t *testing.T) {
 	now := time.Now()
 	cases := []struct {

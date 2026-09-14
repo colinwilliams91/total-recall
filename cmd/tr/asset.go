@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/colinwilliams91/total-recall/assets"
@@ -12,6 +13,24 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// assetNamePattern is the allowlist for user-supplied asset names: a single
+// lowercase-hyphenated token, matching shipped asset naming. Validating at
+// the CLI boundary (before any path construction) means traversal-shaped or
+// odd-character arguments are rejected outright instead of being contained
+// accidentally by other checks.
+var assetNamePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// validateAssetName rejects asset names that are not a single
+// lowercase-hyphenated token. The error names the offending argument and
+// teaches the expected form.
+func validateAssetName(name string) error {
+	if !assetNamePattern.MatchString(strings.TrimSpace(name)) {
+		return fmt.Errorf("invalid asset name '%s' — expected a single lowercase-hyphenated name, e.g. 'question-generation-policy'",
+			name)
+	}
+	return nil
+}
 
 // promptsDir returns the override slot directory: the Total Recall data dir's
 // prompts/ ($TR_HOME when set, else ~/.tr). The bool result is false when the
@@ -28,10 +47,30 @@ func assetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "asset",
 		Short: "Inspect and manage prompt-asset overrides",
+		Long: `Inspect and manage prompt-asset overrides.
+
+Every quiz is shaped by a markdown policy doc shipped inside the binary.
+A same-named file in the data dir's prompts/ directory (~/.tr/prompts,
+or $TR_HOME/prompts when TR_HOME is set) replaces the shipped default —
+edit it and restart the daemon, no recompile.
+
+  list            every asset's resolved source, path, and age
+  sync <name>     copy the shipped policy into your override slot as a
+                  starting point for re-tuning
+  reset [<name>]  remove an override so the shipped default takes effect
+
+reset and sync only touch files — restart 'tr serve' to pick up the
+change. A startup OVERRIDE WARNING fires when a stale override is older
+than the shipped policy by more than prompt-asset.drift-warning-days.`,
 	}
 	cmd.AddCommand(listAssetCmd(), resetAssetCmd(), syncAssetCmd())
 	return cmd
 }
+
+// sourceInactive marks slot files that shadow no shipped asset: present on
+// disk, but never loaded by the engine. Presentation-only — the assets
+// package's Source vocabulary stays strictly about load origin.
+const sourceInactive = "inactive"
 
 func listAssetCmd() *cobra.Command {
 	return &cobra.Command{
@@ -39,18 +78,26 @@ func listAssetCmd() *cobra.Command {
 		Short: "List resolved prompt assets",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			shipped := make(map[string]struct{}, 8)
+			for _, name := range assets.EmbeddedNames() {
+				shipped[name] = struct{}{}
+			}
 			for _, asset := range assets.LoadAll() {
 				if asset.Source == assets.SourceFallback || asset.Path == "" {
 					continue
 				}
 				name := strings.TrimSuffix(filepath.Base(asset.Path), ".md")
+				source := asset.Source
+				if _, ok := shipped[name]; !ok {
+					source = sourceInactive
+				}
 				path := asset.Path
 				age := assets.Age(asset.ModTime)
 				if asset.Source == assets.SourceEmbedded {
 					path = "<embedded>"
 					age = "embedded"
 				}
-				fmt.Printf("%s\t%s\t%s\t%s\n", name, asset.Source, path, age)
+				fmt.Printf("%s\t%s\t%s\t%s\n", name, source, path, age)
 			}
 			return nil
 		},
@@ -71,13 +118,16 @@ func resetAssetCmd() *cobra.Command {
 			}
 			if len(args) == 1 {
 				name := args[0]
+				if err := validateAssetName(name); err != nil {
+					return err
+				}
 				return removeOverride(filepath.Join(dir, name+".md"), name)
 			}
 			return resetAllOverrides(dir, all, force)
 		},
 	}
 
-	cmd.Flags().BoolVar(&all, "all", false, "Remove every override under $TR_HOME/prompts/")
+	cmd.Flags().BoolVar(&all, "all", false, "Remove every override in the data dir's prompts/ directory")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip the confirmation prompt")
 
 	return cmd
@@ -146,6 +196,9 @@ func syncAssetCmd() *cobra.Command {
 				return fmt.Errorf("sync requires an explicit asset name")
 			}
 			name := args[0]
+			if err := validateAssetName(name); err != nil {
+				return err
+			}
 
 			dir, ok := promptsDir()
 			if !ok {
@@ -154,7 +207,7 @@ func syncAssetCmd() *cobra.Command {
 
 			embeddedBytes, ok := assets.Embedded(name)
 			if !ok {
-				return fmt.Errorf("embedded asset %s not found", name)
+				return fmt.Errorf("embedded asset '%s' not found — run 'tr asset list' to see the available asset names", name)
 			}
 
 			target := filepath.Join(dir, name+".md")
