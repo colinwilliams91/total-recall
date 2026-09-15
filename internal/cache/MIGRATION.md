@@ -1,11 +1,20 @@
 # MIGRATION: schema reshape
 
-This change reshapes the `questions` table and adds `choices`, `selections`,
-and `question_events` tables. The teardown is intentionally destructive: the
-prior schema (`correct_index`, `answer_index`, `answer`, `correct`,
-`delivered_at`, `answered_at`, `queued_at`, `claimed_by`, `feedback` as
-in-row columns, `choices` as JSON) is gone. There is no incremental migration
-path.
+This change reshapes the `questions` table. The teardown is intentionally
+destructive and applies to any `memory.db` created by an earlier build:
+
+- First reshape (prior): dropped `correct_index`, `answer_index`, `answer`,
+  `correct`, `delivered_at`, `answered_at`, `queued_at`, `claimed_by`,
+  `feedback` as in-row columns, and `choices` as JSON; added `choices`,
+  `selections`, and `question_events` tables.
+- Second reshape (current): drops the free-text correctness-key column
+  `correct_answer` and narrows the `question_type` CHECK constraint to
+  `('multiple_choice','multi_select')` (removing `'free_text'`).
+
+There is no incremental migration path. A stale `questions` table that still
+carries `correct_answer` and the `'free_text'` CHECK value must be torn down:
+the new build's narrowed CHECK cannot exist in it, and inserts the new build
+wants to reject would still succeed there.
 
 Before running the new build for the first time, run ONE of:
 

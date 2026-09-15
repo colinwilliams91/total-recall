@@ -32,13 +32,12 @@ CREATE TABLE IF NOT EXISTS concepts (
 CREATE TABLE IF NOT EXISTS questions (
     id              INTEGER  PRIMARY KEY AUTOINCREMENT,
     question_type   TEXT     NOT NULL DEFAULT 'multiple_choice'
-                    CHECK (question_type IN ('multiple_choice','multi_select','free_text')),
+                    CHECK (question_type IN ('multiple_choice','multi_select')),
     status          TEXT     NOT NULL DEFAULT 'queued'
                     CHECK (status IN ('queued','delivered','answered','skipped')),
     question        TEXT     NOT NULL,
     repo            TEXT     NOT NULL,
     branch          TEXT     NOT NULL,
-    correct_answer  TEXT,
     feedback        TEXT
 );
 `
@@ -120,7 +119,6 @@ type StoredQuestion struct {
 	Branch        string
 	Choices       []Choice
 	CorrectIndex  int
-	CorrectAnswer *string
 	Feedback      *string
 	Selections    []Selection
 }
@@ -133,15 +131,18 @@ type Store struct {
 // Open opens (or creates) the memory store at $TR_HOME/memory.db, or
 // ~/.tr/memory.db when TR_HOME is unset. Returns a non-nil *Store on success.
 //
-// MIGRATION: this version reshapes the `questions` table (drops the prior
-// `correct_index`, `answer_index`, `choices` JSON, `answer`, `correct`,
-// `delivered_at`, `claimed_by`, `answered_at`, `queued_at`, `feedback`-as-row
-// columns) and adds `choices`, `selections`, `question_events` tables. There is
-// no in-code migration path. If a prior `memory.db` exists, Open()'s
-// `CREATE TABLE IF NOT EXISTS` is a no-op against the stale `questions`
-// table — the maintainer must run the teardown SQL (`DROP TABLE IF EXISTS
-// questions;`) or delete the data file before the new build runs. See
-// MIGRATION.md in this package.
+// MIGRATION: this version reshapes the `questions` table a second time —
+// it drops the free-text correctness-key column `correct_answer` and
+// narrows the `question_type` CHECK constraint to
+// ('multiple_choice','multi_select') (removing 'free_text'). This is on top
+// of the earlier reshape that dropped the `correct_index`, `answer_index`,
+// `choices` JSON, `answer`, `correct`, `delivered_at`, `claimed_by`,
+// `answered_at`, `queued_at`, `feedback`-as-row columns and added `choices`,
+// `selections`, `question_events` tables. There is no in-code migration
+// path. If a prior `memory.db` exists, Open()'s `CREATE TABLE IF NOT EXISTS`
+// is a no-op against the stale `questions` table — the maintainer must run
+// the teardown SQL (`DROP TABLE IF EXISTS questions;`) or delete the data
+// file before the new build runs. See MIGRATION.md in this package.
 func Open() (*Store, error) {
 	dir, err := trDir()
 	if err != nil {
@@ -557,7 +558,7 @@ func (s *Store) RecentQuestions(ctx context.Context, repo, branch string, limit 
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT q.id, q.question_type, q.status, q.question, q.repo, q.branch, q.correct_answer, q.feedback,
+SELECT q.id, q.question_type, q.status, q.question, q.repo, q.branch, q.feedback,
        e_terminal.occurred_at
 FROM questions q
 JOIN question_events e_terminal
@@ -574,14 +575,10 @@ LIMIT ?`, repo, branch, limit)
 	var result []StoredQuestion
 	for rows.Next() {
 		var sq StoredQuestion
-		var correctAnswer, feedback sql.NullString
+		var feedback sql.NullString
 		var terminalAt string
-		if err := rows.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &correctAnswer, &feedback, &terminalAt); err != nil {
+		if err := rows.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &feedback, &terminalAt); err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
-		}
-		if correctAnswer.Valid {
-			v := correctAnswer.String
-			sq.CorrectAnswer = &v
 		}
 		if feedback.Valid {
 			v := feedback.String
@@ -603,7 +600,7 @@ func recentQuestions(ctx context.Context, db *sql.DB, repo, branch, status strin
 		return nil, nil
 	}
 	rows, err := db.QueryContext(ctx, `
-SELECT q.id, q.question_type, q.status, q.question, q.repo, q.branch, q.correct_answer, q.feedback
+SELECT q.id, q.question_type, q.status, q.question, q.repo, q.branch, q.feedback
 FROM questions q
 JOIN question_events e_terminal
   ON e_terminal.question_id = q.id
@@ -619,13 +616,9 @@ LIMIT ?`, status, repo, branch, limit)
 	var result []StoredQuestion
 	for rows.Next() {
 		var sq StoredQuestion
-		var correctAnswer, feedback sql.NullString
-		if err := rows.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &correctAnswer, &feedback); err != nil {
+		var feedback sql.NullString
+		if err := rows.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &feedback); err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
-		}
-		if correctAnswer.Valid {
-			v := correctAnswer.String
-			sq.CorrectAnswer = &v
 		}
 		if feedback.Valid {
 			v := feedback.String
@@ -732,19 +725,15 @@ func trDir() (string, error) {
 // source of truth is the IsCorrect boolean on each choice row.
 func selectQuestion(ctx context.Context, db *sql.DB, id int64) (*StoredQuestion, error) {
 	row := db.QueryRowContext(ctx, `
-SELECT id, question_type, status, question, repo, branch, correct_answer, feedback
+SELECT id, question_type, status, question, repo, branch, feedback
 FROM questions WHERE id = ?`, id)
 	var sq StoredQuestion
-	var correctAnswer, feedback sql.NullString
-	if err := row.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &correctAnswer, &feedback); err != nil {
+	var feedback sql.NullString
+	if err := row.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &feedback); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("fetching question %d: %w", id, err)
-	}
-	if correctAnswer.Valid {
-		v := correctAnswer.String
-		sq.CorrectAnswer = &v
 	}
 	if feedback.Valid {
 		v := feedback.String
@@ -765,19 +754,15 @@ FROM questions WHERE id = ?`, id)
 // returned question reflects the just-claimed state.
 func selectQuestionInTx(ctx context.Context, tx *sql.Tx, id int64) (*StoredQuestion, error) {
 	row := tx.QueryRowContext(ctx, `
-SELECT id, question_type, status, question, repo, branch, correct_answer, feedback
+SELECT id, question_type, status, question, repo, branch, feedback
 FROM questions WHERE id = ?`, id)
 	var sq StoredQuestion
-	var correctAnswer, feedback sql.NullString
-	if err := row.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &correctAnswer, &feedback); err != nil {
+	var feedback sql.NullString
+	if err := row.Scan(&sq.ID, &sq.QuestionType, &sq.Status, &sq.Question, &sq.Repo, &sq.Branch, &feedback); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("fetching question %d: %w", id, err)
-	}
-	if correctAnswer.Valid {
-		v := correctAnswer.String
-		sq.CorrectAnswer = &v
 	}
 	if feedback.Valid {
 		v := feedback.String
@@ -874,11 +859,11 @@ WHERE question_id = ? ORDER BY id ASC`, qs[i].ID)
 
 // deriveCorrectIndex returns the position of the choice with IsCorrect=true,
 // or -1 if no choice has IsCorrect set. The -1 sentinel is intentional:
-// returning 0 for free-text or any "no correct row" case would silently
-// identify choices[0] as the correct answer at every caller that reads
-// CorrectIndex without branching on QuestionType. Callers MUST check
-// CorrectIndex >= 0 (or branch on QuestionType) before treating it as a
-// valid index into Choices.
+// returning 0 for any "no correct row" case would silently identify
+// choices[0] as the correct answer at every caller that reads
+// CorrectIndex before checking for a valid index into Choices.
+// Callers MUST check CorrectIndex >= 0 (or branch on QuestionType) before
+// treating it as a valid index into Choices.
 func deriveCorrectIndex(choices []Choice) int {
 	for _, c := range choices {
 		if c.IsCorrect {
