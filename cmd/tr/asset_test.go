@@ -161,15 +161,15 @@ func TestAssetSyncRejectsInvalidName(t *testing.T) {
 
 // Task 2.3.1: slot files whose name matches no shipped asset list as
 // `inactive`; shipped-name overrides keep `$TR_HOME`.
-func TestAssetListTagsUnmanagedAsInactive(t *testing.T) {
+func TestAssetShowTagsUnmanagedAsInactive(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TR_HOME", tmp)
 	overridePath := writeOverrideFile(t, tmp, "question-generation-policy")
 	orphanPath := writeOverrideFile(t, tmp, "my-experiment")
 
-	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err := runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+overridePath) {
 		t.Fatalf("expected shipped-name override to keep $TR_HOME, got:\n%s", out)
@@ -181,12 +181,12 @@ func TestAssetListTagsUnmanagedAsInactive(t *testing.T) {
 
 // Task 2.3.2: no `inactive` tag appears when the slot holds nothing
 // unmanaged.
-func TestAssetListNoUnmanagedTag(t *testing.T) {
+func TestAssetShowNoUnmanagedTag(t *testing.T) {
 	isolateHome(t)
 
-	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err := runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 	if strings.Contains(out, "inactive") {
 		t.Fatalf("expected no inactive tag without unmanaged files, got:\n%s", out)
@@ -202,7 +202,7 @@ func TestAssetSyncUnknownNamePointsAtList(t *testing.T) {
 		t.Fatal("expected non-nil error for unknown asset")
 	}
 	if !strings.Contains(err.Error(), "embedded asset 'ecs-policy' not found") ||
-		!strings.Contains(err.Error(), "run 'tr asset list' to see the available asset names") {
+		!strings.Contains(err.Error(), "run 'tr asset show' to see the available asset names") {
 		t.Fatalf("expected teaching error, got: %v", err)
 	}
 }
@@ -230,12 +230,12 @@ func TestAssetResetUnmanagedFileStillWorks(t *testing.T) {
 
 // Task 3.4.1: with no overrides in the data dir, the canonical asset is listed
 // as embedded.
-func TestAssetListNoOverrides(t *testing.T) {
+func TestAssetShowNoOverrides(t *testing.T) {
 	isolateHome(t)
 
-	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err := runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 	if !strings.Contains(out, "question-generation-policy\tembedded\t<embedded>\tembedded") {
 		t.Fatalf("expected embedded asset line, got:\n%s", out)
@@ -244,14 +244,14 @@ func TestAssetListNoOverrides(t *testing.T) {
 
 // Task 3.4.2: with one override, the line carries the $TR_HOME source, the
 // absolute override path, and an age column.
-func TestAssetListWithOverride(t *testing.T) {
+func TestAssetShowWithOverride(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TR_HOME", tmp)
 	overridePath := writeOverrideFile(t, tmp, "question-generation-policy")
 
-	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err := runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 
 	var line string
@@ -282,15 +282,15 @@ func TestAssetListWithOverride(t *testing.T) {
 // Task 3.4.3: with two slot files, both appear — one shadowing the embedded
 // default ($TR_HOME), one orphaned beyond the embedded set (inactive, per the
 // asset-slot-ux-clarity change).
-func TestAssetListMultipleOverrides(t *testing.T) {
+func TestAssetShowMultipleOverrides(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TR_HOME", tmp)
 	overridePath := writeOverrideFile(t, tmp, "question-generation-policy")
 	orphanPath := writeOverrideFile(t, tmp, "orphan-policy")
 
-	out, err := runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err := runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+overridePath) {
 		t.Fatalf("expected overridden asset line, got:\n%s", out)
@@ -387,12 +387,12 @@ func TestAssetSyncUsesDefaultDataDir(t *testing.T) {
 		t.Fatalf("expected override file at %s: %v", expected, statErr)
 	}
 
-	out, err = runAssetCmd(t, listAssetCmd(), nil, nil)
+	out, err = runAssetCmd(t, showAssetCmd(), nil, nil)
 	if err != nil {
-		t.Fatalf("asset list error: %v", err)
+		t.Fatalf("asset show error: %v", err)
 	}
 	if !strings.Contains(out, "question-generation-policy\t$TR_HOME\t"+expected) {
-		t.Fatalf("expected list to show the default-dir override, got:\n%s", out)
+		t.Fatalf("expected show to show the default-dir override, got:\n%s", out)
 	}
 
 	_, err = runAssetCmd(t, resetAssetCmd(), []string{"question-generation-policy"}, nil)

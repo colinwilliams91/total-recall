@@ -54,7 +54,7 @@ A same-named file in the data dir's prompts/ directory (~/.tr/prompts,
 or $TR_HOME/prompts when TR_HOME is set) replaces the shipped default —
 edit it and restart the daemon, no recompile.
 
-  list            every asset's resolved source, path, and age
+  show            what is loaded: resolved source, path, and age
   sync <name>     copy the shipped policy into your override slot as a
                   starting point for re-tuning
   reset [<name>]  remove an override so the shipped default takes effect
@@ -63,7 +63,7 @@ reset and sync only touch files — restart 'tr serve' to pick up the
 change. A startup OVERRIDE WARNING fires when a stale override is older
 than the shipped policy by more than prompt-asset.drift-warning-days.`,
 	}
-	cmd.AddCommand(listAssetCmd(), resetAssetCmd(), syncAssetCmd())
+	cmd.AddCommand(showAssetCmd(), resetAssetCmd(), syncAssetCmd())
 	return cmd
 }
 
@@ -72,10 +72,10 @@ than the shipped policy by more than prompt-asset.drift-warning-days.`,
 // package's Source vocabulary stays strictly about load origin.
 const sourceInactive = "inactive"
 
-func listAssetCmd() *cobra.Command {
+func showAssetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List resolved prompt assets",
+		Use:   "show",
+		Short: "Show resolved prompt assets",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			shipped := make(map[string]struct{}, 8)
@@ -207,7 +207,7 @@ func syncAssetCmd() *cobra.Command {
 
 			embeddedBytes, ok := assets.Embedded(name)
 			if !ok {
-				return fmt.Errorf("embedded asset '%s' not found — run 'tr asset list' to see the available asset names", name)
+				return fmt.Errorf("embedded asset '%s' not found — run 'tr asset show' to see the available asset names", name)
 			}
 
 			target := filepath.Join(dir, name+".md")

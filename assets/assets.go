@@ -298,7 +298,7 @@ func UnmanagedNames() []string {
 // never touches files; silent when there are none.
 func WarnUnmanagedOverrides() {
 	for _, name := range UnmanagedNames() {
-		log.Printf("[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset list')",
+		log.Printf("[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset show')",
 			name+".md")
 	}
 }

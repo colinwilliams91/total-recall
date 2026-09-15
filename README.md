@@ -41,7 +41,7 @@ command -v tr           # (this directory must be on your PATH)
 tr --version
 
 # Init user config      # (run anywhere; one-time, user-level)
-tr init                 # creates `~/.tr/config.yaml` for conversation analysis & AI provider setup
+tr init                 # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
 
 # Start the daemon
 tr serve				# runs on `localhost:7331` & must be running for hooks & MCP
@@ -57,12 +57,6 @@ tr repo					# adds project `.tr.yaml`, installs Git hooks
 Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
 Run `tr --help` for the full command and flag reference.
-
-### Make it yours
-
-Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push ECS patterns, query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync <name>` names the file for you); `tr asset list|reset` manage the slot; restart `tr serve` to pick up changes.
-
-**[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
 ### Non-Go install path²
 
@@ -81,6 +75,12 @@ tr config --show
 Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
 Checkout [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+
+### Make it yours
+
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync` starts the baseline file for you); `tr asset sync|show|reset` manage the slot; restart `tr serve` to pick up changes.
+
+**[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
 ## Philosophy
 You're a software engineer.

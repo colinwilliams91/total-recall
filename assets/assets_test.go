@@ -469,7 +469,7 @@ func TestWarnUnmanagedOverridesLogsOrphans(t *testing.T) {
 	if strings.Contains(out, "question-generation-policy") {
 		t.Fatalf("expected no warning for the shipped-name override, got: %s", out)
 	}
-	if !strings.Contains(out, "run 'tr asset list'") {
+	if !strings.Contains(out, "run 'tr asset show'") {
 		t.Fatalf("expected the list pointer in the warning, got: %s", out)
 	}
 }

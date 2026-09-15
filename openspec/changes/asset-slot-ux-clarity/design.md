@@ -1,6 +1,6 @@
 ## Context
 
-The drop-in slot's UX has three ambiguities: inert files look like active overrides in `tr asset list`; the naming rule (filename = shipped asset name) is nowhere visible; and the slot invites a workspace mental model where a workspace is the wrong frame. Exploration agreed on the corrective model — **slot = deployment target** — with no variant machinery.
+The drop-in slot's UX has three ambiguities: inert files look like active overrides in `tr asset show`; the naming rule (filename = shipped asset name) is nowhere visible; and the slot invites a workspace mental model where a workspace is the wrong frame. Exploration agreed on the corrective model — **slot = deployment target** — with no variant machinery.
 
 ## Goals / Non-Goals
 
@@ -17,7 +17,7 @@ The drop-in slot's UX has three ambiguities: inert files look like active overri
 
 ### Decision: Slot is a deployment target, and the docs say so
 
-One file per shipped asset; the filename is the address; `tr asset sync <name>` is the doorway that creates the correctly-named file. Ideas, drafts, forks, and version history live in git or a policies folder outside the data dir. Swapping = copying a candidate over the slot file (or `sync` + edit); `tr asset list` confirms what is active; `reset` empties the slot. The user's "can't fork into two files" concern is resolved by reframing, not mechanism: the slot was never where ideas live.
+One file per shipped asset; the filename is the address; `tr asset sync <name>` is the doorway that creates the correctly-named file. Ideas, drafts, forks, and version history live in git or a policies folder outside the data dir. Swapping = copying a candidate over the slot file (or `sync` + edit); `tr asset show` confirms what is active; `reset` empties the slot. The user's "can't fork into two files" concern is resolved by reframing, not mechanism: the slot was never where ideas live.
 
 **Alternatives considered:**
 - *Config-driven variant selection (`prompt-asset.override: <name>`).* Deferred: with one shipped asset it machinery-for-nobody; the `adaptive-difficulty` Resolver pattern makes the later bolt-on natural.
@@ -41,11 +41,11 @@ The list command already owns presentation (tab-separated, parse-friendly); it c
 
 ### Decision: `sync`'s error message carries the pointer, not a name-list dump
 
-`embedded asset '<name>' not found — run 'tr asset list' to see the available asset names`. Dumping the asset list into the error would desync the moment an asset is added or removed; pointing at the inventory keeps one source of truth.
+`embedded asset '<name>' not found — run 'tr asset show' to see the available asset names`. Dumping the asset list into the error would desync the moment an asset is added or removed; pointing at the inventory keeps one source of truth.
 
 ### Decision: Show-section scope unchanged (Open Question resolved as open)
 
-`tr config show`'s `prompt assets:` section iterates shipped names only — by construction it cannot display slot orphans, and adding them would bloat a config-debugging surface with non-config files. The proposal's open question is resolved: no change. `tr asset list` is the inventory surface.
+`tr config show`'s `prompt assets:` section iterates shipped names only — by construction it cannot display slot orphans, and adding them would bloat a config-debugging surface with non-config files. The proposal's open question is resolved: no change. `tr asset show` is the inventory surface.
 
 ## Risks / Trade-offs
 
