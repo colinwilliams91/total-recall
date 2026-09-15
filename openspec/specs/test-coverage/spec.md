@@ -1,3 +1,7 @@
+## Purpose
+
+Contract the automated test coverage of the recall engine: collocated Go-native tests over the cache schema operations, the TUI ask state machine, hook installation, and daemon endpoints, so regressions surface in CI before users meet them.
+
 ## Requirements
 
 ### Requirement: Cache layer tests cover 4C schema operations

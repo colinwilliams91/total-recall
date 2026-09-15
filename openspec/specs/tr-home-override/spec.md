@@ -1,3 +1,7 @@
+## Purpose
+
+Let TR_HOME redirect the entire Total Recall data directory (config and memory.db together) instead of ~/.tr — the test and CI isolation mechanism every verification flow builds on.
+
 ## Requirements
 
 ### Requirement: TR_HOME environment variable redirects the Total Recall data directory

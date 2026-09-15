@@ -1,4 +1,9 @@
-## ADDED Requirements
+## Purpose
+
+Define the user-level configuration layer: a well-known ~/.tr/config.yaml carrying personal defaults across all repositories, auto-created with safe values when absent, and wired into init, daemon startup, and hook dispatch.
+
+## Requirements
+
 
 ### Requirement: User-level config file exists at a well-known path
 The system SHALL support a user-level configuration file at `~/.tr/config.yaml` that defines personal defaults applying across all repositories.

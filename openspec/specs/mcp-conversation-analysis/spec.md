@@ -1,4 +1,9 @@
-## ADDED Requirements
+## Purpose
+
+Carry MCP conversation content (user questions and agent explanations) into the Incremental Analysis Pipeline only under explicit user opt-in, while code-context correlation, delivery, and raw-text hygiene keep working regardless of the flag.
+
+## Requirements
+
 
 ### Requirement: `tr init` prompts the user about conversation analysis opt-in
 The system SHALL present a single plain-language prompt during `tr init` asking whether to enable conversation analysis. The prompt SHALL be simple and earnest, with no legal jargon.
@@ -19,6 +24,8 @@ The system SHALL present a single plain-language prompt during `tr init` asking 
 - **THEN** no prompt is shown — the advisory message directs the user to `tr init` to configure preferences
 
 ---
+
+### Requirement: Conversation analysis requires explicit opt-in
 The system SHALL require explicit opt-in before processing MCP conversation content (Signal 1: user questions; Signal 2: agent explanations) as input signals to the Incremental Analysis Pipeline. The default SHALL be off.
 
 #### Scenario: Conversation analysis disabled by default

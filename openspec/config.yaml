@@ -60,6 +60,7 @@ Example:
       - Always include a "Non-goals" section
       - Focus on low-friction developer workflows
     specs:
+    - Main specs carry ## Purpose (plus ## Requirements); delta headers never appear in a canonical spec
     - Use Given/When/Then format for scenarios
     - Preserve provider-agnostic AI integration whenever possible
     design:

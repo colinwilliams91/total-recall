@@ -1,3 +1,7 @@
+## Purpose
+
+Keep the AI behind one thin, provider-agnostic primitive: a single Complete call, a named registry resolving base URLs for BYOK providers, env-var key handling, and zero vendor SDKs — so domain layers never couple to any vendor.
+
 ## Requirements
 
 ### Requirement: Provider interface is a thin primitive

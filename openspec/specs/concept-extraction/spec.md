@@ -1,3 +1,7 @@
+## Purpose
+
+Turn each staged diff into durable engineering-concept fingerprints asynchronously — extraction never blocks the committing terminal, degrades silently on AI failure, and feeds the background concept cache that recall quizzes draw from.
+
 ## Requirements
 
 ### Requirement: Concept extraction runs asynchronously, never blocking the hook response
