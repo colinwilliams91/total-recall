@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="DOCS/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
+	<img src="docs/MEDIA/TOTAL_RECALL_LOGO_04.png" alt="total recall logo" width="400"/>
 </p>
 
 <p align="center">
@@ -74,7 +74,7 @@ tr config --show
 
 Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
-Checkout [CONFIG.md](DOCS/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+Checkout [CONFIG.md](docs/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
 
 ### Make it yours
 
@@ -106,7 +106,7 @@ Every commit is a learning opportunity.
 - [How AI assistance impacts the formation of coding skills](https://www.anthropic.com/research/AI-assistance-coding-skills)
 	- Anthropic Research Team
 
-Checkout [DATA.md](DOCS/DATA.md) for more information on the research findings.
+Checkout [DATA.md](docs/DATA.md) for more information on the research findings.
 
 ---
 ---
@@ -115,7 +115,7 @@ Checkout [DATA.md](DOCS/DATA.md) for more information on the research findings.
 - I strongly believe in the sharing of knowledge, transparent information and FOSS.
 - _Learning_ is what will distinguish us from the robots. 🥲
 - Contributions are welcome!
-- Please see [CONTRIBUTING.md](DOCS/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `tr init` test.
+- Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `tr init` test.
 
 ---
 
