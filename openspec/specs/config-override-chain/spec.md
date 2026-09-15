@@ -1,4 +1,9 @@
-## ADDED Requirements
+## Purpose
+
+Resolve and protect the two-tier configuration chain: user-level defaults in ~/.tr/config.yaml, per-repo overrides in .tr.yaml, deep-merged so repo keys do not discard unrelated user values, and user-level-only blocks (privacy/ai) never influence per-repo contexts.
+
+## Requirements
+
 
 ### Requirement: Per-repo config overrides user-level defaults
 The system SHALL implement a two-tier config precedence model where per-repo `.tr.yaml` values override `~/.tr/config.yaml` defaults on any conflicting key.
