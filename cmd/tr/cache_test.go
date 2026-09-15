@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/colinwilliams91/total-recall/internal/cache"
@@ -505,6 +506,45 @@ func TestSaveQuestionPersistsIsCorrectOnChoice(t *testing.T) {
 	}
 	if claimed.Choices[0].IsCorrect || claimed.Choices[1].IsCorrect {
 		t.Fatal("expected choice[0] and choice[1].IsCorrect=false")
+	}
+}
+
+// TestFreeTextQuestionTypeRejectedBySchema validates the free-text removal:
+// 'free_text' is no longer a legal question_type value and the questions
+// table no longer carries a correct_answer column.
+func TestFreeTextQuestionTypeRejectedBySchema(t *testing.T) {
+	setupCache(t)
+	db := openRawDB(t)
+
+	if _, err := db.Exec(`INSERT INTO questions (question_type, question, repo, branch)
+VALUES ('free_text', 'q', '/repo/test', 'main')`); err == nil {
+		t.Fatal("expected CHECK constraint violation for question_type='free_text', got nil error")
+	} else if !strings.Contains(err.Error(), "CHECK") {
+		t.Fatalf("expected CHECK constraint violation, got %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM pragma_table_info('questions') WHERE name = 'correct_answer'`).
+		Scan(&count); err != nil {
+		t.Fatalf("pragma_table_info query: %v", err)
+	}
+	if count != 0 {
+		t.Fatal("expected no correct_answer column on questions, found one")
+	}
+}
+
+// TestUnknownQuestionTypeRejectedBySchema validates that any value outside
+// the ('multiple_choice','multi_select') enum fails the CHECK constraint.
+func TestUnknownQuestionTypeRejectedBySchema(t *testing.T) {
+	setupCache(t)
+	db := openRawDB(t)
+
+	if _, err := db.Exec(`INSERT INTO questions (question_type, question, repo, branch)
+VALUES ('poll', 'q', '/repo/test', 'main')`); err == nil {
+		t.Fatal("expected CHECK constraint violation for question_type='poll', got nil error")
+	} else if !strings.Contains(err.Error(), "CHECK") {
+		t.Fatalf("expected CHECK constraint violation, got %v", err)
 	}
 }
 
