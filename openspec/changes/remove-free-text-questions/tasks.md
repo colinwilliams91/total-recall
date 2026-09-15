@@ -19,5 +19,5 @@
 
 ## 4. Documentation reconciliation (parallel-branch dependency)
 
-- [ ] 4.1 Run the `/domain-modeling` skill using the parallel branch's "no free-text" documentation as the source of truth; reconcile repo-side docs (e.g., `CONTEXT.md`, `AGENTS.md`, in-package doc comments) wherever they still describe or imply the free-text format; if the parallel branch has not landed yet, block this task until it does
+- [x] 4.1 Run the `/domain-modeling` skill using the parallel branch's "no free-text" documentation as the source of truth; reconcile repo-side docs (e.g., `CONTEXT.md`, `AGENTS.md`, in-package doc comments) wherever they still describe or imply the free-text format; if the parallel branch has not landed yet, block this task until it does
 - [x] 4.2 Verify no remaining free-text references in code or docs outside archived OpenSpec changes: `rg -n "free_text|free-text|selected_text" --glob '!openspec/changes/archive/**'` returns nothing
