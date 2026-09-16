@@ -17,6 +17,10 @@
     </a>
 </p>
 
+<p align="center">
+	<img src="https://github.com/colinwilliams91/total-recall-demos/releases/download/demos-v1/demo-a-full-flow.gif" alt="Total Recall TUI demo — install, commit, recall quiz" width="800"/>
+</p>
+
 > _AI coding assistants make us faster while we slowly forget the fundamentals._
 >
 > _Total-Recall reinforces software engineering knowledge through short, diff-aware quizzes triggered by your normal Git workflow._

@@ -82,3 +82,7 @@ One flow is still manual: `tr init`, because its `huh` TUI requires a real TTY. 
 ```
 
 See `scripts/e2e/README.md` for what it covers and why it can't be automated yet.
+
+### TUI demos
+
+The README's demo GIFs live in [`total-recall-demos`](https://github.com/colinwilliams91/total-recall-demos) (tape sources, harness, release assets). Re-rendering them is **maintainer-owned** — don't expect contributors to refresh a demo. Breaking `TestGolden*` tests in `cmd/tr/testdata/` after a UX change is the signal that the demos have gone stale.
