@@ -303,7 +303,7 @@ func TestLoadWarnsOnStaleOverride(t *testing.T) {
 	if !strings.Contains(out, "100d older") {
 		t.Fatalf("expected %q in warning, got: %s", "100d older", out)
 	}
-	if !strings.Contains(out, "re-sync with 'tr asset sync question-generation-policy'") {
+	if !strings.Contains(out, "re-sync with 'torec asset sync question-generation-policy'") {
 		t.Fatalf("expected re-sync hint in warning, got: %s", out)
 	}
 }
@@ -469,7 +469,7 @@ func TestWarnUnmanagedOverridesLogsOrphans(t *testing.T) {
 	if strings.Contains(out, "question-generation-policy") {
 		t.Fatalf("expected no warning for the shipped-name override, got: %s", out)
 	}
-	if !strings.Contains(out, "run 'tr asset show'") {
+	if !strings.Contains(out, "run 'torec asset show'") {
 		t.Fatalf("expected the list pointer in the warning, got: %s", out)
 	}
 }

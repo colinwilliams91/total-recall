@@ -3,10 +3,10 @@
 ## *Quickstart 30 seconds*
 ==--
 ```sh
-go install ./cmd/tr
-tr init          # setup anywhere
-tr repo          # inside a git repo
-tr serve         # persist in 2nd terminal
+go install ./cmd/torec
+torec init          # setup anywhere
+torec repo          # inside a git repo
+torec serve         # persist in 2nd terminal
 ```
 ==--
 ## Build
@@ -14,7 +14,7 @@ tr serve         # persist in 2nd terminal
 The Makefile wraps everything:
 
 ```sh
-make build       # → bin/tr.exe (Windows) or bin/tr (Linux/macOS)
+make build       # → bin/torec.exe (Windows) or bin/torec (Linux/macOS)
 make install     # → $GOPATH/bin
 make tidy        # go mod tidy — sync dependencies
 make lint        # golangci-lint (must be installed separately)
@@ -24,15 +24,15 @@ make clean       # remove the bin/ directory
 Or directly with Go:
 
 ```sh
-go build -o bin/tr.exe ./cmd/tr
-go install ./cmd/tr
+go build -o bin/torec.exe ./cmd/torec
+go install ./cmd/torec
 ```
 
 ## Run
 
 ```sh
-./bin/tr --help
-./bin/tr serve   # start the daemon on localhost:7331
+./bin/torec --help
+./bin/torec serve   # start the daemon on localhost:7331
 ```
 
 Available subcommands:
@@ -53,11 +53,11 @@ asset            # Inspect/manage prompt-asset overrides: show | reset | sync
 
 ### Automated (Go-native)
 
-No external runners. Tests live in `cmd/tr/*_test.go` and use three strategies: model isolation (pure `Update(msg)`/`View()` calls), headless integration (in-process daemon via `startTestDaemon`), and golden-file snapshots of TUI views.
+No external runners. Tests live in `cmd/torec/*_test.go` and use three strategies: model isolation (pure `Update(msg)`/`View()` calls), headless integration (in-process daemon via `startTestDaemon`), and golden-file snapshots of TUI views.
 
 ```sh
 go test ./...            # entire repo
-go test ./cmd/tr/...     # all tr CLI tests (the bulk of the suite)
+go test ./cmd/torec/...     # all torec CLI tests (the bulk of the suite)
 ```
 
 Verify the full build pipeline before pushing:
@@ -66,16 +66,16 @@ Verify the full build pipeline before pushing:
 go build ./... && go vet ./... && go test ./...
 ```
 
-Golden files live in `cmd/tr/testdata/*.golden`. After changing a TUI view, regenerate them:
+Golden files live in `cmd/torec/testdata/*.golden`. After changing a TUI view, regenerate them:
 
 ```sh
-$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/tr/...
-go test -run TestGolden ./cmd/tr/...   # re-run without the flag to verify
+$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/torec/...
+go test -run TestGolden ./cmd/torec/...   # re-run without the flag to verify
 ```
 
 ### Manual E2E
 
-One flow is still manual: `tr init`, because its `huh` TUI requires a real TTY. Run it with:
+One flow is still manual: `torec init`, because its `huh` TUI requires a real TTY. Run it with:
 
 ```powershell
 .\scripts\e2e\manual-init.ps1

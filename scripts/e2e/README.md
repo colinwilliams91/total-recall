@@ -4,19 +4,19 @@
 
 | Location | Scope | Strategy |
 |----------|-------|----------|
-| `cmd/tr/*_test.go` | Automated e2e (58 tests) | Go-native: model isolation, headless integration, golden file |
-| `scripts/e2e/manual-init.ps1` | Manual e2e (3 steps) | Interactive TTY — `tr init` TUI only |
+| `cmd/torec/*_test.go` | Automated e2e (58 tests) | Go-native: model isolation, headless integration, golden file |
+| `scripts/e2e/manual-init.ps1` | Manual e2e (3 steps) | Interactive TTY — `torec init` TUI only |
 
-## Why `tr init` is still manual
+## Why `torec init` is still manual
 
-`tr init` uses `huh.NewForm()` which requires a real TTY for its interactive
+`torec init` uses `huh.NewForm()` which requires a real TTY for its interactive
 mode. The `huh` library has an accessible mode (`TERM=dumb`) that switches to
 plain `bufio.Scanner`-based stdin/stdout I/O, but it has a per-field
 `bufio.Scanner` buffering bug: the first field's scanner buffers all available
 input, and subsequent fields get EOF and silently fall back to defaults.
 
 This makes piped-input automation unreliable. Until `huh` fixes the scanner
-sharing (or we adopt a PTY library), `tr init` remains a manual test.
+sharing (or we adopt a PTY library), `torec init` remains a manual test.
 
 ## Running the manual test
 
@@ -31,7 +31,7 @@ sharing (or we adopt a PTY library), `tr init` remains a manual test.
 The script will:
 1. Back up your existing `~/.tr/config.yaml`
 2. Create a scratch git repo
-3. Prompt you to run `tr init` interactively (3 times)
+3. Prompt you to run `torec init` interactively (3 times)
 4. Auto-verify config files, hook installation, and idempotency after each step
 5. Restore your original config
 
@@ -51,7 +51,7 @@ The script will:
 Run all automated tests:
 
 ```bash
-go test ./cmd/tr/...
+go test ./cmd/torec/...
 ```
 
 ## Removed scripts
@@ -65,4 +65,4 @@ The following scripts were removed because their coverage migrated to Go tests:
 | `phase-02.ps1` | `integration_test.go`, `main_test.go` |
 | `phase-03.ps1` | `provider_test.go`, `cache_test.go` |
 | `phase-04a.ps1` | `integration_test.go`, `ask_test.go`, `golden_test.go` |
-| `run-all.ps1` | `go test ./cmd/tr/...` |
+| `run-all.ps1` | `go test ./cmd/torec/...` |

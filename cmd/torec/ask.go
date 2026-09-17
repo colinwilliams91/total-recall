@@ -46,7 +46,7 @@ func resolveAskBranch() (string, error) {
 }
 
 const (
-	// defaultTimeout is how long tr ask polls for a question before showing
+	// defaultTimeout is how long torec ask polls for a question before showing
 	// the "caught up" message and exiting. Must be >= the pipeline context
 	// timeout in internal/engine/server.go so the poller doesn't give up
 	// before the pipeline produces a question. See the timeout relationship
@@ -60,7 +60,7 @@ var animFrames = []string{"Thinking.", "Thinking..", "Thinking..."}
 
 const caughtUpMessage = "You're all caught up on your recall questions. Great job 🤖💗"
 
-const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with tr serve."
+const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with torec serve."
 
 // askCmd is the Cobra command for surfacing a recall question in the terminal.
 func askCmd() *cobra.Command {

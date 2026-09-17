@@ -20,8 +20,8 @@ Each phase section covers what is testable, what is intentionally untestable (de
 Run from the repo root before testing any phase:
 
 ```sh
-go build -o tr ./cmd/tr   # Linux/macOS
-go build -o tr.exe ./cmd/tr  # Windows
+go build -o torec ./cmd/torec   # Linux/macOS
+go build -o torec.exe ./cmd/torec  # Windows
 ```
 
 Verify clean build and vet:
@@ -48,7 +48,7 @@ export TR_HOME=/tmp/tr-e2e
 
 # Windows PowerShell
 $env:TR_HOME = "$env:TEMP\tr-e2e"
-.\tr.exe serve
+.\torec.exe serve
 ```
 
 When `TR_HOME` is unset, the default `~/.tr/` is used. Go tests use `t.Setenv("TR_HOME", t.TempDir())` for automatic isolation.
@@ -60,8 +60,8 @@ Recall questions are tagged with the absolute repo path at ingestion and scoped 
 1. Start the daemon with `TR_HOME` set to a throwaway dir.
 2. Create two scratch git repos (X and Y).
 3. Commit in repo X (with AI configured) → a question is queued for X's repo path.
-4. Run `tr ask` in repo Y → expect "all caught up" (Y has no questions).
-5. Run `tr ask` in repo X → expect X's question.
+4. Run `torec ask` in repo Y → expect "all caught up" (Y has no questions).
+5. Run `torec ask` in repo X → expect X's question.
 
 ---
 
@@ -71,8 +71,8 @@ Recall questions are tagged with the absolute repo path at ingestion and scoped 
 
 | Check | Command | Expected |
 |-------|---------|----------|
-| Binary runs | `./tr --help` | Usage text with `serve`, `init`, `config`, `status` listed |
-| Version flag | `./tr --version` | `tr version dev` (or semver if built with ldflags) |
+| Binary runs | `./torec --help` | Usage text with `serve`, `init`, `config`, `status` listed |
+| Version flag | `./torec --version` | `torec version dev` (or semver if built with ldflags) |
 
 **Not yet testable in this phase:** All runtime behaviour (daemon, hooks, config, AI).
 
@@ -87,7 +87,7 @@ Recall questions are tagged with the absolute repo path at ingestion and scoped 
 ```sh
 # Optionally clear existing config to test a fresh state:
 rm ~/.tr/config.yaml   # Linux/macOS
-del %USERPROFILE%\.tr\config.yaml  # Windows
+del %USERPROFILE%\.torec\config.yaml  # Windows
 ```
 
 ### Checks
@@ -95,10 +95,10 @@ del %USERPROFILE%\.tr\config.yaml  # Windows
 | # | Check | Command | Expected |
 |---|-------|---------|----------|
 | 1.1 | User config auto-creates | `./tr serve` (then Ctrl-C) | Advisory: "created ~/.tr/config.yaml" (unless --quiet) |
-| 1.2 | Quiet flag suppresses advisory | `./tr serve --quiet` (then Ctrl-C) | No advisory printed |
-| 1.3 | Init prompts for opt-in | `./tr init` (inside a git repo) | TUI confirm for conversation analysis; config written |
-| 1.4 | Config show displays merged result | `./tr config --show` | Table of keys with `[user]`, `[repo]`, or `[default]` source tags |
-| 1.5 | Repo config respected | Add `privacy:\n  conversation_analysis: true` to `.tr.yaml`; run `./tr config --show` | `conversation_analysis` shows `[repo]` source |
+| 1.2 | Quiet flag suppresses advisory | `./torec serve --quiet` (then Ctrl-C) | No advisory printed |
+| 1.3 | Init prompts for opt-in | `./torec init` (inside a git repo) | TUI confirm for conversation analysis; config written |
+| 1.4 | Config show displays merged result | `./torec config --show` | Table of keys with `[user]`, `[repo]`, or `[default]` source tags |
+| 1.5 | Repo config respected | Add `privacy:\n  conversation_analysis: true` to `.torec.yaml`; run `./torec config --show` | `conversation_analysis` shows `[repo]` source |
 
 **Not yet testable:** Daemon routes, hook installation, AI calls.
 
@@ -106,7 +106,7 @@ del %USERPROFILE%\.tr\config.yaml  # Windows
 
 ## Phase 02 — Daemon Foundation
 
-**Goal:** Daemon starts and accepts hook payloads; `tr init` installs hooks; `tr status` reflects live daemon state.
+**Goal:** Daemon starts and accepts hook payloads; `torec init` installs hooks; `torec status` reflects live daemon state.
 
 ### Prerequisites
 
@@ -119,8 +119,8 @@ del %USERPROFILE%\.tr\config.yaml  # Windows
 
 ```sh
 # 1. Start the daemon (keep this terminal open throughout)
-./tr serve # posix
-.\tr.exe serve # windows
+./torec serve # posix
+.\torec.exe serve # windows
 
 # Expected: "Total Recall daemon listening on :7331"
 ```
@@ -135,8 +135,8 @@ Invoke-RestMethod http://localhost:7331/health # windows
 
 ```sh
 # 3. Status command (separate terminal)
-./tr status # posix
-.\tr.exe status # windows
+./torec status # posix
+.\torec.exe status # windows
 
 # Expected:
 #   ✓ Daemon running on localhost:7331
@@ -145,8 +145,8 @@ Invoke-RestMethod http://localhost:7331/health # windows
 
 ```sh
 # 4. Status when daemon is NOT running (stop daemon first, then):
-./tr status # posix
-.\tr.exe status # windows
+./torec status # posix
+.\torec.exe status # windows
 echo $?          # Linux/macOS
 $LASTEXITCODE    # Windows PowerShell
 # Expected: "✗ Daemon not running on localhost:7331" and exit code 1
@@ -156,19 +156,19 @@ $LASTEXITCODE    # Windows PowerShell
 
 ```sh
 # 5. Create a scratch repo
-mkdir /tmp/tr-test && cd /tmp/tr-test   # Linux/macOS
-mkdir C:\tmp\tr-test && cd C:\tmp\tr-test  # Windows
+mkdir /tmp/torec-test && cd /tmp/torec-test   # Linux/macOS
+mkdir C:\tmp\torec-test && cd C:\tmp\torec-test  # Windows
 
 git init
 
 # Run init from the scratch repo (point to your built binary)
-/path/to/tr init
+/path/to/torec init
 
 # Expected:
 #   TUI: conversation analysis confirm
 #   TUI: three hook selection confirms (pre-commit / commit-msg / pre-push)
 #   "✓ User config saved to ~/.tr/config.yaml"
-#   "✓ Repo config saved to ./.tr.yaml"
+#   "✓ Repo config saved to ./.torec.yaml"
 #   "✓ Installed N hook(s) into ./.git/hooks/"
 ```
 
@@ -181,7 +181,7 @@ cat .git/hooks/pre-commit
 
 ```sh
 # 7. Re-run init (idempotency check)
-/path/to/tr init
+/path/to/torec init
 # Expected: same result; hook file regenerated in-place, NOT duplicated
 #           Previous hook selections pre-populated in TUI
 ```
@@ -198,7 +198,7 @@ echo '#!/usr/bin/env bash' > .git/hooks/pre-commit
 echo 'echo "existing hook ran"' >> .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 
-/path/to/tr init  # enable pre-commit
+/path/to/torec init  # enable pre-commit
 cat .git/hooks/pre-commit
 
 # ---
@@ -210,7 +210,7 @@ cat .git/hooks/pre-commit
 echo "existing hook ran"
 '@ | Set-Content .git/hooks/pre-commit
 
-/path/to/tr init  # enable pre-commit
+/path/to/torec init  # enable pre-commit
 cat .git/hooks/pre-commit
 
 # ---
@@ -265,8 +265,8 @@ git commit -m "test: trigger TR hook"
 # Expected:
 #   - Commit succeeds (hook is non-blocking)
 #   - Daemon terminal prints a log line per enabled hook, e.g.:
-#       2026/01/01 12:00:00 [hook] pre-commit  repo=/tmp/tr-test  branch=main
-#       2026/01/01 12:00:00 [hook] commit-msg  repo=/tmp/tr-test  branch=main
+#       2026/01/01 12:00:00 [hook] pre-commit  repo=/tmp/torec-test  branch=main
+#       2026/01/01 12:00:00 [hook] commit-msg  repo=/tmp/torec-test  branch=main
 #   Note: the daemon logs envelope metadata only (hook name, repo path, branch).
 #   The full payload (diff, staged files, commit message) is received but not
 #   logged in Phase 2 — it will be processed in Phase 3 by the AI pipeline.
@@ -277,21 +277,21 @@ git commit -m "test: trigger TR hook"
 #### P0 credential scan
 
 ```sh
-# 11. Commit blocked by raw api-key in .tr.yaml
-echo 'api-key: sk-supersecret' >> .tr.yaml
-git add .tr.yaml
+# 11. Commit blocked by raw api-key in .torec.yaml
+echo 'api-key: sk-supersecret' >> .torec.yaml
+git add .torec.yaml
 git commit -m "oops: leaked key"
 # Expected: commit BLOCKED with message about raw api-key detected
 #           "Use 'api-key: env:MY_VAR' instead"
 
 # Cleanup
-git checkout .tr.yaml
+git checkout .torec.yaml
 ```
 
 ```sh
 # 12. env: format is allowed through
-# Edit .tr.yaml: api-key: env:OPENAI_API_KEY
-git add .tr.yaml
+# Edit .torec.yaml: api-key: env:OPENAI_API_KEY
+git add .torec.yaml
 git commit -m "fix: use env reference"
 # Expected: commit proceeds (no block)
 ```
@@ -305,7 +305,7 @@ echo "test" >> foo.txt
 git add . && git commit -m "test: no daemon"
 # Expected:
 #   - Each enabled hook prints once:
-#       "[total-recall] Daemon not running at http://localhost:7331 — skipping recall check. Start with 'tr serve'."
+#       "[total-recall] Daemon not running at http://localhost:7331 — skipping recall check. Start with 'torec serve'."
 #   - If multiple hooks are enabled (e.g. pre-commit + commit-msg), you will see
 #     the message TWICE — once per hook. This is expected behaviour, not a bug.
 #   - Commit SUCCEEDS (all hooks exit 0 — TR never blocks Git)
@@ -321,7 +321,7 @@ git add . && git commit -m "test: no daemon"
 
 ### Prerequisites
 
-- Binary built from current source (`go build -o tr ./cmd/tr`).
+- Binary built from current source (`go build -o torec ./cmd/torec`).
 - Scratch Git repo from Phase 02 still available (or create a new one).
 - **At least one of the following for live AI checks:**
   - Anthropic API key (set `ANTHROPIC_API_KEY` in your shell)
@@ -331,12 +331,12 @@ git add . && git commit -m "test: no daemon"
 
 ---
 
-### Section A — `tr init` AI Provider TUI
+### Section A — `torec init` AI Provider TUI
 
 ```sh
 # 3.1  Run init — new AI provider section appears before hooks
-cd /tmp/tr-test   # your scratch repo
-/path/to/tr init
+cd /tmp/torec-test   # your scratch repo
+/path/to/torec init
 ```
 
 **Expected TUI flow (in order):**
@@ -362,7 +362,7 @@ grep "base-url" ~/.tr/config.yaml
 # 3.3 (WINDOWS) base-url shown blank in config (not hidden by omitempty)
 
 Select-String `
-    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Path "$env:USERPROFILE\.torec\config.yaml" `
     -Pattern "base-url"
 
 # Expected:
@@ -371,14 +371,14 @@ Select-String `
 
 ```sh
 # 3.4  Re-run init — existing AI values pre-populated
-/path/to/tr init
+/path/to/torec init
 # Expected: API key, model, and provider fields pre-filled with
 #           the values written in check 3.1 — user can confirm or change
 ```
 
 ```sh
 # 3.5  config --show reflects new AI fields
-/path/to/tr config --show
+/path/to/torec config --show
 # Expected: rows for provider, model, api-key, base-url all present
 #           with [user] or [default] source tags
 ```
@@ -389,7 +389,7 @@ Select-String `
 
 ```sh
 # 3.6 (POSIX)  Start daemon with AI configured (separate terminal)
-ANTHROPIC_API_KEY=sk-... /path/to/tr serve
+ANTHROPIC_API_KEY=sk-... /path/to/torec serve
 # Expected:
 #   ✓ Total Recall daemon running on localhost:7331
 #   (no error about provider — key resolved from env: reference)
@@ -399,17 +399,17 @@ ANTHROPIC_API_KEY=sk-... /path/to/tr serve
 # 3.6 Start daemon with AI configured (separate terminal)
 
 $env:ANTHROPIC_API_KEY = "sk-..."
-C:\path\to\tr.exe serve
+C:\path\to\torec.exe serve
 ```
 
 ```sh
 # 3.7  Start daemon WITHOUT AI configured (missing provider)
 # Edit ~/.tr/config.yaml — set provider to "" or delete the ai: block, then:
-/path/to/tr serve
+/path/to/torec serve
 # Expected:
 #   ✓ Total Recall daemon running on localhost:7331
 #   Advisory logged: "[daemon] AI provider not configured — recall questions
-#     will not be generated. Run 'tr init' to configure."
+#     will not be generated. Run 'torec init' to configure."
 #   Daemon continues running (AI is optional — non-blocking)
 ```
 
@@ -427,7 +427,7 @@ curl -s -o /dev/null -w "%{http_code}" \
   -H "Content-Type: application/json" \
   -d '{
     "hook": "pre-commit",
-    "repo": "/tmp/tr-test",
+    "repo": "/tmp/torec-test",
     "branch": "main",
     "timestamp": "2026-01-01T00:00:00Z",
     "payload": {"diff": "+ func retryWithBackoff(maxRetries int) error {\n+   time.Sleep(time.Duration(math.Pow(2, float64(attempt))) * time.Second)\n+ }"}
@@ -446,7 +446,7 @@ $response = Invoke-WebRequest `
     -Body @'
 {
   "hook": "pre-commit",
-  "repo": "/tmp/tr-test",
+  "repo": "/tmp/torec-test",
   "branch": "main",
   "timestamp": "2026-01-01T00:00:00Z",
   "payload": {
@@ -463,7 +463,7 @@ $response.StatusCode
 **Watch daemon terminal after the POST:**
 ```
 Expected (within ~5-10 seconds):
-  [hook] pre-commit  repo=/tmp/tr-test  branch=main
+  [hook] pre-commit  repo=/tmp/torec-test  branch=main
   [pipeline] ... (optional extraction log)
 
   🧠 Recall Check
@@ -482,7 +482,7 @@ Expected (within ~5-10 seconds):
 (POSIX)
 ```sh
 # 3.9  Real commit triggers async pipeline
-cd /tmp/tr-test
+cd /tmp/torec-test
 cat > retry.go << 'EOF'
 package main
 
@@ -547,7 +547,7 @@ git commit --allow-empty -m "chore: empty commit"
 ```sh
 # 3.11  Cache database created after first commit
 ls -la ~/.tr/memory.db # POSIX
-Get-Item "$env:USERPROFILE\.tr\memory.db" # WINDOWS
+Get-Item "$env:USERPROFILE\.torec\memory.db" # WINDOWS
 # Expected: file exists (created on first successful Save)
 ```
 
@@ -559,7 +559,7 @@ sqlite3 ~/.tr/memory.db \
   "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
 
 # (WINDOWS)
-sqlite3 "$env:USERPROFILE\.tr\memory.db" `
+sqlite3 "$env:USERPROFILE\.torec\memory.db" `
     "SELECT concept, source, weight, seen_at FROM concepts ORDER BY seen_at DESC LIMIT 10;"
 
 # Expected: rows with concept names like "exponential backoff", "retry semantics";
@@ -575,7 +575,7 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 
 ```sh
 # 3.13  Configure Ollama in init
-/path/to/tr init
+/path/to/torec init
 # Select: Ollama (local · free · runs on your machine)
 # Enter model: llama3.2
 
@@ -584,7 +584,7 @@ grep -A4 "^ai:" ~/.tr/config.yaml
 
 # Verify config: (WINDOWS)
 Select-String `
-    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Path "$env:USERPROFILE\.torec\config.yaml" `
     -Pattern "^ai:" `
     -Context 0,4
 
@@ -593,7 +593,7 @@ Select-String `
 
 ```sh
 # 3.14  Daemon with Ollama (must have `ollama serve` running locally)
-/path/to/tr serve
+/path/to/torec serve
 git add . && git commit -m "test: ollama provider"
 # Expected: recall question printed to daemon terminal (no API key needed)
 ```
@@ -602,7 +602,7 @@ git add . && git commit -m "test: ollama provider"
 
 ```sh
 # 3.15  Custom provider with explicit base URL
-/path/to/tr init
+/path/to/torec init
 # Select: Custom
 # Base URL: http://localhost:11434/v1   (Ollama OpenAI-compat endpoint)
 # Model: llama3.2
@@ -613,7 +613,7 @@ grep "base-url" ~/.tr/config.yaml
 
 # (WINDOWS)
 Select-String `
-    -Path "$env:USERPROFILE\.tr\config.yaml" `
+    -Path "$env:USERPROFILE\.torec\config.yaml" `
     -Pattern "base-url"
 
 # Expected: base-url: http://localhost:11434/v1
@@ -626,7 +626,7 @@ Select-String `
 ```sh
 # 3.16  AI failure (bad API key) — daemon continues, no crash
 # Set a garbage API key: (POSIX)
-ANTHROPIC_API_KEY=sk-garbage /path/to/tr serve
+ANTHROPIC_API_KEY=sk-garbage /path/to/torec serve
 
 # Set a garbage API key: (WINDOWS)
 $env:ANTHROPIC_API_KEY = "sk-garbage"
@@ -651,12 +651,12 @@ git add . && git commit -m "test: bad api key"
 
 ## Phase 04A — Out-of-Band Delivery (MCP + Shell)
 
-**Goal:** Questions are delivered via MCP to AI coding agents and via `tr ask` (post-commit hook) to terminal users — not through daemon stdout.
+**Goal:** Questions are delivered via MCP to AI coding agents and via `torec ask` (post-commit hook) to terminal users — not through daemon stdout.
 
 ### Prerequisites
 
 - Binary built from current source.
-- Daemon running (`tr serve`) with AI configured (see Phase 03 prereqs).
+- Daemon running (`torec serve`) with AI configured (see Phase 03 prereqs).
 - Scratch Git repo from Phase 03 with at least one concept-generating commit already made (so `memory.db` exists).
 
 ---
@@ -680,7 +680,7 @@ $r.StatusCode
 # 4.2  recall_status tool via MCP — smoke test: POST a hook to queue a question (POSIX)
 curl -s -X POST http://localhost:7331/hooks/pre-commit \
   -H "Content-Type: application/json" \
-  -d '{"hook":"pre-commit","repo":"/tmp/tr-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}'
+  -d '{"hook":"pre-commit","repo":"/tmp/torec-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}'
 # Expected: 202 (question will be queued after AI pipeline completes ~5-10s)
 ```
 
@@ -690,7 +690,7 @@ $response = Invoke-WebRequest `
     -Uri 'http://localhost:7331/hooks/pre-commit' `
     -Method POST `
     -ContentType 'application/json' `
-    -Body '{"hook":"pre-commit","repo":"C:\\tmp\\tr-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}' `
+    -Body '{"hook":"pre-commit","repo":"C:\\tmp\\torec-test","branch":"main","timestamp":"2026-01-01T00:00:00Z","payload":{"diff":"+ func parseAST(src string) (*ast.File, error)"}}' `
     -SkipHttpErrorCheck
 $response.StatusCode
 # Expected: 202
@@ -776,7 +776,7 @@ sqlite3 ~/.tr/memory.db \
   "SELECT id, question, claimed_by, answer FROM questions ORDER BY queued_at DESC LIMIT 5;"
 
 # (WINDOWS)
-sqlite3 "$env:USERPROFILE\.tr\memory.db" `
+sqlite3 "$env:USERPROFILE\.torec\memory.db" `
   "SELECT id, question, claimed_by, answer FROM questions ORDER BY queued_at DESC LIMIT 5;"
 
 # Expected: rows with question text, claimed_by = "rest" or "mcp", answer or null
@@ -784,12 +784,12 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 
 ---
 
-### Section C — `tr ask` Subcommand
+### Section C — `torec ask` Subcommand
 
 ```sh
-# 4.8  tr ask with no question queued (daemon running)
-./tr ask  # POSIX
-.\tr.exe ask  # Windows
+# 4.8  torec ask with no question queued (daemon running)
+./torec ask  # POSIX
+.\torec.exe ask  # Windows
 
 # Expected: "Thinking." animation while polling, then for the final 4 seconds:
 #   "You're all caught up on your recall questions. Great job 🤖💗"
@@ -798,9 +798,9 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 ```
 
 ```sh
-# 4.9  tr ask with a question queued (POSIX)
+# 4.9  torec ask with a question queued (POSIX)
 # First, queue a question by posting a hook payload (check 4.2), wait ~10s, then:
-./tr ask
+./torec ask
 
 # Expected TUI flow:
 #   "Thinking." animation (cycling) while polling
@@ -813,36 +813,36 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 ```powershell
 # 4.9 (WINDOWS)
 # First, post a hook payload (check 4.2), wait ~10s, then:
-.\tr.exe ask
+.\torec.exe ask
 
 # Expected TUI flow: same as POSIX above
 ```
 
 ```sh
-# 4.10  tr ask TTY guard — silent in non-interactive shell (POSIX)
-echo "" | ./tr ask
+# 4.10  torec ask TTY guard — silent in non-interactive shell (POSIX)
+echo "" | ./torec ask
 # Expected: exits 0 with no output (not a TTY → silently no-op)
 ```
 
 ```powershell
 # 4.10 (WINDOWS)
-cmd /c "tr.exe ask < nul"
+cmd /c "torec.exe ask < nul"
 $LASTEXITCODE
 # Expected: exits 0 with no output (not a TTY → silently no-op)
 ```
 
 ```sh
-# 4.11  tr ask when daemon is not running (POSIX)
+# 4.11  torec ask when daemon is not running (POSIX)
 # Stop daemon, then:
-./tr ask
-# Expected: prints "[total-recall] Daemon not running. Start with tr serve." and exits 0
+./torec ask
+# Expected: prints "[total-recall] Daemon not running. Start with torec serve." and exits 0
 ```
 
 ```powershell
 # 4.11 (WINDOWS)
 # Stop daemon, then:
-.\tr.exe ask
-# Expected: prints "[total-recall] Daemon not running. Start with tr serve." and exits 0
+.\torec.exe ask
+# Expected: prints "[total-recall] Daemon not running. Start with torec serve." and exits 0
 ```
 
 ---
@@ -850,15 +850,15 @@ $LASTEXITCODE
 ### Section D — Post-Commit Hook
 
 ```sh
-# 4.12  Verify post-commit hook was installed by tr init (POSIX)
+# 4.12  Verify post-commit hook was installed by torec init (POSIX)
 cat .git/hooks/post-commit
-# Expected: contains "tr ask" or "$(which tr) ask"
+# Expected: contains "torec ask" or "$(which torec) ask"
 ```
 
 ```powershell
 # 4.12 (WINDOWS)
 Get-Content .git/hooks/post-commit
-# Expected: contains "tr ask" or "$(which tr) ask"
+# Expected: contains "torec ask" or "$(which torec) ask"
 ```
 
 ```sh
@@ -869,7 +869,7 @@ echo "test" >> foo.txt && git add . && git commit -m "test: 4A post-commit hook"
 # Expected:
 #   - Commit completes immediately
 #   - daemon terminal logs a single "[recall] question queued for terminal delivery choices=N" line
-#   - tr ask TUI appears only in the committing terminal
+#   - torec ask TUI appears only in the committing terminal
 #   - Question displayed; press key to answer or skip
 ```
 
@@ -882,7 +882,7 @@ git commit -m "test: 4A post-commit hook"
 
 # Expected:
 #   - Commit completes immediately
-#   - tr ask TUI appears in the committing terminal
+#   - torec ask TUI appears in the committing terminal
 #   - Question displayed; press key to answer or skip
 ```
 
@@ -905,16 +905,16 @@ $r.StatusCode
 ```
 
 ```sh
-# 4.15  tr ask when daemon is unreachable (POSIX)
-# Stop daemon, then run tr ask
-./tr ask
+# 4.15  torec ask when daemon is unreachable (POSIX)
+# Stop daemon, then run torec ask
+./torec ask
 # Expected: advisory printed, exits 0 — no panic, no error
 ```
 
 ```powershell
 # 4.15 (WINDOWS)
-# Stop daemon, then run tr ask
-.\tr.exe ask
+# Stop daemon, then run torec ask
+.\torec.exe ask
 # Expected: advisory printed, exits 0 — no panic, no error
 ```
 
@@ -936,7 +936,7 @@ $r.StatusCode
 ### Prerequisites
 
 - Binary built from current source.
-- Daemon running (`tr serve`) with AI configured (see Phase 03 prereqs).
+- Daemon running (`torec serve`) with AI configured (see Phase 03 prereqs).
 - Scratch Git repo with at least one concept-generating commit.
 - `curl` and `sqlite3` available (PowerShell `Invoke-RestMethod` on Windows).
 
@@ -950,12 +950,12 @@ sqlite3 ~/.tr/memory.db "PRAGMA table_info(questions);"
 #           claimed_by, answer, answered_at from Phase 4A)
 
 # 4C.1 (WINDOWS)
-sqlite3 "$env:USERPROFILE\.tr\memory.db" "PRAGMA table_info(questions);"
+sqlite3 "$env:USERPROFILE\.torec\memory.db" "PRAGMA table_info(questions);"
 ```
 
 ```sh
 # 4C.2  Idempotent re-run: stop and restart the daemon, then re-check
-#       (POSIX: kill the daemon with Ctrl-C, then `./tr serve` again)
+#       (POSIX: kill the daemon with Ctrl-C, then `./torec serve` again)
 sqlite3 ~/.tr/memory.db "PRAGMA table_info(questions);"
 # Expected: same column set; no "duplicate column" error in daemon logs
 ```
@@ -1035,18 +1035,18 @@ sqlite3 ~/.tr/memory.db \
 #           and the start of the AI feedback string (or NULL if AI failed)
 
 # 4C.8 (WINDOWS)
-sqlite3 "$env:USERPROFILE\.tr\memory.db" `
+sqlite3 "$env:USERPROFILE\.torec\memory.db" `
   "SELECT id, answer, answer_index, correct, substr(feedback, 1, 60)
      FROM questions WHERE id = 1;"
 ```
 
-### Section C — `tr ask` Feedback Render
+### Section C — `torec ask` Feedback Render
 
 ```sh
 # 4C.9  Correct answer — verdict + feedback paragraph
-#       Queue a question, then run tr ask and press the correct key
-./tr ask          # POSIX
-.\tr.exe ask      # Windows
+#       Queue a question, then run torec ask and press the correct key
+./torec ask          # POSIX
+.\torec.exe ask      # Windows
 # Expected TUI flow:
 #   "Thinking." → question displayed → [1-N] press →
 #   "Evaluating..." (alt-screen) → alt-screen closes →
@@ -1057,8 +1057,8 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 
 ```sh
 # 4C.10  Incorrect answer — correct_text named, feedback paragraph follows
-#        Queue a question, run tr ask, press a wrong key
-./tr ask
+#        Queue a question, run torec ask, press a wrong key
+./torec ask
 # Expected after alt-screen closes:
 #   "✗ The answer was: <correct choice text>"
 #   ""
@@ -1067,15 +1067,15 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 
 ```sh
 # 4C.11  Skip — gentle acknowledgement, no feedback
-#        Queue a question, run tr ask, press Enter
-./tr ask
+#        Queue a question, run torec ask, press Enter
+./torec ask
 # Expected after alt-screen closes:
 #   "→ Question saved for later."
 ```
 
 ```sh
 # 4C.12  q / Esc — silent exit, no POST
-./tr ask
+./torec ask
 # Expected: alt-screen closes, nothing printed to stdout
 #           question remains unclaimed in the queue (re-deliverable)
 ```
@@ -1083,7 +1083,7 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 ```sh
 # 4C.13  Feedback AI failure — verdict still printed, no paragraph
 #        With AI provider returning errors (e.g. invalid key), answer a
-#        question via tr ask with ?feedback=true
+#        question via torec ask with ?feedback=true
 # Expected after alt-screen closes:
 #   "✓ Correct." OR "✗ The answer was: ..."
 #   (no feedback paragraph — graceful degradation)
@@ -1091,7 +1091,7 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 
 ```sh
 # 4C.14  Daemon unreachable during postAnswer — silent exit
-#        Stop the daemon, then run tr ask and press a key
+#        Stop the daemon, then run torec ask and press a key
 # Expected: no output after alt-screen closes; exit code 0
 #           (same behaviour as the TTY-guard / connection-error path)
 ```
@@ -1158,12 +1158,12 @@ sqlite3 "$env:USERPROFILE\.tr\memory.db" `
 ```sh
 # 4C.21  All Phase 4A regression checks still pass
 #        Re-run checks 4.5 (POST /recall/answer), 4.6 (skip), 4.7 (memory.db
-#        inspection), 4.8 (tr ask caught-up), 4.9 (tr ask with question),
+#        inspection), 4.8 (torec ask caught-up), 4.9 (torec ask with question),
 #        4.10 (TTY guard), 4.11 (daemon-unreachable advisory)
 # Expected: all pass unchanged — Phase 4C is additive
 ```
 
-**Not yet testable in this phase:** Spaced repetition / difficulty progression (future); scoring dashboards / `tr review` subcommand (future); VS Code extension delivery (Phase 4B).
+**Not yet testable in this phase:** Spaced repetition / difficulty progression (future); scoring dashboards / `torec review` subcommand (future); VS Code extension delivery (Phase 4B).
 
 ---
 

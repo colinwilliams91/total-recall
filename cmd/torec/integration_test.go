@@ -570,7 +570,7 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 
 // Empty-queue dequeue returns 204 (the wire-level signal). The prior
 // "repo-move advisory" log line was removed — it fired on every empty-queue
-// poll (tr ask polls every 400ms for 15s, producing ~37 log lines per
+// poll (torec ask polls every 400ms for 15s, producing ~37 log lines per
 // invocation). The 204 response is the only signal the client needs.
 func TestRecallNextEmptyQueueReturns204(t *testing.T) {
 	_, _, baseURL := startTestDaemon(t)
@@ -1475,7 +1475,7 @@ func TestRepoInstallsIntoCommonGitdirInWorktree(t *testing.T) {
 	}
 
 	postCommitPath := filepath.Join(hooksDir, "post-commit")
-	if err := os.WriteFile(postCommitPath, []byte(buildPostCommitHookScript("/usr/local/bin/tr")), 0o755); err != nil {
+	if err := os.WriteFile(postCommitPath, []byte(buildPostCommitHookScript("/usr/local/bin/torec")), 0o755); err != nil {
 		t.Fatalf("write post-commit: %v", err)
 	}
 	mainPostCommit := filepath.Join(mainHooksDir, "post-commit")

@@ -59,7 +59,7 @@ edit it and restart the daemon, no recompile.
                   starting point for re-tuning
   reset [<name>]  remove an override so the shipped default takes effect
 
-reset and sync only touch files — restart 'tr serve' to pick up the
+reset and sync only touch files — restart 'torec serve' to pick up the
 change. A startup OVERRIDE WARNING fires when a stale override is older
 than the shipped policy by more than prompt-asset.drift-warning-days.`,
 	}
@@ -141,7 +141,7 @@ func removeOverride(path, name string) error {
 		}
 		return fmt.Errorf("removing %s: %w", path, err)
 	}
-	fmt.Printf("[assets] removed override at %s; restart 'tr serve' to pick up the change\n", path)
+	fmt.Printf("[assets] removed override at %s; restart 'torec serve' to pick up the change\n", path)
 	return nil
 }
 
@@ -179,7 +179,7 @@ func resetAllOverrides(dir string, all, force bool) error {
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("removing %s: %w", path, err)
 		}
-		fmt.Printf("[assets] removed override at %s; restart 'tr serve' to pick up the change\n", path)
+		fmt.Printf("[assets] removed override at %s; restart 'torec serve' to pick up the change\n", path)
 	}
 	return nil
 }
@@ -207,12 +207,12 @@ func syncAssetCmd() *cobra.Command {
 
 			embeddedBytes, ok := assets.Embedded(name)
 			if !ok {
-				return fmt.Errorf("embedded asset '%s' not found — run 'tr asset show' to see the available asset names", name)
+				return fmt.Errorf("embedded asset '%s' not found — run 'torec asset show' to see the available asset names", name)
 			}
 
 			target := filepath.Join(dir, name+".md")
 			if fi, err := os.Stat(target); err == nil && fi.Size() > 0 && !force {
-				return fmt.Errorf("%s exists and is non-empty — pass --force to overwrite, or 'tr asset reset %s' to start from defaults", target, name)
+				return fmt.Errorf("%s exists and is non-empty — pass --force to overwrite, or 'torec asset reset %s' to start from defaults", target, name)
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("creating prompts dir: %w", err)
@@ -221,7 +221,7 @@ func syncAssetCmd() *cobra.Command {
 				return fmt.Errorf("writing %s: %w", target, err)
 			}
 
-			fmt.Printf("[assets] synced %s to %s; restart 'tr serve' to pick up the change\n", name, target)
+			fmt.Printf("[assets] synced %s to %s; restart 'torec serve' to pick up the change\n", name, target)
 			return nil
 		},
 	}

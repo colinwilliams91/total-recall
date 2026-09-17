@@ -2,7 +2,7 @@
 
 ## Phase 00 — Foundation (Shipped)
 
-- Go binary scaffolding (`tr` CLI, `cmd/`, `internal/` package layout)
+- Go binary scaffolding (`torec` CLI, `cmd/`, `internal/` package layout)
 - Hook script stubs (`hooks/*.sh`, `hooks/*.bat`)
 - Go module, Cobra command skeleton, `go.mod`
 
@@ -11,8 +11,8 @@
 ## Phase 01 — Config Architecture (Shipped)
 
 - Two-tier configuration: `~/.tr/config.yaml` (user) + `.tr.yaml` (per-repo)
-- `tr init` with conversation analysis opt-in (Huh TUI)
-- `tr config --show` with source annotations and deep-merge
+- `torec init` with conversation analysis opt-in (Huh TUI)
+- `torec config --show` with source annotations and deep-merge
 - `EnsureUserConfig` with auto-create and `--quiet` flag
 - MCP conversation analysis gate (`privacy.conversation_analysis`)
 - Daemon-required architecture; transient mode deferred
@@ -21,10 +21,10 @@
 
 ## Phase 02 — Daemon Foundation (Shipped)
 
-- HTTP daemon at `localhost:7331` (`tr serve`)
+- HTTP daemon at `localhost:7331` (`torec serve`)
 - Hook routes: `POST /hooks/pre-commit`, `/hooks/commit-msg`, `/hooks/pre-push`
-- `GET /health` endpoint; `tr status` with exit-code-1 on failure
-- Hook installation in `tr init` — Huh prompts, sentinel chaining, idempotent re-runs
+- `GET /health` endpoint; `torec status` with exit-code-1 on failure
+- Hook installation in `torec init` — Huh prompts, sentinel chaining, idempotent re-runs
 - Full hook scripts: P0 credential scan, diff capture, curl dispatch, graceful degradation
 - `.bat` variants for Windows environments outside Git Bash
 - `HookResponse` typed struct (Phase 3 forward-compatible: `Recall *RecallPrompt omitempty`)
@@ -36,7 +36,7 @@
 
 - AI provider interface (`internal/ai/Provider`) — raw HTTP, BYOK-first, no SDK dependencies
 - Named provider registry: Anthropic, OpenAI, Groq, Ollama, LM Studio, Custom
-- `tr init` AI provider setup TUI — provider select, API key (env: pattern), model name, base URL for custom
+- `torec init` AI provider setup TUI — provider select, API key (env: pattern), model name, base URL for custom
 - Concept extraction from staged diffs (`internal/pipeline/`) with 8 KB diff guard
 - SQLite concept cache (`~/.tr/memory.db`, `modernc.org/sqlite`) — no CGo required
 - Recall Engine: question synthesis from recent cached concepts (`internal/recall/`)
@@ -52,8 +52,8 @@
 
 - **MCP server** mounted at `/mcp/` — AI coding agents (Copilot CLI, Claude Code) receive questions via `recall_next` tool, subscribe to `recall://queue` resource, and are guided by the `recall_workflow` prompt
 - **REST endpoints**: `GET /recall/next` (atomic dequeue) and `POST /recall/answer` (answer/skip recording)
-- **`tr ask` subcommand** — Bubbletea TUI with "Thinking." animation, multiple-choice keypress handler, 30-second timeout; TTY-aware (silent in CI/CD)
-- **Post-commit hook** — `tr init` writes `.git/hooks/post-commit` that calls `tr ask` after each successful commit
+- **`torec ask` subcommand** — Bubbletea TUI with "Thinking." animation, multiple-choice keypress handler, 30-second timeout; TTY-aware (silent in CI/CD)
+- **Post-commit hook** — `torec init` writes `.git/hooks/post-commit` that calls `torec ask` after each successful commit
 - **`~/.tr/memory.db`** — unified SQLite backing store; `questions` table with exactly-once atomic dequeue (`UPDATE ... RETURNING`); both `concepts` and `questions` tables tagged with a `repo` column for repo-scoped recall; `TR_HOME` env var redirects the data directory for test/CI isolation
 - **`terminal.Adapter` opt-in** — `presentation.terminal: true` retains daemon-pane delivery for users who prefer it; off by default
 
@@ -63,7 +63,7 @@
 - **Correctness evaluation** — server-side arithmetic (`answer_index == correct_index`); persisted at answer time; `recall.Question.CorrectIndex` (computed at synthesis) is now stored at enqueue, not dropped
 - **AI feedback for terminal users** — `POST /recall/answer?feedback=true` triggers a `recall.Engine.GenerateFeedback` call (≤ 150 tokens, plain prose); verdict and feedback render after the alt-screen closes
 - **MCP self-explanation** — `recall_next` returns `correct_index` to AI agents; `recall_answer` evaluates and returns `correct`/`correct_index`/`correct_text` but skips the AI call; agents explain using their own knowledge per the updated `recall_workflow` prompt
-- **Skip path** — `POST /recall/answer` with `{"skip": true}` records `answer = "skip"`, no evaluation, no AI call; tr ask renders `→ Question saved for later.`
+- **Skip path** — `POST /recall/answer` with `{"skip": true}` records `answer = "skip"`, no evaluation, no AI call; torec ask renders `→ Question saved for later.`
 - **Enriched `recall://recent`** — MCP resource includes `correct_index`, `answer_index`, `correct`, `feedback` for each row (NULL for skipped/MCP rows)
 - **Foundation for spaced repetition** — `memory.db` now carries the answer history needed for future difficulty progression and recall debt
 
@@ -71,7 +71,7 @@
 
 - VS Code extension surfaces questions as workspace notifications with clickable answer choices
 - Polls `GET /recall/next`; uses VS Code Notifications API (`window.showInformationMessage`)
-- Daemon autostart: `tr init` will offer launchd/systemd/Task Scheduler entry so `tr serve` starts on reboot
+- Daemon autostart: `torec init` will offer launchd/systemd/Task Scheduler entry so `torec serve` starts on reboot
 
 > **Deferred out of Phase 4 scope.** The REST API and MCP server are stable delivery surfaces; the VS Code extension is a UX enhancement, not a capability gap. Moved to make room for higher-priority work.
 
@@ -82,7 +82,7 @@
 - **DeepSeek** — OpenAI-compatible; default model `deepseek-v4-pro`
 - **OpenRouter** — OpenAI-compatible unified model catalog; default model `deepseek/deepseek-v4-flash:free` (free tier)
 - All four route through existing `openai.New()` adapter — no new adapter packages required
-- `tr init` TUI updated with new provider options and API key placeholders
+- `torec init` TUI updated with new provider options and API key placeholders
 
 ---
 
@@ -235,17 +235,17 @@ This commit involved:
 
 ### Transient mode (hooks without a running daemon)
 - **Status**: Deferred indefinitely
-- **Current behavior**: Hooks require `tr serve` to be running. If the daemon is not running, the hook prints an advisory and exits 0 — the Git operation proceeds unblocked.
+- **Current behavior**: Hooks require `torec serve` to be running. If the daemon is not running, the hook prints an advisory and exits 0 — the Git operation proceeds unblocked.
 - **Revisit trigger**: Community demand, e.g. CI/CD pipeline use cases where a persistent daemon is impractical
 - **If ever implemented, MUST**:
   - Warn clearly: "Running without daemon — expect slower analysis and extra AI provider round-trips."
-  - Strongly recommend `tr serve` for optimal performance and a warm cache
+  - Strongly recommend `torec serve` for optimal performance and a warm cache
   - Never be the documented default or primary installation path
 
-### Daemon autostart (`tr init` enhancement)
+### Daemon autostart (`torec init` enhancement)
 - **Status**: Future Phase 1 task — implement after `config-architecture` is complete
-- `tr init` should offer to configure daemon autostart so `tr serve` starts automatically after reboot:
+- `torec init` should offer to configure daemon autostart so `torec serve` starts automatically after reboot:
   - macOS: launchd plist (`~/Library/LaunchAgents/`)
   - Linux: systemd user unit (`~/.config/systemd/user/`)
   - Windows: Task Scheduler entry or startup folder shortcut
-- Ensures developers don't have to remember to run `tr serve` each session
+- Ensures developers don't have to remember to run `torec serve` each session
