@@ -7,8 +7,8 @@ before:
     - go mod tidy
 
 builds:
-  - main: ./cmd/tr
-    binary: tr
+  - main: ./cmd/torec
+    binary: torec
     env:
       - CGO_ENABLED=0
     goos:

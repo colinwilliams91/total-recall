@@ -1,13 +1,13 @@
 The daemon IS the Core Go Engine runtime.[^1]
 
-> **Phase 02 status**: Daemon HTTP server is live. `tr serve` binds to `:7331`, registers all hook routes (`/hooks/*`) and the MCP stub (`/mcp/*`), and handles graceful shutdown on SIGTERM/SIGINT. Phase 03 wires in AI processing, concept extraction, and recall synthesis.
+> **Phase 02 status**: Daemon HTTP server is live. `torec serve` binds to `:7331`, registers all hook routes (`/hooks/*`) and the MCP stub (`/mcp/*`), and handles graceful shutdown on SIGTERM/SIGINT. Phase 03 wires in AI processing, concept extraction, and recall synthesis.
 
 ## Lifecycle
 
-_Start: The developer runs `tr serve` in their terminal._
+_Start: The developer runs `torec serve` in their terminal._
 
 ```
-tr serve
+torec serve
     ->
 Start Core Runtime
     ->

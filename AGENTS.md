@@ -4,8 +4,8 @@
 
 | Task | Command |
 |------|---------|
-| Build | `make build` → `bin/tr(.exe)` |
-| Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `go install ./cmd/tr` to `$GOBIN`, also runs `go vet` |
+| Build | `make build` → `bin/torec(.exe)` |
+| Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `go install ./cmd/torec` to `$GOBIN`, also runs `go vet` |
 | Test | `go test ./...` |
 | Single test | `go test -run TestName ./path/to/pkg/...` |
 | Lint | `golangci-lint run` (must be installed separately) |
@@ -15,13 +15,13 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ## Architecture
 
-- **Entrypoint**: `cmd/tr/main.go` (Cobra CLI)
-- **Provider factory**: `cmd/tr/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
-- **Daemon**: `tr serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
+- **Entrypoint**: `cmd/torec/main.go` (Cobra CLI)
+- **Provider factory**: `cmd/torec/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
+- **Daemon**: `torec serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
 - **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`, `choices`, `selections`, `question_events`. Concepts and questions are scoped per-repo AND per-branch (no global pool). Empty `repo` or `branch` is refused at the store layer. **Schema migrations are manual**: `Open()` uses `CREATE TABLE IF NOT EXISTS` (no `ALTER TABLE` path); after a schema-changing build, delete `~/.tr/memory.db` (or `$TR_HOME/memory.db`) before starting the daemon — stale schema + `IF NOT EXISTS` = silent half-migration.
 - **MCP server**: mounted at `/mcp/` inside the daemon
-- **Install & layer model**: five independent layers (binary / user config / user cache / repo config / git hooks) with a small set of explicit leak points. Rebuilding the binary does NOT update installed hook files — re-run `tr repo` for that. See [DOCS/ARCHITECTURE/INSTALL_LAYERS.md](DOCS/ARCHITECTURE/INSTALL_LAYERS.md) for the full model, canonical new-user install flow, and the testing simulation rules (scratch must be its own repo; re-`tr repo` after hook-body changes)
+- **Install & layer model**: five independent layers (binary / user config / user cache / repo config / git hooks) with a small set of explicit leak points. Rebuilding the binary does NOT update installed hook files — re-run `torec repo` for that. See [DOCS/ARCHITECTURE/INSTALL_LAYERS.md](DOCS/ARCHITECTURE/INSTALL_LAYERS.md) for the full model, canonical new-user install flow, and the testing simulation rules (scratch must be its own repo; re-`torec repo` after hook-body changes)
 
 ### Key packages
 
@@ -43,7 +43,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Conventional commits**
 - **Prompt assets** live under `assets/prompts/` — loaded by the `assets` package at Engine init via `//go:embed` with a runtime override at `<data-dir>/prompts/<name>.md` (`$TR_HOME` when set, else `~/.tr`; edit markdown + restart daemon to tune; no recompile). Overrides are observable and recoverable via `tr asset show|reset|sync` and the `prompt assets:` section of `tr config show`; stale overrides warn at daemon startup (`prompt-asset.drift-warning-days`, default 90)
 - **OpenSpec**: repo uses spec-driven development. Specs: `openspec/specs/`. Changes: `openspec/changes/`. Config: `openspec/config.yaml`
-- **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `tr repo` time
+- **Hooks**: shell scripts in `hooks/` come in `.sh` + `.bat` pairs. The managed installer writes to `.git/hooks/` at `torec repo` time
 - **Keep adapters thin**: Core Go Engine is authoritative; hooks, MCP, and presentation are thin clients
 - **Don't include** return types or examples in docstrings/comments because it can drift on implementation changes. The code should be self-documenting to an extent. Docstrings should focus on the "why" and "what" rather than the "how".
 
@@ -51,7 +51,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ### Framework
 
-All automated tests are Go-native, collocated in `cmd/tr/*_test.go`. No external test runners or Node.js dependencies. The test suite uses three strategies from the Bubble Tea testing model:
+All automated tests are Go-native, collocated in `cmd/torec/*_test.go`. No external test runners or Node.js dependencies. The test suite uses three strategies from the Bubble Tea testing model:
 
 | Strategy | What it tests | Key tools |
 |----------|--------------|-----------|
@@ -74,7 +74,7 @@ All automated tests are Go-native, collocated in `cmd/tr/*_test.go`. No external
 
 ### Manual e2e
 
-`scripts/e2e/manual-init.ps1` — the only manual test. Covers `tr init` TUI flow (huh forms require a real TTY; accessible mode has a `bufio.Scanner` buffering bug). See `scripts/e2e/README.md` for details.
+`scripts/e2e/manual-init.ps1` — the only manual test. Covers `torec init` TUI flow (huh forms require a real TTY; accessible mode has a `bufio.Scanner` buffering bug). See `scripts/e2e/README.md` for details.
 
 ### When adding or extending features
 
@@ -90,7 +90,7 @@ Follow these steps to maintain test coverage:
 
 5. **New AI provider** → Add a case to `TestNewProviderRoutesOpenAIFallback` (or `TestNewProviderRoutesAnthropic` if it uses the Anthropic adapter) in `provider_test.go`.
 
-6. **New TUI view or visual change** → Add a golden file test in `golden_test.go`. Run `$env:UPDATE_GOLDEN=1; go test -run TestGolden... ./cmd/tr/...` to generate the snapshot, then re-run without the flag to verify.
+6. **New TUI view or visual change** → Add a golden file test in `golden_test.go`. Run `$env:UPDATE_GOLDEN=1; go test -run TestGolden... ./cmd/torec/...` to generate the snapshot, then re-run without the flag to verify.
 
 7. **New hook script content** → Add a test in `main_test.go` asserting on `buildPostCommitHookScript()` output.
 
@@ -98,13 +98,13 @@ Follow these steps to maintain test coverage:
 
 ```powershell
 # Generate or update golden files
-$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/tr/...
+$env:UPDATE_GOLDEN=1; go test -run TestGolden ./cmd/torec/...
 
 # Verify (normal CI run)
-go test -run TestGolden ./cmd/tr/...
+go test -run TestGolden ./cmd/torec/...
 ```
 
-Golden files live in `cmd/tr/testdata/*.golden` and are marked `-text` in `.gitattributes` to prevent CRLF corruption on Windows.
+Golden files live in `cmd/torec/testdata/*.golden` and are marked `-text` in `.gitattributes` to prevent CRLF corruption on Windows.
 
 ### Key patterns
 

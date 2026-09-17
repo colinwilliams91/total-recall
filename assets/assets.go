@@ -121,7 +121,7 @@ func resolve(name string) (PromptAsset, error) {
 // dataDir returns the Total Recall data directory: $TR_HOME when set to a
 // non-empty value, else ~/.tr. This mirrors config.UserConfigDir and
 // cache.trDir — assets cannot import config (config imports assets for the
-// `tr config show` prompt-assets section), so the rule is restated here and
+// `torec config show` prompt-assets section), so the rule is restated here and
 // must stay in sync with those two.
 func dataDir() (string, bool) {
 	if env := os.Getenv("TR_HOME"); env != "" {
@@ -146,8 +146,8 @@ func overridePath(name string) (string, bool) {
 }
 
 // resolveQuiet resolves an asset without logging and without touching the
-// package cache. LoadAll uses it so inspection surfaces (`tr asset list`,
-// `tr config show`) read fresh disk state on every invocation.
+// package cache. LoadAll uses it so inspection surfaces (`torec asset list`,
+// `torec config show`) read fresh disk state on every invocation.
 func resolveQuiet(name string) PromptAsset {
 	if path, ok := overridePath(name); ok {
 		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
@@ -255,14 +255,14 @@ func warnOnStaleOverride(overridePath, name string, modTime time.Time) {
 	if daysOld <= driftThresholdDays {
 		return
 	}
-	log.Printf("[assets] OVERRIDE WARNING: %s is %dd older than the embedded default — re-sync with 'tr asset sync %s'",
+	log.Printf("[assets] OVERRIDE WARNING: %s is %dd older than the embedded default — re-sync with 'torec asset sync %s'",
 		overridePath, daysOld, name)
 }
 
 // UnmanagedNames returns the names of .md files in the override slot that do
 // not correspond to a shipped (embedded) asset, sorted. Such files are never
 // loaded — the engine only requests shipped names — so both classification
-// surfaces (the daemon's startup warning and `tr asset list`'s inactive tag)
+// surfaces (the daemon's startup warning and `torec asset list`'s inactive tag)
 // share this primitive and can never drift. Empty when the slot is empty,
 // absent, or the data dir is unresolvable.
 func UnmanagedNames() []string {
@@ -298,13 +298,13 @@ func UnmanagedNames() []string {
 // never touches files; silent when there are none.
 func WarnUnmanagedOverrides() {
 	for _, name := range UnmanagedNames() {
-		log.Printf("[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset show')",
+		log.Printf("[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'torec asset show')",
 			name+".md")
 	}
 }
 
 // Age renders a human-readable mtime-relative age ("2d old", "6mo old") for
-// display in `tr asset list` and `tr config show`. A zero mtime renders as
+// display in `torec asset list` and `torec config show`. A zero mtime renders as
 // "unknown" — callers substitute "embedded" when the asset's source is the
 // embedded default.
 func Age(modTime time.Time) string {

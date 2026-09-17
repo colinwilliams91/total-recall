@@ -34,33 +34,33 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 
 ```sh
 # Install the binary    # (one-time, user-level)
-go install github.com/colinwilliams91/total-recall/cmd/tr@latest
+go install github.com/colinwilliams91/total-recall/cmd/torec@latest
 
 # Verify the installed binary and its location
-command -v tr           # (this directory must be on your PATH)
-tr --version
+command -v torec           # (this directory must be on your PATH)
+torec --version
 
 # Init user config      # (run anywhere; one-time, user-level)
-tr init                 # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
+torec init                # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
 
 # Start the daemon
-tr serve				# runs on `localhost:7331` & must be running for hooks & MCP
+torec serve				# runs on `localhost:7331` & must be running for hooks & MCP
 
 # New terminal
-tr status				# Check daemon status
+torec status				# Check daemon status
 
 # Init in a repo
 cd your-project/
-tr repo					# adds project `.tr.yaml`, installs Git hooks
+torec repo					# adds project `.tr.yaml`, installs Git hooks
 ```
 
-Re-run `tr repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
+Re-run `torec repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
 
-Run `tr --help` for the full command and flag reference.
+Run `torec --help` for the full command and flag reference.
 
 ### Non-Go install path²
 
-Without Go: download the release archive from GitHub Releases, extract, place `tr` (or `tr.exe`) on PATH manually. Same downstream flow.
+Without Go: download the release archive from GitHub Releases, extract, place `torec` (or `torec.exe`) on PATH manually. Same downstream flow.
 
 ## Configuration
 
@@ -69,16 +69,16 @@ Total-Recall uses two config files with clear separation of concerns:
 **Inspect the resolved config**
 
 ```sh
-tr config --show
+torec config --show
 ```
 
 Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
-Checkout [CONFIG.md](docs/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+**[CONFIG.md](docs/ARCHITECTURE/CONFIG.md)** -- the full deep-merge rules and examples.
 
 ### Make it yours
 
-Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`tr asset sync` starts the baseline file for you); `tr asset sync|show|reset` manage the slot; restart `tr serve` to pick up changes.
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`torec asset sync` starts the baseline file for you); `torec asset sync|show|reset` manage the slot; restart `torec serve` to pick up changes.
 
 **[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
@@ -115,12 +115,12 @@ Checkout [DATA.md](docs/DATA.md) for more information on the research findings.
 - I strongly believe in the sharing of knowledge, transparent information and FOSS.
 - _Learning_ is what will distinguish us from the robots. 🥲
 - Contributions are welcome!
-- Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `tr init` test.
+- Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development workflow, how to run the automated tests and the manual `torec init` test.
 
 ---
 
 #### Footnotes
-¹ <sup>`tr repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature</sup> \
+¹ <sup>`torec repo` uses `git rev-parse --git-path hooks` under the hood, a Git 2.5+ feature</sup> \
 ² <sup>`Go` is not actually required for installation</sup>
 
 <img src="https://img.shields.io/liberapay/receives/colin-williams-dev.svg?logo=liberapay">

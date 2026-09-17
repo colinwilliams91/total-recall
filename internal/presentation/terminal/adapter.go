@@ -8,7 +8,7 @@ import (
 
 // Adapter implements engine.Dispatcher by logging recall delivery events.
 //
-// The actual interactive question is delivered through tr ask via /recall/next.
+// The actual interactive question is delivered through torec ask via /recall/next.
 // The daemon terminal only gets a compact operational log so pipeline activity
 // remains visible without duplicating the recall card.
 type Adapter struct{}

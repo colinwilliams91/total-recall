@@ -316,7 +316,7 @@ It is simply:
 Meaning:
 
 ```
-tr serve
+torec serve
 ```
 
 runs the Core Engine persistently.

@@ -241,7 +241,7 @@ The most recent `question_events` row for a question determines its true status;
 ---
 
 ### Requirement: StalePerBranch returns per-branch counts of queued questions
-`(*Store).StalePerBranch(ctx, repo)` SHALL return a map of branch name → count of questions where `status = 'queued' AND repo = ?`, grouped by branch. Repo is required; an empty value returns an empty map. Used by `GET /recall/stale` to back the `tr status` advisory. Branches with zero queued questions are omitted.
+`(*Store).StalePerBranch(ctx, repo)` SHALL return a map of branch name → count of questions where `status = 'queued' AND repo = ?`, grouped by branch. Repo is required; an empty value returns an empty map. Used by `GET /recall/stale` to back the `torec status` advisory. Branches with zero queued questions are omitted.
 
 #### Scenario: Three branches with queued questions
 - **WHEN** `StalePerBranch(ctx, "/path/X")` is called and `/path/X` has 3 queued questions on `feature-X`, 0 on `main`, and 2 on `bugfix-Y`

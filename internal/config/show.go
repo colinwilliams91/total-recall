@@ -58,7 +58,7 @@ func Show(cfg *Config, w io.Writer) {
 
 // writePromptAssetsSection prints one line per embedded-known prompt asset
 // with its resolved source, path, and age, so a debugging user sees an active
-// override in `tr config show` instead of digging through daemon logs. The
+// override in `torec config show` instead of digging through daemon logs. The
 // section lives at the end of the show output to keep the config scan compact.
 // Resolution is fresh (no asset cache), so the section always reflects disk.
 func writePromptAssetsSection(w io.Writer) {

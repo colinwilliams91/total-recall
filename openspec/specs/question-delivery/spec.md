@@ -1,6 +1,6 @@
 ## Purpose
 
-Define the daemon HTTP endpoints the terminal (`tr ask`) and MCP paths use to fetch the next recall question, submit a selection or skip it, and report per-branch queued-question counts — all scoped to repo and branch with no global pool.
+Define the daemon HTTP endpoints the terminal (`torec ask`) and MCP paths use to fetch the next recall question, submit a selection or skip it, and report per-branch queued-question counts — all scoped to repo and branch with no global pool.
 
 ## Requirements
 

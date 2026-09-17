@@ -8,14 +8,14 @@ Total Recall is a single Go binary distributed via `go install` (or release arch
 
 | Layer | Owned by | Lifetime | Reads from | Writes to |
 |---|---|---|---|---|
-| **Binary** (`tr` / `tr.exe`) | One per user; on `$GOBIN`, or `$(go env GOPATH)/bin` when `$GOBIN` is unset | Until re-install | Nothing at runtime (stateless) | Invoked for `init`, `serve`, `ask`, `config` |
+| **Binary** (`torec` / `torec.exe`) | One per user; on `$GOBIN`, or `$(go env GOPATH)/bin` when `$GOBIN` is unset | Until re-install | Nothing at runtime (stateless) | Invoked for `init`, `serve`, `ask`, `config` |
 | **User config** (`~/.tr/config.yaml`) | One per user | Until deleted | Runtime config loader | Written by `tr init`; never by hooks |
 | **User cache** (`~/.tr/memory.db`) | One per user | Until deleted | Daemon (read concepts); write concepts/answers | Daemon only |
 | **Repo config** (`.tr.yaml`) | One per repo | Until deleted | Runtime config loader | Written by `tr repo` |
-| **Git hooks** (`.git/hooks/*`) | One per gitdir | Until overwritten | Fired by Git | Written by `tr repo` |
+| **Git hooks** (`.git/hooks/*`) | One per gitdir | Until overwritten | Fired by Git | Written by `torec repo` |
 | **Daemon** (`total-recall serve` on `:7331`) | One per machine | Process lifetime | User cache + AI provider | User cache |
 
-The binary is stateless: invoking it from any path executes the same logic against the same user-level state. Its compile-time-baked constants (hook bodies, daemon URL) are emitted into the installable artifacts at `tr repo` time, then the binary is out of the loop until the next `tr repo`.
+The binary is stateless: invoking it from any path executes the same logic against the same user-level state. Its compile-time-baked constants (hook bodies, daemon URL) are emitted into the installable artifacts at `torec repo` time, then the binary is out of the loop until the next `torec repo`.
 
 ---
 
@@ -23,9 +23,9 @@ The binary is stateless: invoking it from any path executes the same logic again
 
 These independence properties are what make the system tractable, and violating them silently is the source of most "why didn't my change take effect?" surprises.
 
-1. **Binary location is irrelevant to which hooks fire.** Hooks fire because Git finds executable files in `<gitdir>/hooks/`. Delete the binary after `tr repo` and the hooks still fire on every commit (they fail politely, but they fire).
-2. **Binary location is irrelevant to where `tr repo` installs hooks.** `tr repo` resolves the gitdir from the *current working directory* (`hooks.FindRepoRoot()`). The binary could be on a network drive; running it from worktree A installs into A's gitdir.
-3. **Hooks are static files, fully decoupled from the binary after install.** Once `tr repo` writes `.git/hooks/pre-commit`, that file is just bash. It does not invoke or read the binary. It only knows `http://localhost:7331` (a string baked into the hook body at *compile* time and emitted into the script at *`tr repo`* time).
+1. **Binary location is irrelevant to which hooks fire.** Hooks fire because Git finds executable files in `<gitdir>/hooks/`. Delete the binary after `torec repo` and the hooks still fire on every commit (they fail politely, but they fire).
+2. **Binary location is irrelevant to where `torec repo` installs hooks.** `torec repo` resolves the gitdir from the *current working directory* (`hooks.FindRepoRoot()`). The binary could be on a network drive; running it from worktree A installs into A's gitdir.
+3. **Hooks are static files, fully decoupled from the binary after install.** Once `torec repo` writes `.git/hooks/pre-commit`, that file is just bash. It does not invoke or read the binary. It only knows `http://localhost:7331` (a string baked into the hook body at *compile* time and emitted into the script at *`torec repo`* time).
 4. **Daemon is fully decoupled from binary and hooks.** Hooks are HTTP clients; daemon is an HTTP server. They share only the URL `http://localhost:7331`. Rebuild the binary, restart the daemon, swap hook files — none affects the others as long as the URL is stable.
 5. **User config vs. repo config are physically separate** (`~/.tr/` vs. `<repo>/.tr.yaml`). The loader (`internal/config/merge.go`) deep-merges with explicit rejection of `privacy.*`/`ai.*` from repo config. See [CONFIG.md](./CONFIG.md).
 
@@ -37,10 +37,10 @@ The cross-layer couplings that exist — each is instructive:
 
 | Coupling | Direction | Mechanism | Implication |
 |---|---|---|---|
-| Binary → hooks (content) | At `tr repo` time only | Hook script bodies are embedded `const` strings in `internal/hooks/scripts.go`, compiled into the binary, written verbatim to `.git/hooks/` by `tr repo` | Rebuilding the binary does NOT update already-installed hooks. You must re-run `tr repo`. |
-| Binary → post-commit hook (path) | At `tr repo` time only | `postCommitHookScriptTmpl` in `main.go` has two `%s` placeholders filled by `buildPostCommitHookScript(os.Executable())` at `tr repo` time — one for the PowerShell branch (native backslash path), one for the sh fallback (forward-slash path for MSYS sh) | Moving/rebuilding the binary to a new path leaves the installed hook pointing at the old path. Re-run `tr repo` to refresh the baked path. |
+| Binary → hooks (content) | At `torec repo` time only | Hook script bodies are embedded `const` strings in `internal/hooks/scripts.go`, compiled into the binary, written verbatim to `.git/hooks/` by `torec repo` | Rebuilding the binary does NOT update already-installed hooks. You must re-run `torec repo`. |
+| Binary → post-commit hook (path) | At `torec repo` time only | `postCommitHookScriptTmpl` in `main.go` has two `%s` placeholders filled by `buildPostCommitHookScript(os.Executable())` at `torec repo` time — one for the PowerShell branch (native backslash path), one for the sh fallback (forward-slash path for MSYS sh) | Moving/rebuilding the binary to a new path leaves the installed hook pointing at the old path. Re-run `torec repo` to refresh the baked path. |
 | Hooks → daemon (URL) | At hook-fire time | `curl http://localhost:7331/hooks/...` — URL is a string in the hook script | Daemon must be running for dispatch to succeed. No daemon → advisory printed (the #14 surface). |
-| post-commit hook → binary (ask) | At hook-fire time | `exec "<baked-path>" ask` — runs the absolute path captured at `tr repo` time via `os.Executable()` | The only hook that invokes the binary at fire time. The baked path avoids PATH-collision with the Unix `tr` translate utility (Git for Windows hooks run via MSYS sh with a restricted PATH that includes `/usr/bin/tr` but not the user's Windows PATH additions). A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
+| post-commit hook → binary (ask) | At hook-fire time | `exec "<baked-path>" ask` — runs the absolute path captured at `torec repo` time via `os.Executable()` | The only hook that invokes the binary at fire time. The baked path avoids PATH-collision with the Unix `tr` translate utility (Git for Windows hooks run via MSYS sh with a restricted PATH that includes `/usr/bin/tr` but not the user's Windows PATH additions). A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
 
 ---
 
@@ -52,11 +52,11 @@ A common debugging mistake (and the one that drove the investigation surfacing t
 
 Mental model that produced the confusion: *the binary's location governs which hooks fire, or where they install, or which advisory surfaces.*
 
-Reality: *the binary's location governs only one thing — **which compiled-in hook body constants get written** when `tr repo` runs. After `tr repo`, the binary is out of the loop for dispatch hooks entirely.*
+Reality: *the binary's location governs only one thing — **which compiled-in hook body constants get written** when `torec repo` runs. After `torec repo`, the binary is out of the loop for dispatch hooks entirely.*
 
-So running `D:\...\worktree-A\tr.exe` from the main worktree:
-- `tr repo` resolved CWD's git repo → main repo (`FindRepoRoot()` uses invocation CWD, not binary location)
-- `tr repo` wrote the *new* hook bodies into the main repo's `.git/hooks/` — overwriting the prior ones
+So running `D:\...\worktree-A\torec.exe` from the main worktree:
+- `torec repo` resolved CWD's git repo → main repo (`FindRepoRoot()` uses invocation CWD, not binary location)
+- `torec repo` wrote the *new* hook bodies into the main repo's `.git/hooks/` — overwriting the prior ones
 - Subsequent commits in the main worktree fired the *newly installed* hooks
 - The dispatch hooks (pre-commit) still print *their* advisory when no daemon is reachable — that's correct behavior, not a bug
 
@@ -68,38 +68,38 @@ The binary being on a worktree was a red herring. Only two facts mattered: *whic
 
 ```sh
 # 1. Binary install (one-time, user-level)
-go install github.com/colinwilliams91/total-recall/cmd/tr@latest
-#   → places `tr` in $GOBIN, or $(go env GOPATH)/bin when $GOBIN is unset
+go install github.com/colinwilliams91/total-recall/cmd/torec@latest
+#   → places `torec` in $GOBIN, or $(go env GOPATH)/bin when $GOBIN is unset
 #   → the selected install directory must already be on PATH
 
 # 2. Verify the resolved binary
-command -v tr
-tr --version
+command -v torec
+torec --version
 
 # 3. User-level init (one-time, user-level)
-tr init
+torec init
 #   → prompts: conversation analysis opt-in, AI provider, API key, model
 #   → writes ~/.tr/config.yaml
-#   → prints next-step guidance: "Next: cd into your project and run tr repo."
+#   → prints next-step guidance: "Next: cd into your project and run torec repo."
 
 # 4. Start daemon (long-running terminal; keep alive)
-tr serve
+torec serve
 #   → binds localhost:7331
 #   → reads ~/.tr/config.yaml + ~/.tr/memory.db
 
 # 5. Per-repo init (run inside each repo you want recall in)
 cd ~/projects/my-app
-tr repo
+torec repo
 #   → resolves .git/hooks via `git rev-parse --git-path hooks` (worktree-aware)
 #   → writes .tr.yaml with hook enablement
 #   → writes .git/hooks/{pre-commit,commit-msg,pre-push,post-commit} per selections
 
 # 6. Verify
-tr status
+torec status
 git commit -m "..."   # triggers installed hooks (NOT the binary)
 ```
 
-For a user without Go: download the release archive from GitHub Releases, extract, and place `tr` (or `tr.exe`) in a directory on PATH. The same downstream flow applies.
+For a user without Go: download the release archive from GitHub Releases, extract, and place `torec` (or `torec.exe`) in a directory on PATH. The same downstream flow applies.
 
 ---
 
@@ -114,14 +114,14 @@ cd D:\repos\open-source\total-recall-05-opsx
 .\scripts\rebuild.ps1
 
 # 2. Fresh git repo OUTSIDE any existing repo
-$scratch = "C:\tmp\tr-test-$(Get-Random)"
+$scratch = "C:\tmp\torec-test-$(Get-Random)"
 mkdir $scratch; cd $scratch
 git init -q
 git config user.email t@t
 git config user.name t
 
 # 3. Install hooks using the binary under test (resolve from $GOBIN)
-tr repo
+torec repo
 
 # 4. (Optional) simulate brand-new user with isolated HOME
 #    t.Setenv equivalent for manual testing
@@ -133,7 +133,7 @@ git commit -m "test daemon-down"
 # Expected: ONE pre-commit advisory + "Press any key" + ONE ask advisory (different wording)
 
 #    b) daemon UP (separate terminal)
-tr serve
+torec serve
 # back in scratch:
 "y" | Out-File b.txt; git add b.txt
 git commit -m "test daemon-up"
@@ -143,7 +143,7 @@ git commit -m "test daemon-up"
 **Two non-negotiable simulation rules:**
 
 1. **The scratch must be its own repo, not nested in any existing repo.** Nested `git init` creates an independent gitdir that does NOT inherit parent hooks.
-2. **To verify changes to hook bodies, you must re-run `tr repo` against the rebuilt binary.** Source-code changes do not propagate to installed hook files; only `tr repo` does.
+2. **To verify changes to hook bodies, you must re-run `torec repo` against the rebuilt binary.** Source-code changes do not propagate to installed hook files; only `torec repo` does.
 
 ---
 
@@ -151,7 +151,7 @@ git commit -m "test daemon-up"
 
 These are real follow-ups, not novel discoveries — each is a consequence of the layer model. The phase letter refers to the OpenSpec handoff plan; see your `/opsx-explore` proposal.
 
-- **Worktree install** (resolved): `tr repo` from a linked worktree now works correctly — it resolves the hooks dir via `git rev-parse --git-path hooks`, which points to the common gitdir shared across all linked worktrees.
-- **Post-commit PATH collision with Unix `tr`** (resolved): Git for Windows runs hooks via MSYS sh with a restricted PATH that includes `/usr/bin/tr` (the Unix translate utility) but not the user's Windows PATH additions. The previous `exec tr ask` form silently invoked the wrong binary. Fixed by baking `os.Executable()`'s absolute path into the hook at `tr repo` time (`buildPostCommitHookScript` in `main.go`). Trade-off: moving/rebuilding the binary to a new path now requires re-running `tr repo` to refresh the baked path (see leak-point table above). This is the same stale-path trade-off documented in the original pre-Y4 design; it was deemed preferable to the silent collision because its failure mode is loud (`No such file or directory` pointing at the dead path) rather than silent (unrelated `/usr/bin/tr` error), and it only triggers on binary relocation rather than on every commit.
-- **Binary version drift across repos** (architectural): hooks are static; if a user has 10 repos with `tr repo`'d hooks and upgrades the binary, only repos where they re-run `tr repo` get new hook bodies. No version handshake exists.
-- **`tr init` and `tr repo` are separate commands** (resolved): user-config (`tr init`) and repo-config (`tr repo`) are now physically and logically separate. Re-running either command only re-prompts its own concerns.
+- **Worktree install** (resolved): `torec repo` from a linked worktree now works correctly — it resolves the hooks dir via `git rev-parse --git-path hooks`, which points to the common gitdir shared across all linked worktrees.
+- **Post-commit PATH collision with Unix `tr`** (resolved): Git for Windows runs hooks via MSYS sh with a restricted PATH that includes `/usr/bin/tr` (the Unix translate utility) but not the user's Windows PATH additions. The previous `exec torec ask` form silently invoked the wrong binary. Fixed by baking `os.Executable()`'s absolute path into the hook at `torec repo` time (`buildPostCommitHookScript` in `main.go`). Trade-off: moving/rebuilding the binary to a new path now requires re-running `torec repo` to refresh the baked path (see leak-point table above). This is the same stale-path trade-off documented in the original pre-Y4 design; it was deemed preferable to the silent collision because its failure mode is loud (`No such file or directory` pointing at the dead path) rather than silent (unrelated `/usr/bin/tr` error), and it only triggers on binary relocation rather than on every commit.
+- **Binary version drift across repos** (architectural): hooks are static; if a user has 10 repos with `torec repo`'d hooks and upgrades the binary, only repos where they re-run `torec repo` get new hook bodies. No version handshake exists.
+- **`torec init` and `torec repo` are separate commands** (resolved): user-config (`torec init`) and repo-config (`torec repo`) are now physically and logically separate. Re-running either command only re-prompts its own concerns.

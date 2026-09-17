@@ -3,26 +3,26 @@ param(
     [string]$ScratchDir
 )
 
-# manual-init.ps1 — Manual e2e test for the `tr init` TUI flow.
+# manual-init.ps1 — Manual e2e test for the `torec init` TUI flow.
 #
 # This is the ONLY remaining manual e2e test. All other e2e coverage
 # (daemon, hooks, recall, MCP, config, cache, provider routing, ask
-# state machine, golden views) is automated in cmd/tr/*_test.go.
+# state machine, golden views) is automated in cmd/torec/*_test.go.
 #
-# `tr init` uses huh.NewForm() which requires a real TTY. The huh
+# `torec init` uses huh.NewForm() which requires a real TTY. The huh
 # accessible mode (TERM=dumb) exists but has a bufio.Scanner-per-field
 # buffering bug that loses piped input, making automation unreliable.
 #
 # Usage:
 #   .\scripts\e2e\manual-init.ps1
-#   .\scripts\e2e\manual-init.ps1 -BinaryPath .\bin\tr.exe
+#   .\scripts\e2e\manual-init.ps1 -BinaryPath .\bin\torec.exe
 
 . "$PSScriptRoot/common.ps1" -BinaryPath $BinaryPath -ScratchDir $ScratchDir
 Initialize-E2E -BinaryPath $BinaryPath -ScratchDir $ScratchDir
 
-Write-Host "  Manual E2E — tr init TUI" -ForegroundColor White
+Write-Host "  Manual E2E — torec init TUI" -ForegroundColor White
 Write-Host "  -------------------------------------------" -ForegroundColor DarkGray
-Write-Host "  This test guides you through the tr init TUI" -ForegroundColor DarkGray
+Write-Host "  This test guides you through the torec init TUI" -ForegroundColor DarkGray
 Write-Host "  and auto-verifies the results after each step." -ForegroundColor DarkGray
 Write-Host ""
 
@@ -39,7 +39,7 @@ New-ScratchRepo
 # ─── Step 1: First-run init (full TUI flow) ──────────────────────────────────
 
 Write-Manual -Id "1.1" `
-    -Description "tr init — first run (conversation analysis + AI provider + hooks)" `
+    -Description "torec init — first run (conversation analysis + AI provider + hooks)" `
     -Command "cd $script:ScratchRepo`n& $script:TrBin init" `
     -Expected @"
 TUI prompts in order:
@@ -83,7 +83,7 @@ Then: User config saved, repo config saved, hooks installed, post-commit install
             $issues += "post-commit hook not installed"
         } else {
             $postContent = Get-Content $postCommitPath -Raw
-            if (-not ($postContent -match "tr\.exe ask|tr ask")) { $issues += "post-commit missing 'tr ask'" }
+            if (-not ($postContent -match "torec\.exe ask|torec ask")) { $issues += "post-commit missing 'torec ask'" }
         }
         if ($issues.Count -gt 0) {
             return @{ Passed = $false; Detail = ($issues -join "; ") }
@@ -105,7 +105,7 @@ if (Test-Path $hookPath) {
 
 if ($configHashBefore -and $hookHashBefore) {
     Write-Manual -Id "1.2" `
-        -Description "tr init — idempotent re-run (values pre-populated, files unchanged)" `
+        -Description "torec init — idempotent re-run (values pre-populated, files unchanged)" `
         -Command "cd $script:ScratchRepo`n& $script:TrBin init" `
         -Expected "All prompts pre-filled with previous selections. Accept all defaults. Config and hook files should be unchanged." `
         -Verify {
@@ -126,7 +126,7 @@ if ($configHashBefore -and $hookHashBefore) {
 # ─── Step 3: Hook chaining with existing unmanaged hook ──────────────────────
 
 Write-Manual -Id "1.3" `
-    -Description "tr init — chains with existing unmanaged hook" `
+    -Description "torec init — chains with existing unmanaged hook" `
     -Command @"
 cd $script:ScratchRepo
 # Create a pre-existing unmanaged hook
@@ -152,4 +152,4 @@ echo 'echo "existing hook ran"' >> .git/hooks/pre-commit
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 Restore-TrConfig | Out-Null
-Write-Summary "Manual E2E — tr init"
+Write-Summary "Manual E2E — torec init"

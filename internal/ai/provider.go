@@ -14,7 +14,7 @@ import (
 // cancellation)
 //
 // If you change this value, verify the pipeline context in
-// internal/engine/server.go and the tr ask default in cmd/tr/ask.go still
+// internal/engine/server.go and the tr ask default in cmd/torec/ask.go still
 // satisfy the relationship.
 const DefaultHTTPTimeout = 60 * time.Second
 

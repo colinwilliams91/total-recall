@@ -41,5 +41,5 @@ The system SHALL treat `privacy.*` keys as user-level only. Per-repo `.tr.yaml` 
 The system SHALL provide a CLI command to display the fully resolved config for the current context.
 
 #### Scenario: Developer inspects resolved config
-- **WHEN** the user runs `tr config --show`
+- **WHEN** the user runs `torec config --show`
 - **THEN** the system SHALL print the resolved (merged) config, annotating each key with its source (`user` or `repo`)
