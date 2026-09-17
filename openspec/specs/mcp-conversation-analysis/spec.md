@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: `tr init` prompts the user about conversation analysis opt-in
-The system SHALL present a single plain-language prompt during `tr init` asking whether to enable conversation analysis. The prompt SHALL be simple and earnest, with no legal jargon.
+The system SHALL present a single plain-language prompt during `torec init` asking whether to enable conversation analysis. The prompt SHALL be simple and earnest, with no legal jargon.
 
 #### Scenario: User opts in during init
-- **WHEN** the user answers `y` to the conversation analysis prompt during `tr init`
+- **WHEN** the user answers `y` to the conversation analysis prompt during `torec init`
 - **THEN** `~/.tr/config.yaml` SHALL be written with `privacy.conversation_analysis: true`
 - **THEN** the system SHALL confirm the choice and inform the user it can be changed in `~/.tr/config.yaml`
 
@@ -16,7 +16,7 @@ The system SHALL present a single plain-language prompt during `tr init` asking 
 #### Scenario: Auto-created config defaults conversation analysis to off
 - **WHEN** `~/.tr/config.yaml` is auto-created because init was bypassed
 - **THEN** `privacy.conversation_analysis` SHALL default to `false`
-- **THEN** no prompt is shown — the advisory message directs the user to `tr init` to configure preferences
+- **THEN** no prompt is shown — the advisory message directs the user to `torec init` to configure preferences
 
 ---
 The system SHALL require explicit opt-in before processing MCP conversation content (Signal 1: user questions; Signal 2: agent explanations) as input signals to the Incremental Analysis Pipeline. The default SHALL be off.

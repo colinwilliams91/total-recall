@@ -4,7 +4,7 @@
 The system SHALL support a user-level configuration file at `~/.tr/config.yaml` that defines personal defaults applying across all repositories.
 
 #### Scenario: User-level config loaded at daemon startup
-- **WHEN** `tr serve` is invoked
+- **WHEN** `torec serve` is invoked
 - **THEN** the Core Engine SHALL load `~/.tr/config.yaml` before loading any per-repo config
 
 #### Scenario: User-level config loaded when hook contacts daemon
@@ -57,7 +57,7 @@ The system SHALL auto-create `~/.tr/config.yaml` with safe defaults if the Core 
 #### Scenario: Daemon starts without user config present
 - **WHEN** `tr serve` is invoked and `~/.tr/config.yaml` does not exist
 - **THEN** the Core Engine SHALL create `~/.tr/config.yaml` with safe defaults (including `privacy.conversation_analysis: false`)
-- **THEN** the Core Engine SHALL emit a single advisory message informing the user and suggesting they run `tr init`
+- **THEN** the Core Engine SHALL emit a single advisory message informing the user and suggesting they run `torec init`
 - **THEN** the Core Engine SHALL continue starting normally
 
 #### Scenario: Hook fires without user config present
