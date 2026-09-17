@@ -12,12 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING**: installed executable renamed `tr` -> `torec` to eliminate
   collision with GNU coreutils `/usr/bin/tr` (shadowing broke unrelated
-  programs on Linux — see docs/handoff for the Omarchy incident).
-  `go install github.com/colinwilliams91/total-recall/cmd/torec@latest`;
-  delete the stale legacy `tr` binary, then re-run `torec repo` in each
-  configured repository. No `tr` compatibility alias ships.
+  programs on Linux — shell scripts, desktop launchers — see the Omarchy
+  incident documented in GH Issue https://github.com/colinwilliams91/total-recall/issues/49).
 - `torec init` PATH detection looks up `torec` and additionally warns when a
   stale legacy `tr` binary of this app still shadows coreutils.
+
+### Migration (from any pre-rename install)
+
+1. `go install github.com/colinwilliams91/total-recall/cmd/torec@latest`
+2. Delete the old stale `tr` binary from your PATH.
+3. Re-run `torec repo` in each repository with hooks installed so the hook
+   scripts pick up the new name.
+
+There is no `tr` compatibility alias — re-installing one deliberately keeps
+shadowing coreutils.
 
 ## [0.2.0] - 2026-07-22
 

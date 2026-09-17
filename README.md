@@ -27,17 +27,6 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 
 ## Setup
 
-> **Upgrading from an older version that installed a `tr` binary?** Versions
-> before this release installed an executable named `tr`, which shadowed the
-> GNU coreutils `tr` translate utility and broke unrelated programs (shell
-> scripts, desktop launchers) on Linux. The executable is now named
-> **`torec`**. To migrate: install the new version (`go install
-> github.com/colinwilliams91/total-recall/cmd/torec@latest`), **delete the old
-> stale `tr` binary** from your PATH, then **re-run `torec repo`** in each
-> repository with hooks installed so the hook scripts pick up the new name.
-> There is no `tr` compatibility alias — re-installing one deliberately keeps
-> shadowing coreutils.
-
 **Prerequisites:**
 - Git 2.5+ (2015) for linked worktree support¹.
 - Go 1.25.5+ to install binary² -- _or see below for non-Go install path._
@@ -85,7 +74,7 @@ torec config --show
 
 Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
-Checkout [CONFIG.md](docs/ARCHITECTURE/CONFIG.md) for full deep-merge rules.
+**[CONFIG.md](docs/ARCHITECTURE/CONFIG.md)** -- the full deep-merge rules and examples.
 
 ### Make it yours
 
