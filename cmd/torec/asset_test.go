@@ -72,13 +72,20 @@ func TestAssetLongHelpDocumentsOverrideLoop(t *testing.T) {
 		}
 		out := buf.String()
 		for _, want := range []string{
-			"prompts/ directory",
-			"sync <name>",
-			"reset [<name>]",
+			"data dir's prompts/",
+			"one policy, one file",
+			"listed 'inactive'",
+			"sync",
+			"reset",
 			"restart 'torec serve'",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("args %v: expected help to contain %q, got:\n%s", args, want, out)
+			}
+		}
+		for _, stale := range []string{"--all", "reset [<name>]"} {
+			if strings.Contains(out, stale) {
+				t.Errorf("args %v: expected help to drop stale form %q, got:\n%s", args, stale, out)
 			}
 		}
 	}
@@ -87,6 +94,87 @@ func TestAssetLongHelpDocumentsOverrideLoop(t *testing.T) {
 // Task 4.6.4's successor: the unresolvable-data-dir behavior is covered by
 // TestAssetResetUnresolvableDataDirExits1. The name-validation table lives
 // below (task 4.3).
+
+// Task 2.1: soleAssetFrom resolves the no-argument target from an enumerated
+// shipped-asset list — one name wins, zero or several refuse with the
+// inventory named.
+func TestSoleAssetFrom(t *testing.T) {
+	name, err := soleAssetFrom([]string{"question-generation-policy"})
+	if err != nil || name != "question-generation-policy" {
+		t.Fatalf("one name → it; got (%q, %v)", name, err)
+	}
+
+	_, err = soleAssetFrom(nil)
+	if err == nil || !strings.Contains(err.Error(), "no shipped prompt assets — nothing to sync to") {
+		t.Fatalf("zero names → refusal; got: %v", err)
+	}
+
+	many := []string{"policy-a", "policy-b", "policy-c"}
+	_, err = soleAssetFrom(many)
+	if err == nil {
+		t.Fatal("several names → refusal, got nil error")
+	}
+	for _, n := range many {
+		if !strings.Contains(err.Error(), n) {
+			t.Fatalf("expected refusal to list %q, got: %v", n, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "multiple shipped prompt assets — specify one of:") {
+		t.Fatalf("expected multi-asset refusal wording, got: %v", err)
+	}
+}
+
+// Task 2.2: no-arg sync resolves the sole shipped asset, creates the override
+// with embedded bytes, and prints the advisory.
+func TestAssetSyncNoArgTargetsSoleAsset(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+
+	out, err := runAssetCmd(t, syncAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("no-arg sync error: %v", err)
+	}
+
+	target := filepath.Join(tmp, "prompts", "question-generation-policy.md")
+	written, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("reading synced override: %v", err)
+	}
+	embeddedBytes, ok := assets.Embedded("question-generation-policy")
+	if !ok {
+		t.Fatal("expected embedded bytes to exist")
+	}
+	if !bytes.Equal(written, embeddedBytes) {
+		t.Fatal("expected synced file to equal the embedded bytes")
+	}
+	if !strings.Contains(out, "[assets] synced question-generation-policy to "+target+"; restart 'torec serve' to pick up the change") {
+		t.Fatalf("expected sync advisory, got:\n%s", out)
+	}
+}
+
+// Task 2.3: no-arg reset resolves the sole shipped asset — removes the
+// override when present, no-ops (exit 0) when absent.
+func TestAssetResetNoArgTargetsSoleAsset(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TR_HOME", tmp)
+
+	out, err := runAssetCmd(t, resetAssetCmd(), nil, nil)
+	if err != nil || !strings.Contains(out, "no override for question-generation-policy — nothing to reset") {
+		t.Fatalf("expected absent-override no-op, got (%q, %v)", out, err)
+	}
+
+	overridePath := writeOverrideFile(t, tmp, "question-generation-policy")
+	out, err = runAssetCmd(t, resetAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("no-arg reset error: %v", err)
+	}
+	if _, statErr := os.Stat(overridePath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected override removed, stat err: %v", statErr)
+	}
+	if !strings.Contains(out, "[assets] removed override at "+overridePath+"; restart 'torec serve' to pick up the change") {
+		t.Fatalf("expected restart advisory, got:\n%s", out)
+	}
+}
 
 // Task 4.3: name validation accepts exactly single lowercase-hyphenated tokens.
 func TestValidateAssetName(t *testing.T) {
@@ -337,34 +425,6 @@ func TestAssetResetNoOverrideIsNoOp(t *testing.T) {
 	}
 }
 
-// Task 4.6.3: batch reset without --all refuses (non-zero); with --all --force
-// both overrides are removed.
-func TestAssetResetMultipleRequiresAllFlag(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("TR_HOME", tmp)
-	pathA := writeOverrideFile(t, tmp, "question-generation-policy")
-	pathB := writeOverrideFile(t, tmp, "orphan-policy")
-
-	cmd := resetAssetCmd()
-	_, err := runAssetCmd(t, cmd, nil, nil)
-	if err == nil {
-		t.Fatal("expected refusal (non-zero exit) for batch reset without --all")
-	}
-
-	out, err := runAssetCmd(t, resetAssetCmd(), nil, map[string]string{"all": "true", "force": "true"})
-	if err != nil {
-		t.Fatalf("expected --all --force batch removal to succeed, got error: %v", err)
-	}
-	for _, path := range []string{pathA, pathB} {
-		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
-			t.Fatalf("expected %s to be removed", path)
-		}
-	}
-	if !strings.Contains(out, "[assets] removed override at "+pathA) || !strings.Contains(out, "[assets] removed override at "+pathB) {
-		t.Fatalf("expected advisory per removed override, got:\n%s", out)
-	}
-}
-
 // The review follow-up: with TR_HOME unset, the commands operate on the
 // default data dir (~/.tr) — sync lands there and list sees it, proving the
 // CLI's data-dir resolution agrees with the assets package's.
@@ -476,16 +536,6 @@ func TestAssetSyncOverwritesWithForce(t *testing.T) {
 	overwritten, err := os.ReadFile(existingPath)
 	if err != nil || !bytes.Equal(overwritten, embeddedBytes) {
 		t.Fatalf("expected override overwritten with embedded bytes, err: %v", err)
-	}
-}
-
-// Task 5.7.3: sync with no name refuses (sync-all is too easy to misread).
-func TestAssetSyncEmptyNoNameRefuses(t *testing.T) {
-	t.Setenv("TR_HOME", t.TempDir())
-
-	_, err := runAssetCmd(t, syncAssetCmd(), nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "sync requires an explicit asset name") {
-		t.Fatalf("expected explicit-name error, got: %v", err)
 	}
 }
 

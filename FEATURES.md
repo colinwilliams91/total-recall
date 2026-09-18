@@ -22,22 +22,18 @@ git commit -m "fix: handle retry jitter"   ──>   concept: exponential backof
 
 ### ✍️ Drop-in prompt customization
 
-Every quiz is shaped by a markdown **policy doc** shipped inside the binary — it's the pedagogy: how questions are framed, what makes a good distractor, what counts as exercising a concept. You can replace it with your own, without recompiling — and you never type an asset name:
+Every quiz is shaped by a markdown **policy doc** shipped inside the binary — it's the pedagogy: how questions are framed, what makes a good distractor, what counts as exercising a concept. You can replace it with your own, without recompiling — and you never type an asset name. The four steps:
 
-```sh
-torec asset sync                # copies the shipped policy into the slot as your starting point
-# ...edit the file it places at ~/.tr/prompts/question-generation-policy.md then restart 'tr serve'
-torec asset show                # what's loaded: resolved source, path & age
-torec asset reset               # remove the override — the shipped default returns on next daemon restart
-```
+1. `torec asset sync` — copies the shipped policy into your override slot, naming the file for you and printing its path
+2. Edit the file at the printed path (`~/.tr/prompts/question-generation-policy.md` — or under `$TR_HOME` when set)
+3. Restart `torec serve` to pick up the change
+4. `torec asset show` confirms your override is what's loaded (source `$TR_HOME`, path, age)
 
-**One policy. One file. `sync` names it.** The slot lives at `~/.tr/prompts/` (or `$TR_HOME/prompts/` when `TR_HOME` is set) and holds exactly one file, named exactly like the shipped asset (`question-generation-policy.md`). Anything else you put in the slot is listed as `inactive` — present on disk, ignored by quizzes — and the daemon mentions it once at startup; `tr asset reset <name>` is the cleanup path for strays.
+**One policy. One file. `sync` names it — never type an asset name. Anything else in the slot is listed `inactive` — present, ignored, cleanable with `torec asset reset <name>`.** (Inside the doc, the front-matter `name:`/`description:` keys are descriptive metadata — the filename is how the asset is addressed.)
 
-**The slot is a deployment target, not a workspace.** Ideas, drafts, forks, and version history belong in git or a policies folder (`~/policies/` works well); the slot holds the one doc that is active. Swapping = copying a candidate over the slot file — `sync` refreshes it from the shipped canonical, `reset` empties it. Inside the doc, the front-matter keys (`name:`, `description:`) are descriptive metadata only; the filename is how the asset is addressed (a front-matter `name:` of `generate-quiz-question` is normal and unrelated). If someone shares a policy doc, deploying it is the same copy — policy files are prompts, so review what you import the way you'd review a patch.
+**The slot is a deployment target, not a workspace.** Ideas, drafts, forks, and version history belong in git or a policies folder (`~/policies/` works well); the slot holds the one doc that is active. If someone shares a policy doc, deploying it is the same copy over the slot file — policy files are prompts, so review what you import the way you'd review a patch.
 
 Total Recall watches for drift: a startup `OVERRIDE WARNING` fires when your override is older than the shipped policy by more than `prompt-asset.drift-warning-days` (default 90, `0` disables) — the shipped pedagogy improves over time, and a stale override silently freezes yours at the old policy. `torec asset sync --force` re-baselines you onto the current canonical doc; edit and re-apply your tweaks from there.
-
-`reset` and `sync` mutate files only — restart `torec serve` to pick up the change.
 
 ### 🔍 Observability, not guesswork
 

@@ -5,12 +5,12 @@ Three earlier changes shipped the drop-in idea, its observability, and the slot-
 ## Goals / Non-Goals
 
 **Goals:**
-- `tr asset sync` / `tr asset reset` work argument-free today (sole shipped asset), refusing by enumeration only when the future-hypothetical of multiple assets materializes.
+- `torec asset sync` / `torec asset reset` work argument-free today (sole shipped asset), refusing by enumeration only when the future-hypothetical of multiple assets materializes.
 - Delete the batch-removal apparatus (`--all`, `--force` on reset, TTY confirm gates) — machinery for a question that cannot be asked.
-- Docs state the singular truth once, clearly: one policy, one file, `sync` names it; slot = deployment target; machinery details live in `tr asset --help`.
+- Docs state the singular truth once, clearly: one policy, one file, `sync` names it; slot = deployment target; machinery details live in `torec asset --help`.
 
 **Non-Goals:**
-- Renames; deleting the presentation-level generality (`LoadAll`, `EmbeddedNames`, `inactive`, unmanaged warning); prefix matching; `tr policy` alias; changes to `prompt-asset-loading`'s canonical spec.
+- Renames; deleting the presentation-level generality (`LoadAll`, `EmbeddedNames`, `inactive`, unmanaged warning); prefix matching; `torec policy` alias; changes to `prompt-asset-loading`'s canonical spec.
 
 ## Decisions
 
@@ -37,13 +37,13 @@ FEATURES.md drops the plural vocabulary ("finite set of valid names", community 
 
 A stock stray file is now more likely (users copying shared docs around), and each one deserves exactly one honest signal — the `inactive` tag and the startup line. No docs beyond one sentence; not deleting the `asset-slot-ux-clarity` behavior just shipped.
 
-### Decision: `tr asset list` becomes `tr asset show` (add-on, user-directed)
+### Decision: `torec asset list` becomes `torec asset show` (add-on, user-directed)
 
-"List" sold an inventory; the slot has exactly one meaningful row. `show` is the status verb and rhymes with `tr config --show`. Renamed in code, help, teaching error, unmanaged-file warning, and every doc/artifact mention; the canonical spec requirement is retitled via this change's RENAMED operation, so the archive carries the rename into the canonical cleanly.
+"List" sold an inventory; the slot has exactly one meaningful row. `show` is the status verb and rhymes with `torec config --show`. Renamed in code, help, teaching error, unmanaged-file warning, and every doc/artifact mention; the canonical spec requirement is retitled via this change's RENAMED operation, so the archive carries the rename into the canonical cleanly.
 
 ## Risks / Trade-offs
 
-- **[BREAKING, narrow] `tr asset reset --all` disappears.** Unreleased-in-docs surface; scripts passing `--all` on a modern build didn't exist — called out in the proposal Impact section and superseded in the delta.
+- **[BREAKING, narrow] `torec asset reset --all` disappears.** Unreleased-in-docs surface; scripts passing `--all` on a modern build didn't exist — called out in the proposal Impact section and superseded in the delta.
 - **[Trade-off] `soleAssetFrom`'s multi-asset branch is untestable against the real binary** (one asset embedded). Mitigated: pure function unit-tested with 0/1/N tables; the wrapper is a two-liner.
 
 ## Migration Plan

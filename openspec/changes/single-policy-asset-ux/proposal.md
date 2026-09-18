@@ -2,14 +2,14 @@
 
 The drop-in feature's UX was confusing for three named reasons, and the fix agreed in exploration — "slot = deployment target, no-arg commands, docs as walkthrough" — surfaced one deeper discovery: **the multi-policy concept was the confusion's root cause, and it is a bluff.** There will never be multiple question-generation policies. The shipped policy doc is canonical and tightly bound to the tool's purpose; question synthesis is driven overwhelmingly by the working diffs and cached concepts, the policy doc only shapes pedagogy *framing*, and its tunable surface is small. The community sharing of policy docs is a pipe dream. Documentation currently explains machinery ("finite set of valid names", `inactive` eligibility, per-domain docs) sized for a plural feature that does not exist and never will — and the machine-level inventory concepts were written down as if plural was the point.
 
-Also carried from the prior discussion: `tr asset sync` and `tr asset reset` should work with **no argument** when there is exactly one shipped asset (there is), because forcing the long asset name is pure ceremony; and `reset`'s batch-removal machinery (`--all`, `--force`, TTY gates) is an orphan of the multi-doc era — its confirmation apparatus answers "which of several overrides?" for a world where there is only ever one.
+Also carried from the prior discussion: `torec asset sync` and `torec asset reset` should work with **no argument** when there is exactly one shipped asset (there is), because forcing the long asset name is pure ceremony; and `reset`'s batch-removal machinery (`--all`, `--force`, TTY gates) is an orphan of the multi-doc era — its confirmation apparatus answers "which of several overrides?" for a world where there is only ever one.
 
 ## What Changes
 
-- **`tr asset sync` (no args) targets the sole shipped asset.** No argument: resolves the single shipped asset name and syncs it ("you never type an asset name"). Multiple shipped assets (hypothetical future): error listing the names. Explicit `<name>` args keep working unchanged (validation, `--force` overwrite protection, teaching error).
-- **`tr asset reset` (no args) removes the sole shipped asset's override.** Explicit `<name>` args keep working (permissive — they flush stray or unmanaged files). The batch-removal path is deleted: `--all` and `--force` flags, the TTY confirmation prompt, and the "requires --all" gate all go. Reset is exactly one file per invocation, with the existing single-file advisory semantics.
-- **Documentation tells the single-policy truth.** FEATURES.md: the customization section becomes a four-step walkthrough (`sync` → edit → restart → `list` to confirm), with one two-sentence naming rule ("one policy. one file. `sync` names it; anything else in the slot is listed `inactive` and ignored"). The Community policy-sharing section is deleted (a one-sentence trust note stays: a shared doc deploys by copying over the slot file — review what you import). "The filename is the address" machinery talk exits FEATURES.md and lands in `tr asset --help`. README teaser drops the long asset name. `assets` package doc comment and AGENTS.md reworded from "future prompt assets" to the singular truth.
-- **`tr asset --help` re-taught**: the addition of no-arg primary forms and the slot-deployment framing.
+- **`torec asset sync` (no args) targets the sole shipped asset.** No argument: resolves the single shipped asset name and syncs it ("you never type an asset name"). Multiple shipped assets (hypothetical future): error listing the names. Explicit `<name>` args keep working unchanged (validation, `--force` overwrite protection, teaching error).
+- **`torec asset reset` (no args) removes the sole shipped asset's override.** Explicit `<name>` args keep working (permissive — they flush stray or unmanaged files). The batch-removal path is deleted: `--all` and `--force` flags, the TTY confirmation prompt, and the "requires --all" gate all go. Reset is exactly one file per invocation, with the existing single-file advisory semantics.
+- **Documentation tells the single-policy truth.** FEATURES.md: the customization section becomes a four-step walkthrough (`sync` → edit → restart → `list` to confirm), with one two-sentence naming rule ("one policy. one file. `sync` names it; anything else in the slot is listed `inactive` and ignored"). The Community policy-sharing section is deleted (a one-sentence trust note stays: a shared doc deploys by copying over the slot file — review what you import). "The filename is the address" machinery talk exits FEATURES.md and lands in `torec asset --help`. README teaser drops the long asset name. `assets` package doc comment and AGENTS.md reworded from "future prompt assets" to the singular truth.
+- **`torec asset --help` re-taught**: the addition of no-arg primary forms and the slot-deployment framing.
 
 ## Capabilities
 
@@ -23,11 +23,11 @@ Also carried from the prior discussion: `tr asset sync` and `tr asset reset` sho
 
 ## Impact
 
-- **Code:** `cmd/tr/asset.go` (sole-asset resolution helper; sync/reset no-arg branches; delete `resetAllOverrides`, the `--all`/`--force` reset flags, and the TTY `confirm` helper; `Long` help rewrite); assets package doc comment wording.
-- **Tests:** `cmd/tr/asset_test.go` — no-arg sync creates the override; no-arg reset removes it / no-ops when absent; sole-asset resolution table (0/1/N); batch-related tests retired.
+- **Code:** `cmd/torec/asset.go` (sole-asset resolution helper; sync/reset no-arg branches; delete `resetAllOverrides`, the `--all`/`--force` reset flags, and the TTY `confirm` helper; `Long` help rewrite); assets package doc comment wording.
+- **Tests:** `cmd/torec/asset_test.go` — no-arg sync creates the override; no-arg reset removes it / no-ops when absent; sole-asset resolution table (0/1/N); batch-related tests retired.
 - **Docs:** `FEATURES.md`, `README.md` (one clause), `AGENTS.md` (one clause), `assets/assets.go` package comment.
 - **Specs:** `openspec/changes/single-policy-asset-ux/specs/cli-asset-commands/spec.md` (2 MODIFIED requirements, headers matching the canonical created at the `prompt-asset-observability` archive).
-- **Dependencies:** none. **BREAKING:** the batch-reset invocation (`tr asset reset --all [--force]`) is removed; the multi-asset "sync with no name refuses" contract is replaced. Neither form is user-facing documentation anywhere — the breaking change is a CLI surface called out explicitly in this change.
+- **Dependencies:** none. **BREAKING:** the batch-reset invocation (`torec asset reset --all [--force]`) is removed; the multi-asset "sync with no name refuses" contract is replaced. Neither form is user-facing documentation anywhere — the breaking change is a CLI surface called out explicitly in this change.
 
 ## Key Design Decisions
 
@@ -40,12 +40,12 @@ Also carried from the prior discussion: `tr asset sync` and `tr asset reset` sho
 
 - Renaming the asset or its file (`question-generation-policy` stays).
 - Deleting `LoadAll`/`EmbeddedNames`/unmanaged machinery — presentation-level generality is invisible in docs and needs no churn.
-- A `tr policy` alias subcommand or prefix matching — more name-resolution is how the confusion got here.
+- A `torec policy` alias subcommand or prefix matching — more name-resolution is how the confusion got here.
 - Any change to loader precedence, drift warning, front-matter parsing, or the `prompt-asset-loading` canonical spec.
 
 ## Developer Workflow Impact
 
-Zero commit-time or daemon-loop changes. `tr asset sync` / `tr asset reset` lose a mandatory argument; `list` and the drift warning are unchanged; a hypothetical script that used `reset --all` (unreleased batching) or passed names explicitly keeps working for the single shipped asset.
+Zero commit-time or daemon-loop changes. `torec asset sync` / `torec asset reset` lose a mandatory argument; `list` and the drift warning are unchanged; a hypothetical script that used `reset --all` (unreleased batching) or passed names explicitly keeps working for the single shipped asset.
 
 ## Open Questions
 

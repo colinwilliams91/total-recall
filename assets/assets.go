@@ -1,8 +1,7 @@
 // Package assets loads prompt-asset markdown files shipped under assets/prompts/
 // and overlays runtime overrides from the Total Recall data dir's prompts/
-// directory ($TR_HOME when set, else ~/.tr). The canonical asset today is
-// question-generation-policy.md; future prompt assets follow the same loader
-// pattern.
+// directory ($TR_HOME when set, else ~/.tr). There is one shipped asset — the
+// question-generation policy — loaded through the name-keyed overlay machinery.
 //
 // Embedded defaults ship inside the binary via //go:embed; a developer iterating
 // on question style drops a replacement at <data-dir>/prompts/<name>.md and
@@ -146,7 +145,7 @@ func overridePath(name string) (string, bool) {
 }
 
 // resolveQuiet resolves an asset without logging and without touching the
-// package cache. LoadAll uses it so inspection surfaces (`torec asset list`,
+// package cache. LoadAll uses it so inspection surfaces (`torec asset show`,
 // `torec config show`) read fresh disk state on every invocation.
 func resolveQuiet(name string) PromptAsset {
 	if path, ok := overridePath(name); ok {
@@ -262,7 +261,7 @@ func warnOnStaleOverride(overridePath, name string, modTime time.Time) {
 // UnmanagedNames returns the names of .md files in the override slot that do
 // not correspond to a shipped (embedded) asset, sorted. Such files are never
 // loaded — the engine only requests shipped names — so both classification
-// surfaces (the daemon's startup warning and `torec asset list`'s inactive tag)
+// surfaces (the daemon's startup warning and `torec asset show`'s inactive tag)
 // share this primitive and can never drift. Empty when the slot is empty,
 // absent, or the data dir is unresolvable.
 func UnmanagedNames() []string {
@@ -304,7 +303,7 @@ func WarnUnmanagedOverrides() {
 }
 
 // Age renders a human-readable mtime-relative age ("2d old", "6mo old") for
-// display in `torec asset list` and `torec config show`. A zero mtime renders as
+// display in `torec asset show` and `torec config show`. A zero mtime renders as
 // "unknown" — callers substitute "embedded" when the asset's source is the
 // embedded default.
 func Age(modTime time.Time) string {

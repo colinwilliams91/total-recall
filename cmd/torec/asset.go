@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"github.com/colinwilliams91/total-recall/assets"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // assetNamePattern is the allowlist for user-supplied asset names: a single
@@ -43,21 +41,47 @@ func promptsDir() (string, bool) {
 	return filepath.Join(dir, "prompts"), true
 }
 
+// soleAssetFrom resolves the no-argument target when the shipped asset set
+// is enumerated: exactly one name wins; zero or several are refused with a
+// message listing the actual inventory. Decision by enumeration, not a
+// hardcoded constant — the rule survives a future second asset shipping.
+func soleAssetFrom(names []string) (string, error) {
+	switch len(names) {
+	case 0:
+		return "", fmt.Errorf("no shipped prompt assets — nothing to sync to")
+	case 1:
+		return names[0], nil
+	default:
+		return "", fmt.Errorf("multiple shipped prompt assets — specify one of: %s",
+			strings.Join(names, ", "))
+	}
+}
+
+// soleShippedAsset is soleAssetFrom against the binary's embedded inventory.
+func soleShippedAsset() (string, error) {
+	return soleAssetFrom(assets.EmbeddedNames())
+}
+
 func assetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "asset",
 		Short: "Inspect and manage prompt-asset overrides",
-		Long: `Inspect and manage prompt-asset overrides.
+		Long: `Inspect and manage your prompt-asset override.
 
-Every quiz is shaped by a markdown policy doc shipped inside the binary.
-A same-named file in the data dir's prompts/ directory (~/.tr/prompts,
-or $TR_HOME/prompts when TR_HOME is set) replaces the shipped default —
-edit it and restart the daemon, no recompile.
+Every quiz is shaped by a markdown policy doc shipped inside the binary —
+one policy, one file. A same-named file in the data dir's prompts/
+directory (~/.tr/prompts, or $TR_HOME/prompts when TR_HOME is set)
+replaces the shipped default — that slot is the deployment target for
+your own tuning. You never type an asset name: 'sync' copies the shipped
+policy into the slot, names the file, and you edit it from there.
+Anything else you drop in the slot is listed 'inactive' — present on
+disk, ignored by quizzes — and 'reset <name>' cleans up strays.
 
   show            what is loaded: resolved source, path, and age
-  sync <name>     copy the shipped policy into your override slot as a
-                  starting point for re-tuning
-  reset [<name>]  remove an override so the shipped default takes effect
+  sync            copy the shipped policy into your slot as a starting
+                  point for re-tuning  (or: sync <name>)
+  reset           remove the override so the shipped default takes
+                  effect on next daemon restart  (or: reset <name>)
 
 reset and sync only touch files — restart 'torec serve' to pick up the
 change. A startup OVERRIDE WARNING fires when a stale override is older
@@ -105,8 +129,6 @@ func showAssetCmd() *cobra.Command {
 }
 
 func resetAssetCmd() *cobra.Command {
-	var all, force bool
-
 	cmd := &cobra.Command{
 		Use:   "reset [<name>]",
 		Short: "Remove an override so the embedded default takes effect on next daemon restart",
@@ -123,12 +145,13 @@ func resetAssetCmd() *cobra.Command {
 				}
 				return removeOverride(filepath.Join(dir, name+".md"), name)
 			}
-			return resetAllOverrides(dir, all, force)
+			name, err := soleShippedAsset()
+			if err != nil {
+				return err
+			}
+			return removeOverride(filepath.Join(dir, name+".md"), name)
 		},
 	}
-
-	cmd.Flags().BoolVar(&all, "all", false, "Remove every override in the data dir's prompts/ directory")
-	cmd.Flags().BoolVar(&force, "force", false, "Skip the confirmation prompt")
 
 	return cmd
 }
@@ -145,45 +168,6 @@ func removeOverride(path, name string) error {
 	return nil
 }
 
-// resetAllOverrides removes override files in batch. Multi-file or non-TTY
-// batch removal requires --all; an interactive TTY additionally confirms
-// before touching anything unless --force is passed.
-func resetAllOverrides(dir string, all, force bool) error {
-	dirEntries, err := os.ReadDir(dir)
-	if err != nil {
-		fmt.Println("no overrides to reset")
-		return nil
-	}
-
-	var paths []string
-	for _, de := range dirEntries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".md") {
-			continue
-		}
-		paths = append(paths, filepath.Join(dir, de.Name()))
-	}
-	if len(paths) == 0 {
-		fmt.Println("no overrides to reset")
-		return nil
-	}
-
-	tty := term.IsTerminal(int(os.Stdin.Fd()))
-	if !all && (!tty || len(paths) > 1) {
-		return fmt.Errorf("refusing to remove %d override(s) without --all — pass --all --force for batch removal", len(paths))
-	}
-	if tty && !force && !confirm(fmt.Sprintf("Remove %d prompt-asset override(s)?", len(paths))) {
-		return fmt.Errorf("aborted — no overrides removed")
-	}
-
-	for _, path := range paths {
-		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("removing %s: %w", path, err)
-		}
-		fmt.Printf("[assets] removed override at %s; restart 'torec serve' to pick up the change\n", path)
-	}
-	return nil
-}
-
 func syncAssetCmd() *cobra.Command {
 	var force bool
 
@@ -192,12 +176,18 @@ func syncAssetCmd() *cobra.Command {
 		Short: "Refresh an override with the canonical embedded default content",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("sync requires an explicit asset name")
-			}
-			name := args[0]
-			if err := validateAssetName(name); err != nil {
-				return err
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+				if err := validateAssetName(name); err != nil {
+					return err
+				}
+			} else {
+				resolved, err := soleShippedAsset()
+				if err != nil {
+					return err
+				}
+				name = resolved
 			}
 
 			dir, ok := promptsDir()
@@ -229,19 +219,4 @@ func syncAssetCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite an existing non-empty override")
 
 	return cmd
-}
-
-// confirm asks a yes/no question on an interactive TTY. Non-TTY callers are
-// handled before reaching this; a non-affirmative read counts as a no.
-func confirm(prompt string) bool {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return false
-	}
-	fmt.Printf("%s [y/N]: ", prompt)
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil && line == "" {
-		return false
-	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
 }
