@@ -1,18 +1,20 @@
 Invoke-Command -ScriptBlock {
-    # One-time cleanup: previous rebuild.ps1 dropped tr.exe in the repo root.
-    # The script now installs to $GOBIN so the post-commit hook resolves tr
+    # One-time cleanup: previous rebuild.ps1 dropped tr.exe/torec.exe in the repo root.
+    # The script now installs to $GOBIN so the post-commit hook resolves torec
     # via PATH, mirroring real user installs. Remove any stale root binary so
     # contributors upgrading the script don't keep a dead artifact around.
-    if (Test-Path -Path "./tr.exe") {
-        Write-Host "🤖🧹Removing stale ./tr.exe (rebuild.ps1 now installs to `$GOBIN)..."
-        Remove-Item -Path "./tr.exe" -Force
+    foreach ($stale in @("./tr.exe", "./torec.exe")) {
+        if (Test-Path -Path $stale) {
+            Write-Host "🤖🧹Removing stale $stale (rebuild.ps1 now installs to `$GOBIN)..."
+            Remove-Item -Path $stale -Force
+        }
     }
 
     Write-Host "🧠⚡Building and installing total-recall..."
-    go install ./cmd/tr
+    go install ./cmd/torec
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error installing tr. Exiting."
+        Write-Host "Error installing torec. Exiting."
         exit $LASTEXITCODE
     }
 

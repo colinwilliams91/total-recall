@@ -24,15 +24,15 @@ func captureStderrTo(t *testing.T) (*bytes.Buffer, func()) {
 	return &buf, restore
 }
 
-// TestCheckTrOnPath_Found creates a temp dir with a fake `tr` binary and
+// TestCheckTorecOnPath_Found creates a temp dir with a fake `torec` binary and
 // prepends it to PATH. The detection should find it and produce no output.
-func TestCheckTrOnPath_Found(t *testing.T) {
+func TestCheckTorecOnPath_Found(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: PATH-based detection")
 	}
 
 	tmpDir := t.TempDir()
-	fakeTr := filepath.Join(tmpDir, "tr")
+	fakeTr := filepath.Join(tmpDir, "torec")
 	if err := os.WriteFile(fakeTr, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write fake tr: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestCheckTrOnPath_Found(t *testing.T) {
 	t.Setenv("PATH", tmpDir)
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	if buf.Len() != 0 {
@@ -48,8 +48,8 @@ func TestCheckTrOnPath_Found(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NotFound_Bash: SHELL=/bin/bash, PATH=empty dir → bash warning.
-func TestCheckTrOnPath_NotFound_Bash(t *testing.T) {
+// TestCheckTorecOnPath_NotFound_Bash: SHELL=/bin/bash, PATH=empty dir → bash warning.
+func TestCheckTorecOnPath_NotFound_Bash(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: bash advisory")
 	}
@@ -58,20 +58,20 @@ func TestCheckTrOnPath_NotFound_Bash(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // empty dir; no `tr` (Unix translate or Total Recall)
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	output := buf.String()
 	if !strings.Contains(output, "~/.bashrc") {
 		t.Fatalf("expected bash advisory targeting ~/.bashrc, got %q", output)
 	}
-	if !strings.Contains(output, "tr not found on PATH") {
-		t.Fatalf("expected 'tr not found on PATH' in warning, got %q", output)
+	if !strings.Contains(output, "torec not found on PATH") {
+		t.Fatalf("expected 'torec not found on PATH' in warning, got %q", output)
 	}
 }
 
-// TestCheckTrOnPath_NotFound_Zsh: SHELL=/bin/zsh → zsh warning.
-func TestCheckTrOnPath_NotFound_Zsh(t *testing.T) {
+// TestCheckTorecOnPath_NotFound_Zsh: SHELL=/bin/zsh → zsh warning.
+func TestCheckTorecOnPath_NotFound_Zsh(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: zsh advisory")
 	}
@@ -80,7 +80,7 @@ func TestCheckTrOnPath_NotFound_Zsh(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	output := buf.String()
@@ -89,8 +89,8 @@ func TestCheckTrOnPath_NotFound_Zsh(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NotFound_DefaultShell: SHELL unset on Linux → bash fallback.
-func TestCheckTrOnPath_NotFound_DefaultShell(t *testing.T) {
+// TestCheckTorecOnPath_NotFound_DefaultShell: SHELL unset on Linux → bash fallback.
+func TestCheckTorecOnPath_NotFound_DefaultShell(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: default shell fallback")
 	}
@@ -99,7 +99,7 @@ func TestCheckTrOnPath_NotFound_DefaultShell(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	output := buf.String()
@@ -108,8 +108,8 @@ func TestCheckTrOnPath_NotFound_DefaultShell(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NotFound_OtherShell: SHELL=/usr/bin/fish → falls back to bash form.
-func TestCheckTrOnPath_NotFound_OtherShell(t *testing.T) {
+// TestCheckTorecOnPath_NotFound_OtherShell: SHELL=/usr/bin/fish → falls back to bash form.
+func TestCheckTorecOnPath_NotFound_OtherShell(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: other-shell fallback")
 	}
@@ -118,7 +118,7 @@ func TestCheckTrOnPath_NotFound_OtherShell(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	output := buf.String()
@@ -128,8 +128,8 @@ func TestCheckTrOnPath_NotFound_OtherShell(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NotFound_PowerShell: Windows PATH empty → PowerShell advisory.
-func TestCheckTrOnPath_NotFound_PowerShell(t *testing.T) {
+// TestCheckTorecOnPath_NotFound_PowerShell: Windows PATH empty → PowerShell advisory.
+func TestCheckTorecOnPath_NotFound_PowerShell(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows-only test: PowerShell advisory")
 	}
@@ -139,7 +139,7 @@ func TestCheckTrOnPath_NotFound_PowerShell(t *testing.T) {
 	t.Setenv("PATH", tmpDir)
 
 	buf, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	output := buf.String()
@@ -148,10 +148,10 @@ func TestCheckTrOnPath_NotFound_PowerShell(t *testing.T) {
 	}
 }
 
-// TestCheckTrOnPath_NeverWrites: ensures the function never writes to rc files
+// TestCheckTorecOnPath_NeverWrites: ensures the function never writes to rc files
 // even when PATH detection fails. The HOME env var is redirected to a temp dir
 // and we verify no .bashrc/.zshrc/etc. files are created.
-func TestCheckTrOnPath_NeverWrites(t *testing.T) {
+func TestCheckTorecOnPath_NeverWrites(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix-only test: rc-file check")
 	}
@@ -162,7 +162,7 @@ func TestCheckTrOnPath_NeverWrites(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // empty PATH ensures detection fails (no Unix `tr` to find)
 
 	_, restore := captureStderrTo(t)
-	checkTrOnPath()
+	checkTorecOnPath()
 	restore()
 
 	// List the contents of tmpHome; nothing should have been created.
@@ -228,6 +228,68 @@ func TestShellWarning(t *testing.T) {
 			if !strings.Contains(w, s) {
 				t.Errorf("kind=%d: warning %q missing %q", tc.kind, w, s)
 			}
+		}
+	}
+}
+
+func TestCheckTorecOnPath_StaleTrBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only test: legacy shadow guard")
+	}
+
+	// PATH with no `tr`: the guard must stay silent.
+	t.Setenv("PATH", t.TempDir())
+	buf, restore := captureStderrTo(t)
+	checkTorecOnPath()
+	restore()
+	if strings.Contains(buf.String(), "stale legacy") {
+		t.Fatalf("expected no legacy warning with no tr on PATH, got %q", buf.String())
+	}
+
+	// PATH with a `tr` that reports a coreutils version: silent.
+	coreutilsDir := t.TempDir()
+	coreutilsTr := filepath.Join(coreutilsDir, "tr")
+	if err := os.WriteFile(coreutilsTr, []byte("#!/bin/sh\necho 'tr (GNU coreutils) 9.11'\n"), 0o755); err != nil {
+		t.Fatalf("write fake coreutils tr: %v", err)
+	}
+	t.Setenv("PATH", coreutilsDir)
+	buf, restore = captureStderrTo(t)
+	checkTorecOnPath()
+	restore()
+	if strings.Contains(buf.String(), "stale legacy") {
+		t.Fatalf("expected no legacy warning for coreutils tr, got %q", buf.String())
+	}
+
+	// PATH with a `tr` that identifies as this app: warning printed.
+	staleDir := t.TempDir()
+	staleTr := filepath.Join(staleDir, "tr")
+	if err := os.WriteFile(staleTr, []byte("#!/bin/sh\necho 'tr version dev'\n"), 0o755); err != nil {
+		t.Fatalf("write fake stale tr: %v", err)
+	}
+	t.Setenv("PATH", staleDir)
+	buf, restore = captureStderrTo(t)
+	checkTorecOnPath()
+	restore()
+	if !strings.Contains(buf.String(), "stale legacy 'tr' binary") {
+		t.Fatalf("expected stale legacy warning for our tr, got %q", buf.String())
+	}
+}
+
+func TestIsRecallVersionOutput(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{"dev build", "tr version dev\n", true},
+		{"semver build", "tr version 1.2.3\n", true},
+		{"coreutils", "tr (GNU coreutils) 9.11\n", false},
+		{"empty", "", false},
+		{"noise", "a b c\n", false},
+	}
+	for _, tc := range cases {
+		if got := isRecallVersionOutput(tc.out); got != tc.want {
+			t.Errorf("%s: isRecallVersionOutput(%q) = %v, want %v", tc.name, tc.out, got, tc.want)
 		}
 	}
 }

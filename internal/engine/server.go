@@ -131,7 +131,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	// This context covers two sequential AI calls: concept extraction and
 	// question synthesis. Each call is bounded by ai.DefaultHTTPTimeout,
 	// so the pipeline needs at least 2x that to avoid premature cancellation.
-	// The tr ask --timeout default (in cmd/tr/ask.go) must be >= this
+	// The tr ask --timeout default (in cmd/torec/ask.go) must be >= this
 	// value so the ask poller doesn't give up before the pipeline produces a
 	// question. See the timeout relationship documented on ai.DefaultHTTPTimeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -374,7 +374,7 @@ func (s *Server) handleRecallSelect(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRecallStale returns per-branch counts of undelivered questions for the
-// given repo. It backs the `tr status` advisory: the user is told which branch
+// given repo. It backs the `torec status` advisory: the user is told which branch
 // has pending questions so they can switch back and answer them.
 //
 // Query: ?repo=<path> (required).
@@ -424,7 +424,7 @@ func (s *Server) Start() error {
 	ln, err := net.Listen("tcp", daemonAddr)
 	if err != nil {
 		return fmt.Errorf(
-			"cannot bind to %s — another process may be using port %s\n  hint: run 'tr status' to check: %w",
+			"cannot bind to %s — another process may be using port %s\n  hint: run 'torec status' to check: %w",
 			daemonAddr, daemonPort, err,
 		)
 	}

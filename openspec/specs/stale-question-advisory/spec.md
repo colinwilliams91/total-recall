@@ -35,27 +35,27 @@ The query SHALL be `SELECT branch, COUNT(*) FROM questions WHERE delivered_at IS
 
 ```
 ⚠  <count> recall question(s) pending on branch <branch>
-   Switch back: git switch <branch> && tr ask
+   Switch back: git switch <branch> && torec ask
 ```
 
 If the `branches` object is empty, no stale-questions advisory SHALL be printed. If the daemon is not running (status check already exits non-zero for that case), the advisory block is also skipped — the stale-questions advisory is additive to the existing daemon-down exit behavior.
 
-The advisory block SHALL print AFTER the existing daemon-status and config-show blocks, so the overall output of `tr status` becomes: daemon-up confirmation → fully-resolved config → stale-questions advisory.
+The advisory block SHALL print AFTER the existing daemon-status and config-show blocks, so the overall output of `torec status` becomes: daemon-up confirmation → fully-resolved config → stale-questions advisory.
 
 #### Scenario: User on main, questions pending on feature-X
-- **WHEN** `tr status` is run inside `/path/X` on branch `main`, and `/path/X` has 3 undelivered questions on `feature-X`
+- **WHEN** `torec status` is run inside `/path/X` on branch `main`, and `/path/X` has 3 undelivered questions on `feature-X`
 - **THEN** the output includes a line `⚠  3 recall question(s) pending on branch feature-X` followed by the suggested switch-back command
 
 #### Scenario: No pending questions anywhere
-- **WHEN** `tr status` is run inside `/path/X` on branch `main`, and no questions for `/path/X` have `delivered_at IS NULL`
+- **WHEN** `torec status` is run inside `/path/X` on branch `main`, and no questions for `/path/X` have `delivered_at IS NULL`
 - **THEN** no stale-questions advisory is printed
 
 #### Scenario: tr status outside a git repo
-- **WHEN** `tr status` is run from a directory that is not inside a git repository
+- **WHEN** `torec status` is run from a directory that is not inside a git repository
 - **THEN** the stale-questions advisory block is skipped silently; the daemon-health and config-show blocks still print
 
 #### Scenario: Daemon down
-- **WHEN** `tr status` is run and the health check at `/health` fails (daemon not running)
+- **WHEN** `torec status` is run and the health check at `/health` fails (daemon not running)
 - **THEN** `runStatus` exits non-zero as before; the stale-questions advisory is not reached (no point in querying `/recall/stale` if the daemon is down)
 
 ---
@@ -63,13 +63,13 @@ The advisory block SHALL print AFTER the existing daemon-status and config-show 
 ### Requirement: Future anchor - migrate-vs-answer UX is deferred
 This requirement exists to document a future-phase enhancement that builds on the stale-question advisory. It is NOT to be implemented in the `cache-tenant-isolation` phase. The documentation anchor SHALL be preserved in this spec for future-phase authors to discover when scanning for `migrate-vs-answer`. No code path, route, or CLI command related to the scope below SHALL be introduced in `cache-tenant-isolation`.
 
-A future phase MAY introduce a `tr migrate --from <branch> --to <branch>` command that updates the `branch` column on pending (unclaimed) questions in the cache, effectively re-queueing them under a different branch (typically from a feature branch into `main` after a merge). It MAY also introduce a `tr ask --branch <branch>` flag that allows in-place answering of a different branch's pending questions without switching branches first.
+A future phase MAY introduce a `torec migrate --from <branch> --to <branch>` command that updates the `branch` column on pending (unclaimed) questions in the cache, effectively re-queueing them under a different branch (typically from a feature branch into `main` after a merge). It MAY also introduce a `torec ask --branch <branch>` flag that allows in-place answering of a different branch's pending questions without switching branches first.
 
-A future phase MAY also introduce a `post-checkout` Git hook type that fires on `git switch`/`git checkout`, queries `/recall/stale` for the branch being left, and either (a) prints an advisory warning the user that questions remain pending, or (b) inline-triggers `tr ask --branch=<left-branch>` to deliver them before the switch completes.
+A future phase MAY also introduce a `post-checkout` Git hook type that fires on `git switch`/`git checkout`, queries `/recall/stale` for the branch being left, and either (a) prints an advisory warning the user that questions remain pending, or (b) inline-triggers `torec ask --branch=<left-branch>` to deliver them before the switch completes.
 
-The Phase Y1 `cache-tenant-isolation` lays the detection foundation (the `/recall/stale` endpoint + the `tr status` advisory); future phases own the actual delivery/migration actions.
+The Phase Y1 `cache-tenant-isolation` lays the detection foundation (the `/recall/stale` endpoint + the `torec status` advisory); future phases own the actual delivery/migration actions.
 
 #### Scenario: Deferral is documented
 - **WHEN** a future phase author scans this spec for `migrate-vs-answer`
-- **THEN** they find this requirement block and understand the deferred scope (CLI migrate command, `tr ask --branch`, post-checkout hook) — none of which are to be built in Phase Y1.
+- **THEN** they find this requirement block and understand the deferred scope (CLI migrate command, `torec ask --branch`, post-checkout hook) — none of which are to be built in Phase Y1.
 

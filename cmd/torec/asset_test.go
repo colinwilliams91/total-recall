@@ -57,7 +57,7 @@ func isolateHome(t *testing.T) {
 // both `asset --help` and the root `help asset` form.
 func TestAssetLongHelpDocumentsOverrideLoop(t *testing.T) {
 	for _, args := range [][]string{{"asset", "--help"}, {"help", "asset"}} {
-		root := &cobra.Command{Use: "tr"}
+		root := &cobra.Command{Use: "torec"}
 		root.AddCommand(assetCmd())
 		root.SetArgs(args)
 		root.SetOut(nil)
@@ -76,7 +76,8 @@ func TestAssetLongHelpDocumentsOverrideLoop(t *testing.T) {
 			"one policy, one file",
 			"listed 'inactive'",
 			"sync",
-			"restart 'tr serve'",
+			"reset",
+			"restart 'torec serve'",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("args %v: expected help to contain %q, got:\n%s", args, want, out)
@@ -146,7 +147,7 @@ func TestAssetSyncNoArgTargetsSoleAsset(t *testing.T) {
 	if !bytes.Equal(written, embeddedBytes) {
 		t.Fatal("expected synced file to equal the embedded bytes")
 	}
-	if !strings.Contains(out, "[assets] synced question-generation-policy to "+target+"; restart 'tr serve' to pick up the change") {
+	if !strings.Contains(out, "[assets] synced question-generation-policy to "+target+"; restart 'torec serve' to pick up the change") {
 		t.Fatalf("expected sync advisory, got:\n%s", out)
 	}
 }
@@ -170,7 +171,7 @@ func TestAssetResetNoArgTargetsSoleAsset(t *testing.T) {
 	if _, statErr := os.Stat(overridePath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected override removed, stat err: %v", statErr)
 	}
-	if !strings.Contains(out, "[assets] removed override at "+overridePath+"; restart 'tr serve' to pick up the change") {
+	if !strings.Contains(out, "[assets] removed override at "+overridePath+"; restart 'torec serve' to pick up the change") {
 		t.Fatalf("expected restart advisory, got:\n%s", out)
 	}
 }
@@ -289,7 +290,7 @@ func TestAssetSyncUnknownNamePointsAtList(t *testing.T) {
 		t.Fatal("expected non-nil error for unknown asset")
 	}
 	if !strings.Contains(err.Error(), "embedded asset 'ecs-policy' not found") ||
-		!strings.Contains(err.Error(), "run 'tr asset show' to see the available asset names") {
+		!strings.Contains(err.Error(), "run 'torec asset show' to see the available asset names") {
 		t.Fatalf("expected teaching error, got: %v", err)
 	}
 }
@@ -308,12 +309,12 @@ func TestAssetResetUnmanagedFileStillWorks(t *testing.T) {
 	if _, statErr := os.Stat(orphanPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected orphan file removed, stat err: %v", statErr)
 	}
-	if !strings.Contains(out, "[assets] removed override at "+orphanPath+"; restart 'tr serve' to pick up the change") {
+	if !strings.Contains(out, "[assets] removed override at "+orphanPath+"; restart 'torec serve' to pick up the change") {
 		t.Fatalf("expected restart advisory, got:\n%s", out)
 	}
 }
 
-// ── tr asset list ─────────────────────────────────────────────────────────────
+// ── torec asset list ─────────────────────────────────────────────────────────────
 
 // Task 3.4.1: with no overrides in the data dir, the canonical asset is listed
 // as embedded.
@@ -390,7 +391,7 @@ func TestAssetShowMultipleOverrides(t *testing.T) {
 	}
 }
 
-// ── tr asset reset ────────────────────────────────────────────────────────────
+// ── torec asset reset ────────────────────────────────────────────────────────────
 
 // Task 4.6.1: reset <name> removes the override and prints the restart advisory.
 func TestAssetResetSingleOverride(t *testing.T) {
@@ -405,7 +406,7 @@ func TestAssetResetSingleOverride(t *testing.T) {
 	if _, statErr := os.Stat(overridePath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected override file to be removed, stat err: %v", statErr)
 	}
-	if !strings.Contains(out, "[assets] removed override at "+overridePath+"; restart 'tr serve' to pick up the change") {
+	if !strings.Contains(out, "[assets] removed override at "+overridePath+"; restart 'torec serve' to pick up the change") {
 		t.Fatalf("expected restart advisory, got:\n%s", out)
 	}
 }
@@ -475,7 +476,7 @@ func TestAssetResetUnresolvableDataDirExits1(t *testing.T) {
 	}
 }
 
-// ── tr asset sync ─────────────────────────────────────────────────────────────
+// ── torec asset sync ─────────────────────────────────────────────────────────────
 
 // Task 5.7.1: sync <name> writes the embedded bytes to the override slot.
 func TestAssetSyncCreatesNewOverride(t *testing.T) {
@@ -499,7 +500,7 @@ func TestAssetSyncCreatesNewOverride(t *testing.T) {
 	if !bytes.Equal(written, embeddedBytes) {
 		t.Fatal("expected synced file to equal the embedded bytes")
 	}
-	if !strings.Contains(out, "[assets] synced question-generation-policy to "+target+"; restart 'tr serve' to pick up the change") {
+	if !strings.Contains(out, "[assets] synced question-generation-policy to "+target+"; restart 'torec serve' to pick up the change") {
 		t.Fatalf("expected sync advisory, got:\n%s", out)
 	}
 }
@@ -516,7 +517,7 @@ func TestAssetSyncOverwritesWithForce(t *testing.T) {
 	}
 
 	_, err = runAssetCmd(t, syncAssetCmd(), []string{"question-generation-policy"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "exists and is non-empty — pass --force to overwrite, or 'tr asset reset question-generation-policy' to start from defaults") {
+	if err == nil || !strings.Contains(err.Error(), "exists and is non-empty — pass --force to overwrite, or 'torec asset reset question-generation-policy' to start from defaults") {
 		t.Fatalf("expected refuse-without-force error, got: %v", err)
 	}
 	unchanged, err := os.ReadFile(existingPath)

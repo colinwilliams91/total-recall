@@ -1,4 +1,4 @@
-BINARY_NAME = tr
+BINARY_NAME = torec
 BIN_DIR     = bin
 
 ifeq ($(OS),Windows_NT)
@@ -12,10 +12,10 @@ endif
 .PHONY: build install test lint clean tidy release-dry-run changelog
 
 build:
-	go build -o $(BINARY) ./cmd/tr
+	go build -o $(BINARY) ./cmd/torec
 
 install:
-	go install ./cmd/tr
+	go install ./cmd/torec
 
 test:
 	go test ./...

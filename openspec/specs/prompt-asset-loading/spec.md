@@ -98,7 +98,7 @@ When `assets.Load` resolves to an override file in the data dir's `prompts/` dir
 ---
 
 ### Requirement: Stale override above drift threshold emits an `OVERRIDE WARNING` line
-After computing the mtime delta between the override file and the embedded default compile-time reference, when the delta exceeds the drift threshold (default 90 days, configurable via `PromptAssetConfig.DriftWarningDays`), the package SHALL emit an additional log line: `[assets] OVERRIDE WARNING: %s is %dd older than the embedded default — re-sync with 'tr asset sync %s'`. The warning is informational only — it SHALL NOT block daemon startup, SHALL NOT override the user's file, and SHALL NOT mutate any state. A user who deliberately keeps an old override MAY silence the warning by raising the configured threshold.
+After computing the mtime delta between the override file and the embedded default compile-time reference, when the delta exceeds the drift threshold (default 90 days, configurable via `PromptAssetConfig.DriftWarningDays`), the package SHALL emit an additional log line: `[assets] OVERRIDE WARNING: %s is %dd older than the embedded default — re-sync with 'torec asset sync %s'`. The warning is informational only — it SHALL NOT block daemon startup, SHALL NOT override the user's file, and SHALL NOT mutate any state. A user who deliberately keeps an old override MAY silence the warning by raising the configured threshold.
 
 #### Scenario: Override 100 days old fires warning at default threshold
 - **WHEN** `Load("question-generation-policy")` resolves to an override with mtime 100 days ago and `DriftWarningDays == 90`
@@ -163,7 +163,7 @@ After computing the mtime delta between the override file and the embedded defau
 ---
 
 ### Requirement: Daemon startup logs unmanaged override-slot files
-At daemon startup, after the drift threshold is wired, the daemon SHALL enumerate the override slot's `.md` files and, for each file whose name does not correspond to any shipped (embedded) asset, log one line: `[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'tr asset show')`. The warning is informational only — it SHALL NOT block daemon startup, SHALL NOT refuse to load any asset, SHALL NOT remove or rename files, and SHALL NOT fire for shipped-name overrides or when the slot directory is empty or absent. Files the user consciously keeps unmanaged MAY be silenced by removing, renaming, or relocating them; no configuration gate is provided.
+At daemon startup, after the drift threshold is wired, the daemon SHALL enumerate the override slot's `.md` files and, for each file whose name does not correspond to any shipped (embedded) asset, log one line: `[assets] unmanaged file %q in prompts/ — no shipped asset with this name; not active (run 'torec asset show')`. The warning is informational only — it SHALL NOT block daemon startup, SHALL NOT refuse to load any asset, SHALL NOT remove or rename files, and SHALL NOT fire for shipped-name overrides or when the slot directory is empty or absent. Files the user consciously keeps unmanaged MAY be silenced by removing, renaming, or relocating them; no configuration gate is provided.
 
 #### Scenario: Unmanaged file is called out at startup
 - **WHEN** the daemon starts and `<data-dir>/prompts/my-experiment.md` exists but no shipped asset is named `my-experiment`

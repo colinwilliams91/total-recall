@@ -638,7 +638,7 @@ LIMIT ?`, status, repo, branch, limit)
 // StalePerBranch returns a map of branch name → count of queued questions
 // for that branch, restricted to the given repo. Branches with zero queued
 // questions are omitted. Repo is required; an empty value returns an empty
-// map. Used by GET /recall/stale to back the `tr status` advisory.
+// map. Used by GET /recall/stale to back the `torec status` advisory.
 func (s *Store) StalePerBranch(ctx context.Context, repo string) (map[string]int, error) {
 	out := make(map[string]int)
 	if repo == "" {

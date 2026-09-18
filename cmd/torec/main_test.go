@@ -12,54 +12,54 @@ import (
 )
 
 func TestPostCommitHookScriptContainsSentinel(t *testing.T) {
-	script := buildPostCommitHookScript("/usr/local/bin/tr")
+	script := buildPostCommitHookScript("/usr/local/bin/torec")
 	if !strings.Contains(script, "# total-recall managed") {
 		t.Fatalf("expected sentinel comment in script, got:\n%s", script)
 	}
 }
 
 func TestPostCommitHookScriptContainsPowerShellHandoff(t *testing.T) {
-	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\tr.exe`)
-	if !strings.Contains(script, `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& 'C:\Users\colin\go\bin\tr.exe' ask"`) {
+	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\torec.exe`)
+	if !strings.Contains(script, `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& 'C:\Users\colin\go\bin\torec.exe' ask"`) {
 		t.Fatalf("expected PowerShell handoff with baked path in script, got:\n%s", script)
 	}
 }
 
 func TestPostCommitHookScriptContainsExecFallback(t *testing.T) {
-	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\tr.exe`)
-	if !strings.Contains(script, `exec "C:/Users/colin/go/bin/tr.exe" ask`) {
+	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\torec.exe`)
+	if !strings.Contains(script, `exec "C:/Users/colin/go/bin/torec.exe" ask`) {
 		t.Fatalf("expected exec with forward-slash baked path in script, got:\n%s", script)
 	}
 }
 
 func TestPostCommitHookScriptBakesPathWithForwardSlashesForSh(t *testing.T) {
-	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\tr.exe`)
+	script := buildPostCommitHookScript(`C:\Users\colin\go\bin\torec.exe`)
 	// The sh fallback must receive the path with forward slashes so MSYS sh
 	// (the shell Git uses to run hooks on Windows) can exec the .exe directly.
-	if !strings.Contains(script, `exec "C:/Users/colin/go/bin/tr.exe" ask`) {
+	if !strings.Contains(script, `exec "C:/Users/colin/go/bin/torec.exe" ask`) {
 		t.Fatalf("expected forward-slash path in sh fallback, got:\n%s", script)
 	}
 	// The PowerShell branch must keep the native backslash path (PowerShell
 	// accepts both, but the path came from os.Executable() verbatim).
-	if !strings.Contains(script, `'C:\Users\colin\go\bin\tr.exe'`) {
+	if !strings.Contains(script, `'C:\Users\colin\go\bin\torec.exe'`) {
 		t.Fatalf("expected backslash path in PowerShell branch, got:\n%s", script)
 	}
 }
 
 func TestPostCommitHookScriptTemplateHasPercentSPlaceholders(t *testing.T) {
-	// Guard against someone reverting to PATH-based lookup (the bare `exec tr
+	// Guard against someone reverting to PATH-based lookup (the bare `exec torec
 	// ask` form). The template MUST contain two %%s placeholders — one for the
 	// PowerShell branch, one for the sh fallback — so the baked binary path is
-	// always injected at tr repo time. See buildPostCommitHookScript docs.
+	// always injected at torec repo time. See buildPostCommitHookScript docs.
 	if strings.Count(postCommitHookScriptTmpl, "%s") != 2 {
 		t.Fatalf("expected exactly 2 %%s placeholders in template, got:\n%s", postCommitHookScriptTmpl)
 	}
 }
 
 func TestPostCommitHookScriptReferencesTRRepo(t *testing.T) {
-	script := buildPostCommitHookScript("/usr/local/bin/tr")
-	if !strings.Contains(script, "tr repo") {
-		t.Fatalf("expected 'tr repo' reference in generated-by comment, got:\n%s", script)
+	script := buildPostCommitHookScript("/usr/local/bin/torec")
+	if !strings.Contains(script, "torec repo") {
+		t.Fatalf("expected 'torec repo' reference in generated-by comment, got:\n%s", script)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestRunRepoOutsideGitFailsWithExactMessage(t *testing.T) {
 	os.Stdout = origStdout
 
 	output := buf.String()
-	expected := "Total Recall only works with git projects. cd into a project and run tr repo."
+	expected := "Total Recall only works with git projects. cd into a project and run torec repo."
 	if !strings.Contains(output, expected) {
 		t.Fatalf("expected exact message %q in output, got %q", expected, output)
 	}

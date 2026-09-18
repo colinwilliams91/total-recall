@@ -3,9 +3,9 @@ param(
     [string]$ScratchDir
 )
 
-# common.ps1 — shared helpers for the manual tr init e2e test.
+# common.ps1 — shared helpers for the manual torec init e2e test.
 # All daemon/HTTP/assertion helpers were removed when the automated
-# e2e phases migrated to Go tests in cmd/tr/*_test.go.
+# e2e phases migrated to Go tests in cmd/torec/*_test.go.
 
 $script:passed  = 0
 $script:failed  = 0
@@ -25,12 +25,12 @@ function Initialize-E2E {
 
     if ($BinaryPath -and (Test-Path $BinaryPath)) {
         $script:TrBin = (Resolve-Path $BinaryPath).Path
-    } elseif (Test-Path "./bin/tr.exe") {
-        $script:TrBin = (Resolve-Path "./bin/tr.exe").Path
-    } elseif ($found = (Get-Command tr.exe -ErrorAction SilentlyContinue).Source) {
+    } elseif (Test-Path "./bin/torec.exe") {
+        $script:TrBin = (Resolve-Path "./bin/torec.exe").Path
+    } elseif ($found = (Get-Command torec.exe -ErrorAction SilentlyContinue).Source) {
         $script:TrBin = $found
     } else {
-        Write-Host "[ERROR] Cannot find tr.exe. Build with: make build" -ForegroundColor Red
+        Write-Host "[ERROR] Cannot find torec.exe. Build with: make build" -ForegroundColor Red
         Write-Host "        Or install to `$GOBIN with: .\scripts\rebuild.ps1" -ForegroundColor DarkRed
         exit 1
     }
