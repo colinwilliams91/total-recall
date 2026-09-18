@@ -43,65 +43,71 @@ Inspect and manage the runtime override of the shipped prompt-asset policy from 
 - **WHEN** `torec asset reset my-experiment` is invoked after the tagging above
 - **THEN** the file is removed and the restart advisory prints, per the existing reset behavior (reset is the cleanup path for unmanaged files)
 
+### Requirement: `torec asset reset [<name>]` removes override files one per invocation
+`torec asset reset` SHALL remove override files from the data dir's `prompts/` directory (the Total Recall data dir is `$TR_HOME` when set, else `~/.torec`), one file per invocation. With no `<name>` argument, it SHALL operate on the sole shipped asset: resolve the shipped asset name by enumeration (exactly one shipped asset is always present in the shipped binary) and remove that asset's override file. With an explicit `<name>` argument that matches the shipped asset, the behavior is identical; with any other format-valid `<name>`, it SHALL still remove that named file — permissiveness toward non-shipped names is deliberate, because named reset is the cleanup path for stray files in the slot. When the target file does not exist, it SHALL exit 0 with a short "no override for <name> — nothing to reset" message (no error). The command SHALL exit 1 with a `could not resolve the Total Recall data dir` message when the data dir cannot be resolved at all; it SHALL exit 1 with a message listing the shipped asset names when the sole-asset resolution is ambiguous (zero or several shipped assets — states that cannot arise in the shipped single-asset binary, but the rule is future-proof by enumeration). There is no `--all` flag, no `--force` flag, and no TTY confirmation gate. On success, the command SHALL log a restart advisory: `[assets] removed override at <path>; restart 'torec serve' to pick up the change`. The on-disk removal is the only effect — the running daemon's in-memory cache is not touched; the change takes effect at the next daemon restart.
 
-### Requirement: `tr asset reset [<name>]` removes an override file
-`torec asset reset` SHALL remove the override file at `<data-dir>/prompts/<name>.md` (the Total Recall data dir is `$TR_HOME` when set, else `~/.torec`). With an explicit `<name>` argument, it SHALL remove only that file; when the file does not exist, it SHALL exit 0 with a short "no override for <name> — nothing to reset" message (no error). With no `<name>` argument, it SHALL enumerate every `.md` under the data dir's `prompts/` directory and remove them as a batch — gated by a `--all` flag and a TTY confirmation prompt. The command SHALL exit 1 with a `could not resolve the Total Recall data dir` message when the data dir cannot be resolved at all (no `TR_HOME` and no home directory available). On success, the command SHALL log a restart advisory: `[assets] removed override at <path>; restart 'torec serve' to pick up the change`. The on-disk removal is the only effect — the running daemon's in-memory cache is not touched; the change takes effect at the next daemon restart.
+#### Scenario: No-arg reset removes the policy override
+- **WHEN** `torec asset reset` is invoked (no arguments) with an override at `<data-dir>/prompts/question-generation-policy.md`
+- **THEN** the file is removed; stdout contains `[assets] removed override at <path>; restart 'torec serve' to pick up the change`; exit 0
 
-#### Scenario: Reset a single existing override
-- **WHEN** `torec asset reset question-generation-policy` is invoked and `<data-dir>/prompts/question-generation-policy.md` exists
+#### Scenario: No-arg reset when no override exists
+- **WHEN** `torec asset reset` is invoked with no override present in the slot
+- **THEN** stdout is short ("no override for question-generation-policy — nothing to reset"); exit 0; no file is touched
+
+#### Scenario: Named reset removes an override
+- **WHEN** `torec asset reset question-generation-policy` is invoked and the override file exists
 - **THEN** the file is removed; stdout contains the restart advisory; exit 0
 
-#### Scenario: Reset a single non-existent override is a no-op
+#### Scenario: Named reset removes a single non-existent override as a no-op
 - **WHEN** `torec asset reset question-generation-policy` is invoked and the override file does not exist
 - **THEN** stdout is short ("no override for question-generation-policy — nothing to reset"); exit 0; no file is touched
 
-#### Scenario: Reset with no args requires --all
-- **WHEN** `torec asset reset` is invoked with no arguments and two override files exist under the data dir's `prompts/` directory
-- **THEN** the command refuses and exits non-zero with a message instructing `--all --force` for batch removal
-
-#### Scenario: Reset --all --force in TTY removes all overrides
-- **WHEN** `torec asset reset --all --force` is invoked in an interactive TTY and two overrides exist
-- **THEN** both files are removed; stdout contains the restart advisory; exit 0
+#### Scenario: Named reset is the stray-cleanup path
+- **WHEN** `torec asset reset my-experiment` is invoked and `<data-dir>/prompts/my-experiment.md` exists but `my-experiment` is not a shipped asset name
+- **THEN** the file is removed (permissive cleanup); stdout contains the restart advisory; exit 0
 
 #### Scenario: Reset when the data dir cannot be resolved
-- **WHEN** `torec asset reset <name>` is invoked and neither `TR_HOME` nor a home directory can be resolved
+- **WHEN** `torec asset reset [<name>]` is invoked and neither `TR_HOME` nor a home directory can be resolved
 - **THEN** exit 1 with `could not resolve the Total Recall data dir`; no file is touched
 
+---
 
-### Requirement: `tr asset sync [<name>]` writes the canonical embedded content to an override slot
-`torec asset sync <name>` SHALL read the embedded bytes for `<name>.md` (per the `//go:embed` pattern from `synthesize-from-context`) and write them to `<data-dir>/prompts/<name>.md` (the Total Recall data dir is `$TR_HOME` when set, else `~/.torec`). When the target file exists and is non-empty, the command SHALL refuse with exit 1 and a message instructing `--force` to overwrite or `torec asset reset <name>` to start from defaults. With `--force`, the command SHALL overwrite the existing file. The command SHALL refuse to run with no `<name>` argument (sync-all is too easily mistaken for destructive default-restoration; an explicit name forces intent). The command SHALL exit 1 with `could not resolve the Total Recall data dir` when the data dir cannot be resolved at all. When the embedded bytes for `<name>` are unavailable (corrupt build) or no shipped asset with that name exists, the command SHALL exit 1 with the message `embedded asset '<name>' not found — run 'torec asset show' to see the available asset names`; the refusal SHALL still prevent any file write, and the error doubles as the feature's teaching surface: the finite set of valid override names is exactly what `torec asset show` prints. On success, the command SHALL log `[assets] synced <name> to <path>; restart 'torec serve' to pick up the change`. The on-disk write is the only effect — the running daemon's in-memory cache is not touched.
+### Requirement: `torec asset sync [<name>]` re-baselines the sole shipped asset or an explicitly named one
+`torec asset sync` SHALL read the embedded bytes for a prompt asset (per the `//go:embed` pattern from `synthesize-from-context`) and write them to the data dir's `prompts/<name>.md` (the Total Recall data dir is `$TR_HOME` when set, else `~/.torec`). With no `<name>` argument, it SHALL resolve the sole shipped asset by enumeration and sync it — "you never type an asset name"; if zero or several shipped assets existed (a future-hypothetical in the shipped single-asset binary), it SHALL exit 1 with a message listing the shipped asset names to pick one. With an explicit `<name>` argument, it SHALL validate the name (`^[a-z0-9-]+$`, per the name-validation requirement) and operate on exactly that asset. When the target file exists and is non-empty, the command SHALL refuse with exit 1 and a message instructing `--force` to overwrite or `torec asset reset <name>` to start from defaults; with `--force`, the command SHALL overwrite the existing file. The command SHALL exit 1 with `could not resolve the Total Recall data dir` when the data dir cannot be resolved at all. When the embedded bytes for `<name>` are unavailable (corrupt build), the command SHALL exit 1 with `embedded asset '<name>' not found` and a pointer to `torec asset show`. On success, the command SHALL log `[assets] synced <name> to <path>; restart 'torec serve' to pick up the change`. The on-disk write is the only effect — the running daemon's in-memory cache is not touched; the daemon picks up the change at its next start.
 
-#### Scenario: Sync a new override
-- **WHEN** `torec asset sync question-generation-policy` is invoked and `<data-dir>/prompts/question-generation-policy.md` does not exist
+#### Scenario: No-arg sync creates the policy override
+- **WHEN** `torec asset sync` is invoked (no arguments) and `<data-dir>/prompts/question-generation-policy.md` does not exist
+- **THEN** the file is created with the embedded bytes; stdout contains the restart advisory; exit 0
+
+#### Scenario: Named sync a new override
+- **WHEN** `torec asset sync question-generation-policy` is invoked and the override file does not exist
 - **THEN** the file is created with the embedded bytes; stdout contains the restart advisory; exit 0
 
 #### Scenario: Sync an existing non-empty override without --force refuses
 - **WHEN** `torec asset sync question-generation-policy` is invoked, the target file exists and is non-empty, and `--force` is not passed
-- **THEN** exit 1 with `error: <path> exists and is non-empty — pass --force to overwrite, or 'torec asset reset <name>' to start from defaults`; no file is modified
+- **THEN** exit 1 with `error: <path> exists and is non-empty — pass --force to overwrite, or 'torec asset reset question-generation-policy' to start from defaults`; no file is modified
 
 #### Scenario: Sync with --force overwrites the existing override
 - **WHEN** `torec asset sync question-generation-policy --force` is invoked
 - **THEN** the file is overwritten with the embedded bytes; stdout contains the restart advisory; exit 0
 
-#### Scenario: Sync with no name refuses
-- **WHEN** `torec asset sync` is invoked with no arguments
-- **THEN** exit 1 with `error: sync requires an explicit asset name`; no file is modified
+#### Scenario: Sync with an unknown explicit name points at the inventory
+- **WHEN** `torec asset sync ecs-policy` is invoked and no shipped asset named `ecs-policy` exists
+- **THEN** exit 1 with `embedded asset 'ecs-policy' not found` and the `run 'torec asset show'` pointer; no file is touched
 
 #### Scenario: Sync when the data dir cannot be resolved
-- **WHEN** `torec asset sync <name>` is invoked and neither `TR_HOME` nor a home directory can be resolved
+- **WHEN** `torec asset sync [<name>]` is invoked and neither `TR_HOME` nor a home directory can be resolved
 - **THEN** exit 1 with `could not resolve the Total Recall data dir`; no file is touched
 
-#### Scenario: Sync when embedded bytes are unavailable / unknown name points at the inventory
-- **WHEN** `torec asset sync ecs-policy` is invoked and the binary's embedded map contains no shipped asset named `ecs-policy`
-- **THEN** exit 1; the message contains `not found` and the `torec asset show` pointer; no file is touched
+#### Scenario: Sync when embedded bytes are unavailable
+- **WHEN** `torec asset sync <unknown-name>` is invoked and the binary's embedded map does not contain `<unknown-name>.md`
+- **THEN** exit 1 with `embedded asset <unknown-name> not found`; no file is touched
 
-#### Scenario: Valid name is unaffected
-- **WHEN** `torec asset sync question-generation-policy` is invoked
-- **THEN** behavior is unchanged per the existing sync requirements (embedded bytes written to the correctly-named file)
+---
 
 
 ### Requirement: `tr asset reset|sync` validate the `<name>` argument before path construction
-`torec asset reset` and `torec asset sync` SHALL validate an explicit `<name>` argument against `^[a-z0-9-]+$` (a single lowercase-hyphenated token, matching shipped asset naming) before joining it into a path. An argument that is empty after trimming, contains path separators, dots, whitespace, or characters outside the pattern SHALL be rejected with exit 1 and a message naming the offending argument and the expected form (`invalid asset name '<arg>' — expected a single lowercase-hyphenated name, e.g. 'question-generation-policy'`). No file operation SHALL be attempted for an invalid name. The batch (no-argument) forms of `reset` are not affected — they enumerate the override directory directly.
+`torec asset reset` and `torec asset sync` SHALL validate an explicit `<name>` argument against `^[a-z0-9-]+$` (a single lowercase-hyphenated token, matching shipped asset naming) before joining it into a path. An argument that is empty after trimming, contains path separators, dots, whitespace, or characters outside the pattern SHALL be rejected with exit 1 and a message naming the offending argument and the expected form (`invalid asset name '<arg>' — expected a single lowercase-hyphenated name, e.g. 'question-generation-policy'`). No file operation SHALL be attempted for an invalid name. The no-argument forms of `reset` are not affected — they target the sole shipped asset by enumeration.
 
 #### Scenario: Canonical name is accepted
 - **WHEN** `torec asset reset question-generation-policy` is invoked (or the `sync` equivalent)
