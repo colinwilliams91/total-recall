@@ -188,3 +188,15 @@ func UserConfigDir() (string, error) {
 	}
 	return filepath.Join(home, ".tr"), nil
 }
+
+// DaemonPidPath returns the pidfile path in the data directory (same directory
+// as config.yaml and memory.db). The daemon writes its PID there at startup
+// and removes it at graceful exit; stop and status treat stale or missing
+// files as advisory.
+func DaemonPidPath() (string, error) {
+	dir, err := UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "daemon.pid"), nil
+}

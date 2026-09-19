@@ -37,21 +37,22 @@ _The cognitive retention layer for AI-assisted engineering. Four seconds per Git
 go install github.com/colinwilliams91/total-recall/cmd/torec@latest
 
 # Verify the installed binary and its location
-command -v torec           # (this directory must be on your PATH)
+command -v torec        # (this directory must be on your PATH)
 torec --version
 
 # Init user config      # (run anywhere; one-time, user-level)
-torec init                # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
+torec init              # creates `~/.tr/config.yaml` for tr question pipeline & AI provider setup
 
 # Start the daemon
-torec serve				# runs on `localhost:7331` & must be running for hooks & MCP
+torec serve             # runs on `localhost:7331` & must be running for hooks & MCP
 
 # New terminal
-torec status				# Check daemon status
+torec status            # Check daemon status (shows the daemon pid)
+torec stop              # Gracefully stop the daemon (drains in-flight work)
 
 # Init in a repo
 cd your-project/
-torec repo					# adds project `.tr.yaml`, installs Git hooks
+torec repo              # adds project `.tr.yaml`, installs Git hooks
 ```
 
 Re-run `torec repo` anytime to change hook selections or update hook scripts. Existing unmanaged hooks are chained — not overwritten.
@@ -78,7 +79,7 @@ Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
 ### Make it yours
 
-Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`torec asset sync` names the file for you); `torec asset sync|show|reset` manage the slot; restart `torec serve` to pick up changes.
+Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`torec asset sync` names the file for you); `torec asset sync|show|reset` manage the slot; `torec stop && torec serve` picks up changes.
 
 **[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 

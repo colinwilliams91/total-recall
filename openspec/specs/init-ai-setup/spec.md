@@ -35,19 +35,19 @@ After the detection call, `torec init` SHALL proceed with the existing conversat
 
 
 ### Requirement: tr init pre-populates from existing config
-If `~/.torec/config.yaml` already contains an `ai` block, all provider prompts SHALL be pre-populated with the existing values. The user can confirm or change each value. `torec init` does NOT load or modify any `.torec.yaml` repo-config; re-running `torec init` only re-prompts user-level questions.
+If `~/.tr/config.yaml` already contains an `ai` block, all provider prompts SHALL be pre-populated with the existing values. The user can confirm or change each value. `torec init` does NOT load or modify any `.tr.yaml` repo-config; re-running `torec init` only re-prompts user-level questions.
 
 #### Scenario: Re-running tr init with existing config
-- **WHEN** `~/.torec/config.yaml` has `provider: anthropic`, `model: claude-sonnet-4-5`, `api-key: env:ANTHROPIC_API_KEY`
+- **WHEN** `~/.tr/config.yaml` has `provider: anthropic`, `model: claude-sonnet-4-5`, `api-key: env:ANTHROPIC_API_KEY`
 - **THEN** the provider picker defaults to Anthropic, the API key input pre-fills with `env:ANTHROPIC_API_KEY`, and the model input pre-fills with `claude-sonnet-4-5`
 
 
 ### Requirement: Config is written via template writer after AI setup
-After the AI provider prompts complete, `runInit()` SHALL write `~/.torec/config.yaml` using the template writer (not `yaml.Marshal`). The resulting file SHALL include inline comments for every field, including `base-url` (blank with explanatory comment for non-custom providers).
+After the AI provider prompts complete, `runInit()` SHALL write `~/.tr/config.yaml` using the template writer (not `yaml.Marshal`). The resulting file SHALL include inline comments for every field, including `base-url` (blank with explanatory comment for non-custom providers).
 
 #### Scenario: Config file after Ollama setup
 - **WHEN** the user completes `torec init` with Ollama selected
-- **THEN** `~/.torec/config.yaml` contains `provider: ollama`, the correct model, `api-key: ollama`, a blank `base-url:` field, and inline comments explaining each field
+- **THEN** `~/.tr/config.yaml` contains `provider: ollama`, the correct model, `api-key: ollama`, a blank `base-url:` field, and inline comments explaining each field
 
 
 ### Requirement: Cloud provider prompts explain the env:VAR_NAME pattern
@@ -61,12 +61,12 @@ For cloud providers that require an API key, the TUI prompt description SHALL ex
 
 
 ### Requirement: tr init does not touch git or hooks
-`runInit()` SHALL NOT call `hooks.FindRepoRoot`, `hooks.ResolveHooksDir`, or any hooks-installer method. It SHALL NOT mention git or hooks in any prompt or printed message. After writing `~/.torec/config.yaml`, it SHALL print exactly `Next: cd into your project and run torec repo.` (or equivalent wording clearly guiding the user to `torec repo` as the next step) and return.
+`runInit()` SHALL NOT call `hooks.FindRepoRoot`, `hooks.ResolveHooksDir`, or any hooks-installer method. It SHALL NOT mention git or hooks in any prompt or printed message. After writing `~/.tr/config.yaml`, it SHALL print exactly `Next: cd into your project and run torec repo.` (or equivalent wording clearly guiding the user to `torec repo` as the next step) and return.
 
 #### Scenario: tr init run from outside a git repo
 - **WHEN** `torec init` is run from a directory that is not inside any git repository
-- **THEN** `torec init` writes `~/.torec/config.yaml`, prints the next-step guidance (`Next: cd into your project and run torec repo.`), and exits 0; no warning about "not in a git repo" is printed
+- **THEN** `torec init` writes `~/.tr/config.yaml`, prints the next-step guidance (`Next: cd into your project and run torec repo.`), and exits 0; no warning about "not in a git repo" is printed
 
 #### Scenario: tr init run from inside a git repo
 - **WHEN** `torec init` is run from inside a git repository
-- **THEN** `torec init` behaves identically to running from outside a git repo — it writes only `~/.torec/config.yaml`, prints the next-step guidance, and exits 0; no `.torec.yaml` is written, no hooks are installed
+- **THEN** `torec init` behaves identically to running from outside a git repo — it writes only `~/.tr/config.yaml`, prints the next-step guidance, and exits 0; no `.tr.yaml` is written, no hooks are installed

@@ -24,20 +24,20 @@ On error, `torec repo` SHALL print the error advisory and exit non-zero.
 ---
 
 ### Requirement: tr repo writes .tr.yaml with hook enablement
-`torec repo` SHALL run a huh form prompting the user to enable each of: pre-commit, commit-msg, pre-push. The form SHALL pre-populate from existing `.torec.yaml` if present in the resolved repo root. After confirmation, `torec repo` SHALL write `.torec.yaml` via `config.WriteRepoConfig(repoRoot, repoCfg)`. The form SHALL NOT touch `~/.torec/config.yaml` (user-level config is `torec init`'s territory). Re-running `torec repo` re-prompts only the hook-enablement questions.
+`torec repo` SHALL run a huh form prompting the user to enable each of: pre-commit, commit-msg, pre-push. The form SHALL pre-populate from existing `.tr.yaml` if present in the resolved repo root. After confirmation, `torec repo` SHALL write `.tr.yaml` via `config.WriteRepoConfig(repoRoot, repoCfg)`. The form SHALL NOT touch `~/.tr/config.yaml` (user-level config is `torec init`'s territory). Re-running `torec repo` re-prompts only the hook-enablement questions.
 
 #### Scenario: Fresh tr repo with existing .tr.yaml
-- **WHEN** `torec repo` is run in `/path/to/repo` and `.torec.yaml` exists with `hooks.pre-commit: true, hooks.commit-msg: false, hooks.pre-push: false`
-- **THEN** the form pre-populates with `pre-commit=true`, `commit-msg=false`, `pre-push=false`; the user confirms or changes; the new state is written back to `/path/to/repo/.torec.yaml`
+- **WHEN** `torec repo` is run in `/path/to/repo` and `.tr.yaml` exists with `hooks.pre-commit: true, hooks.commit-msg: false, hooks.pre-push: false`
+- **THEN** the form pre-populates with `pre-commit=true`, `commit-msg=false`, `pre-push=false`; the user confirms or changes; the new state is written back to `/path/to/repo/.tr.yaml`
 
 #### Scenario: Fresh tr repo with no existing .tr.yaml
-- **WHEN** `torec repo` is run in `/path/to/repo` and no `.torec.yaml` exists
-- **THEN** the form pre-populates with `pre-commit=true` (sensible default), `commit-msg=false`, `pre-push=false`; the user confirms; `.torec.yaml` is written fresh
+- **WHEN** `torec repo` is run in `/path/to/repo` and no `.tr.yaml` exists
+- **THEN** the form pre-populates with `pre-commit=true` (sensible default), `commit-msg=false`, `pre-push=false`; the user confirms; `.tr.yaml` is written fresh
 
 ---
 
 ### Requirement: tr repo installs dispatch hooks via the resolved hooks dir
-After writing `.torec.yaml`, `torec repo` SHALL call `hooks.NewInstaller(repoRoot, hooksDir)` (where `hooksDir` is the absolutized result from `ResolveHooksDir`) and then `installer.InstallEnabled(repoCfg.Hooks)`. The install SHALL write the enabled hook scripts (pre-commit, commit-msg, pre-push and their `.bat` siblings) into `<hooksDir>`. Existing managed hooks (detected via the `# total-recall managed` sentinel) are overwritten in place. Existing unmanaged hooks are chained before the TR dispatch body.
+After writing `.tr.yaml`, `torec repo` SHALL call `hooks.NewInstaller(repoRoot, hooksDir)` (where `hooksDir` is the absolutized result from `ResolveHooksDir`) and then `installer.InstallEnabled(repoCfg.Hooks)`. The install SHALL write the enabled hook scripts (pre-commit, commit-msg, pre-push and their `.bat` siblings) into `<hooksDir>`. Existing managed hooks (detected via the `# total-recall managed` sentinel) are overwritten in place. Existing unmanaged hooks are chained before the TR dispatch body.
 
 #### Scenario: Fresh install in a normal repo
 - **WHEN** `torec repo` runs in a normal repo with no prior hooks

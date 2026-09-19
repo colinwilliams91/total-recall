@@ -427,3 +427,29 @@ func TestConfigShowListsPromptAssets(t *testing.T) {
 		t.Fatalf("expected [override] source tag, got:\n%s", output)
 	}
 }
+
+func TestDaemonPidPath(t *testing.T) {
+	t.Setenv("TR_HOME", t.TempDir())
+	path, err := config.DaemonPidPath()
+	if err != nil {
+		t.Fatalf("DaemonPidPath: %v", err)
+	}
+	if filepath.Base(path) != "daemon.pid" {
+		t.Fatalf("expected daemon.pid in the data dir, got %q", path)
+	}
+	if filepath.Dir(path) != os.Getenv("TR_HOME") {
+		t.Fatalf("expected pidfile under $TR_HOME, got %q", path)
+	}
+
+	os.Unsetenv("TR_HOME")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path, err = config.DaemonPidPath()
+	if err != nil {
+		t.Fatalf("DaemonPidPath (default): %v", err)
+	}
+	if path != filepath.Join(home, ".tr", "daemon.pid") {
+		t.Fatalf("expected ~/.tr/daemon.pid, got %q", path)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -440,6 +441,21 @@ func (s *Server) Start() error {
 			log.Printf("[daemon] shutdown error: %v", err)
 		}
 	}()
+
+	// Record the daemon PID for `torec stop` / `torec status`. Failures are
+	// advisory — the daemon runs without lifecycle tooling rather than dying.
+	pidPath, pidErr := config.DaemonPidPath()
+	if pidErr != nil {
+		log.Printf("[daemon] pidfile: %v — 'torec stop' will not find this daemon", pidErr)
+	} else if wErr := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o600); wErr != nil {
+		log.Printf("[daemon] could not write pidfile %s: %v — 'torec stop' will not find this daemon", pidPath, wErr)
+	} else {
+		defer func() {
+			if rmErr := os.Remove(pidPath); rmErr != nil && !os.IsNotExist(rmErr) {
+				log.Printf("[daemon] could not remove pidfile %s: %v", pidPath, rmErr)
+			}
+		}()
+	}
 
 	fmt.Printf("✓ Total Recall daemon running on %s\n", daemonAddr)
 
