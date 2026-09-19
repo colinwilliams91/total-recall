@@ -51,6 +51,19 @@ type Engine struct {
 	policy   assets.PromptAsset
 }
 
+// warningQuestionPolicyFallback tells the operator the daemon is quizzing
+// from the degraded legacy template rather than the policy doc. It names both
+// candidate sources so the message fits whichever situation fired: a drop-in
+// file that is absent or unparseable, or a binary whose embedded default is
+// somehow missing/corrupt. The model-facing fallback kept parity with the
+// traffic contract instead — no warning rides in the payload itself, because
+// the answer flow parses responses as strict JSON and prose there fails the
+// whole synthesis call.
+func warningQuestionPolicyFallback(err error) {
+	log.Printf("[recall] WARNING: question-synthesis policy fallback engaged — using the legacy inline template (load error: %v)", err)
+	log.Printf("[recall] WARNING: check the drop-in policy at $TR_HOME/prompts/question-generation-policy.md (~/.tr/prompts/ by default) and re-serve if you touched the drop-in file, or assets/prompts/question-generation-policy.md in the source tree and rebuild if you did not enable the drop-in and suspect a broken shipped asset")
+}
+
 // New creates an Engine. Both provider and store must be non-nil. The
 // question-generation-policy prompt asset is loaded once at construction;
 // a missing or corrupt asset falls back to SourceFallback and Synthesize
@@ -58,7 +71,7 @@ type Engine struct {
 func New(provider ai.Provider, store *cache.Store) *Engine {
 	policy, err := assets.Load("question-generation-policy")
 	if err != nil {
-		log.Printf("[recall] policy asset load: %v", err)
+		warningQuestionPolicyFallback(err)
 	}
 	return &Engine{provider: provider, store: store, policy: policy}
 }
