@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"os"
 	"os/exec"
@@ -141,6 +142,12 @@ func TestStopHealthyDaemon(t *testing.T) {
 	cfg := config.Merge(&userCfg, nil)
 	srv := engine.New(cfg, nil, store, nil)
 
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	})
+
 	done := make(chan error, 1)
 	go func() { done <- srv.Start() }()
 
@@ -210,6 +217,12 @@ func TestStopDrainsInFlight(t *testing.T) {
 	userCfg := config.DefaultUserConfig()
 	cfg := config.Merge(&userCfg, nil)
 	srv := engine.New(cfg, nil, store, nil)
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	})
 
 	done := make(chan error, 1)
 	go func() { done <- srv.Start() }()

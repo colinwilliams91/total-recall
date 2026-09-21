@@ -185,22 +185,27 @@ func sigZero() syscall.Signal {
 // unixProcessName returns the command name for the pid. Linux reads /proc;
 // macOS and other Unixes fall back to ps. exists=false with unknown=false
 // means "pid not present".
+// unixProcessName returns the command name for the pid. Linux reads /proc
+// (fast, complete); other Unixes use ps directly — on macOS /proc does not
+// exist, so a failed /proc read there must not be reported as "pid absent".
 func unixProcessName(pid int) (name string, exists bool, unknown bool) {
-	if b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "comm")); err == nil {
-		return strings.TrimSpace(string(b)), true, false
-	} else if os.IsNotExist(err) {
-		return "", false, false
+	if runtime.GOOS == "linux" {
+		if b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "comm")); err == nil {
+			return strings.TrimSpace(string(b)), true, false
+		} else if os.IsNotExist(err) {
+			return "", false, false
+		} else {
+			return "", false, true // procfs present but unreadable — indeterminate
+		}
 	}
-	// /proc unavailable (macOS/other Unixes): ps fallback.
+	// macOS and other Unixes: ps. macOS `ps -o comm=` prints a full path,
+	// so the caller receives the basename.
 	out, psErr := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
 	name = filepath.Base(strings.TrimSpace(string(out)))
-	if psErr != nil {
-		if name == "." || name == "" {
-			return "", false, false
-		}
-		return "", false, true
+	if psErr != nil || name == "" || name == "." {
+		return "", false, false // ps found nothing for this pid
 	}
-	return name, name != "." && name != "", false
+	return name, true, false
 }
 
 // healthyDaemonPid returns the pidfile PID when it identifies as a live
