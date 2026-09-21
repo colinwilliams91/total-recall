@@ -17,7 +17,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 - **Entrypoint**: `cmd/torec/main.go` (Cobra CLI)
 - **Provider factory**: `cmd/torec/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
-- **Daemon**: `torec serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it
+- **Daemon**: `torec serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it. Lifecycle: pidfile at `<data-dir>/daemon.pid`, graceful stop via `torec stop` (SIGTERM / `taskkill /PID` best-effort on Windows)
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
 - **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`, `choices`, `selections`, `question_events`. Concepts and questions are scoped per-repo AND per-branch (no global pool). Empty `repo` or `branch` is refused at the store layer. **Schema migrations are manual**: `Open()` uses `CREATE TABLE IF NOT EXISTS` (no `ALTER TABLE` path); after a schema-changing build, delete `~/.tr/memory.db` (or `$TR_HOME/memory.db`) before starting the daemon — stale schema + `IF NOT EXISTS` = silent half-migration.
 - **MCP server**: mounted at `/mcp/` inside the daemon

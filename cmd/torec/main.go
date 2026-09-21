@@ -38,6 +38,7 @@ func main() {
 
 	root.AddCommand(
 		serveCmd(),
+		stopCmd(),
 		initCmd(),
 		repoCmd(),
 		configCmd(),
@@ -514,7 +515,10 @@ func runStatus() error {
 	if err != nil {
 		fmt.Println("✗ Daemon not running on localhost:7331")
 		fmt.Println("  Start with: torec serve")
-		os.Exit(1)
+		if pid, stale := staleDaemonPid(); stale {
+			fmt.Printf("  (stale daemon.pid with pid %d ignored — delete it or re-run 'torec stop')\n", pid)
+		}
+		osExit(1)
 	}
 	defer resp.Body.Close()
 
@@ -523,10 +527,14 @@ func runStatus() error {
 	}
 	if jsonErr := json.NewDecoder(resp.Body).Decode(&health); jsonErr != nil || health.Status != "ok" {
 		fmt.Println("✗ Daemon returned unexpected health response")
-		os.Exit(1)
+		osExit(1)
 	}
 
-	fmt.Println("✓ Daemon running on localhost:7331")
+	healthLine := "✓ Daemon running on localhost:7331"
+	if pid, alive := healthyDaemonPid(); pid > 0 && alive {
+		healthLine = fmt.Sprintf("%s (pid %d)", healthLine, pid)
+	}
+	fmt.Println(healthLine)
 
 	cfg, err := config.Load(quiet)
 	if err != nil {

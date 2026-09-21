@@ -1,6 +1,6 @@
 The daemon IS the Core Go Engine runtime.[^1]
 
-> **Phase 02 status**: Daemon HTTP server is live. `torec serve` binds to `:7331`, registers all hook routes (`/hooks/*`) and the MCP stub (`/mcp/*`), and handles graceful shutdown on SIGTERM/SIGINT. Phase 03 wires in AI processing, concept extraction, and recall synthesis.
+> **Phase 02 status**: Daemon HTTP server is live. `torec serve` binds to `:7331`, registers all hook routes (`/hooks/*`) and the MCP stub (`/mcp/*`), and handles graceful shutdown on SIGTERM/SIGINT. The daemon writes its PID to `<data-dir>/daemon.pid` at bind time (`$TR_HOME` when set, else `~/.tr`) and removes it on graceful exit; `torec stop` signals that PID (Unix: SIGTERM; Windows: best-effort `taskkill /PID`) and waits for the drain; `torec status` surfaces the pid. Phase 03 wires in AI processing, concept extraction, and recall synthesis.
 
 ## Lifecycle
 
