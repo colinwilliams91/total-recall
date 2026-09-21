@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -127,6 +128,9 @@ func TestStopPidRecycled(t *testing.T) {
 // TestStopHealthyDaemon drives the full stop flow against a live in-process
 // daemon: pidfile written at bind, signal → drain → pidfile removed.
 func TestStopHealthyDaemon(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows skip: taskkill /F of the test binary would terminate the whole self-signal test run; the identical flow is verified by the stale-pidfile tests + command coverage")
+	}
 	if testing.Short() {
 		t.Skip("requires a live bind on the daemon port")
 	}
@@ -203,6 +207,9 @@ func readPidFileWait(t *testing.T, timeout time.Duration) (string, int, error) {
 // stop signal arrives; the daemon completes the in-flight request within the
 // drain window instead of dropping the connection, then clears the pidfile.
 func TestStopDrainsInFlight(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows skip: taskkill /F of the test process is fatal (no in-process drain observable); drain semantics are a POSIX SIGTERM contract")
+	}
 	if testing.Short() {
 		t.Skip("requires a live bind on the daemon port")
 	}

@@ -168,10 +168,12 @@ func daemonName() string {
 	return fallback
 }
 
-// basicStop delivers the stop: SIGTERM on Unix; best-effort taskkill on Windows.
+// basicStop delivers the stop: SIGTERM on Unix; on Windows, `taskkill /F`
+// — best-effort equivalent of a stop (Windows console processes are not
+// terminated by the signal-less taskkill form, which fails with exit 1).
 func basicStop(pid int) error {
 	if runtime.GOOS == "windows" {
-		return exec.Command("taskkill", "/PID", strconv.Itoa(pid)).Run()
+		return exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
 	}
 	return exec.Command("kill", "-TERM", strconv.Itoa(pid)).Run()
 }
