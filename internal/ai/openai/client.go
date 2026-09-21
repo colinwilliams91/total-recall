@@ -61,7 +61,8 @@ type chatResponse struct {
 }
 
 // Complete sends a chat completion request and returns the assistant content string.
-func (c *Client) Complete(ctx context.Context, req ai.CompletionRequest) (string, error) {	model := c.model
+func (c *Client) Complete(ctx context.Context, req ai.CompletionRequest) (string, error) {
+	model := c.model
 	if req.Model != "" {
 		model = req.Model
 	}
