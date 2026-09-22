@@ -84,7 +84,7 @@ func serveCmd() *cobra.Command {
 
 			var recallEngine *recall.Engine
 			if provider != nil {
-				recallEngine = recall.New(provider, store)
+				recallEngine = recall.New(provider, store, &cfg.Recall)
 			}
 
 			return engine.New(cfg, provider, store, recallEngine).Start()

@@ -39,6 +39,7 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	warnRawAPIKey(&cfg.AI)
+	warnInvalidDifficulty(cfg.Recall.Difficulty, "the user config")
 	return &cfg, nil
 }
 
@@ -174,6 +175,9 @@ func LoadRepoConfig() (*RepoConfig, error) {
 		return nil, fmt.Errorf("parsing %s: %w", RepoConfigFile, err)
 	}
 	warnRepoConfigSecrets(&cfg)
+	if cfg.Recall != nil {
+		warnInvalidDifficulty(cfg.Recall.Difficulty, ".tr.yaml")
+	}
 	return &cfg, nil
 }
 
@@ -205,6 +209,30 @@ func warnRawAPIKey(ai *AIConfig) {
 		"⚠  ai.api-key in ~/.tr/config.yaml appears to be a raw value.\n"+
 			"   Use the env:<VAR_NAME> pattern instead (e.g., env:ANTHROPIC_API_KEY).\n",
 	)
+}
+
+// ValidDifficulties lists the accepted recall.difficulty values: the three
+// concrete levels the synthesis prompt understands and "adaptive", which
+// routes to the signal-driven difficulty resolver.
+var ValidDifficulties = []string{"easy", "intermediate", "hard", "adaptive"}
+
+// warnInvalidDifficulty emits a stderr warning when recall.difficulty holds
+// a value outside the accepted set. The value still propagates (the resolver
+// passes it through verbatim), but a typo reaching the prompt as a meaningless
+// literal degrades question quality — the warning makes the mistake actionable.
+func warnInvalidDifficulty(difficulty, source string) {
+	if difficulty == "" {
+		return
+	}
+	for _, valid := range ValidDifficulties {
+		if difficulty == valid {
+			return
+		}
+	}
+	fmt.Fprintf(os.Stderr,
+		"⚠  recall.difficulty %q in %s is not one of easy | intermediate | hard | adaptive.\n"+
+			"   The value will be passed to the AI verbatim — fix the typo in %s.\n",
+		difficulty, source, source)
 }
 
 // warnRepoConfigSecrets checks .tr.yaml for user-level keys (privacy.*, ai.*)

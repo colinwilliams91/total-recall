@@ -6,6 +6,7 @@
 |----------|-------|----------|
 | `cmd/torec/*_test.go` | Automated e2e (58 tests) | Go-native: model isolation, headless integration, golden file |
 | `scripts/e2e/manual-init.ps1` | Manual e2e (3 steps) | Interactive TTY — `torec init` TUI only |
+| `scripts/e2e/adaptive-ab.{sh,ps1}` | Manual exploration tool | Adaptive-difficulty A/B spike — question quality per signal arm |
 
 ## Why `torec init` is still manual
 
@@ -34,6 +35,27 @@ The script will:
 3. Prompt you to run `torec init` interactively (3 times)
 4. Auto-verify config files, hook installation, and idempotency after each step
 5. Restore your original config
+
+## Adaptive difficulty A/B spike
+
+`adaptive-ab.sh` (Linux/macOS) and `adaptive-ab.ps1` (Windows) are exploration
+tools, not tests. They build a scratch repo whose commits bracket each
+adaptive signal (ai-delegation, high-cluster, dispersed, all-code, fallback),
+capture 10 questions per arm, and log the resolver's
+`[recall] adaptive resolver selected <level> (signals: <list>)` lines for
+side-by-side comparison of question quality. Results inform threshold tuning
+in `internal/recall/difficulty/adaptive.go`; record observations in
+`docs/CORE/ADAPTIVE_SPIKE.md`.
+
+```bash
+# Linux/macOS — requires an AI provider configured in $TR_HOME/config.yaml
+scripts/e2e/adaptive-ab.sh ./bin/torec
+```
+
+```powershell
+# Windows
+.\scripts\e2e\adaptive-ab.ps1 -TorecPath .\bin\torec.exe
+```
 
 ## What the Go tests cover
 

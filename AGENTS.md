@@ -32,6 +32,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 | `internal/config` | Two-tier config load, merge, validation |
 | `internal/pipeline` | Concept extraction from staged diffs |
 | `internal/recall` | Question synthesis from cached concepts |
+| `internal/recall/difficulty` | Difficulty resolution: `Resolver` interface with `Static` and `Adaptive` implementations. A configured `difficulty: adaptive` routes to the heuristic resolver; the first-match heuristic table lives in `internal/recall/difficulty/adaptive.go` |
 | `internal/cache` | SQLite concept store |
 | `internal/hooks` | Hook installation, script generation, HTTP dispatch |
 | `internal/presentation` | Dispatcher interface + terminal adapter |

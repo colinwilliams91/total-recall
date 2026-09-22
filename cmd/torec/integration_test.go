@@ -545,7 +545,8 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
 	}}
 	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
-		return recall.New(provider, s)
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
 	})
 
 	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func retry() {}")))
@@ -565,6 +566,38 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 	}
 	if wrongQ != nil {
 		t.Fatalf("expected no question for /wrong/repo (cross-repo leak), got %+v", wrongQ)
+	}
+}
+
+// Task 3.4: a daemon whose recall engine was built with difficulty "adaptive"
+// must inject a concrete difficulty directive into the synthesis prompt — the
+// literal "adaptive" never reaches the model.
+func TestPipelineAdaptiveConfigResolvesConcreteDifficulty(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`[{"concept":"retry-pattern","source":"code","weight":0.9},{"concept":"jitter","source":"code","weight":0.8},{"concept":"circuit-breaker","source":"code","weight":0.7}]`,
+		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig() // difficulty: adaptive
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func retry() {}")))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+
+	waitForUndeliveredQuestion(t, store, "/repo/test")
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	synthReq := provider.lastReq
+	if strings.Contains(synthReq.System, "adaptive") {
+		t.Fatalf("expected literal adaptive to never reach the prompt, got %q", synthReq.System)
+	}
+	if !strings.Contains(synthReq.System, "hard") {
+		t.Fatalf("expected resolved concrete difficulty (hard, high-cluster) in system turn, got %q", synthReq.System)
 	}
 }
 

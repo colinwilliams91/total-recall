@@ -199,7 +199,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 		CommitMsg:   payload.Message,
 		DiffSnippet: snippet,
 	}
-	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.Recall.Difficulty, s.cfg.AI.Model, synth)
+	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.AI.Model, synth, s.recallEngine.Resolver())
 	if err != nil {
 		log.Printf("[recall] synthesize error: %v", err)
 		return

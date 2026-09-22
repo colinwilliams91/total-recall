@@ -9,7 +9,9 @@ import (
 
 	"github.com/colinwilliams91/total-recall/internal/ai"
 	"github.com/colinwilliams91/total-recall/internal/cache"
+	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/recall"
+	"github.com/colinwilliams91/total-recall/internal/recall/difficulty"
 )
 
 // mockProvider implements ai.Provider with canned responses for testing
@@ -79,7 +81,7 @@ func TestFeedbackRequestTokenBudget(t *testing.T) {
 func TestGenerateFeedbackDegradation(t *testing.T) {
 	s := setupCache(t)
 	provider := &mockProvider{err: errors.New("timeout")}
-	engine := recall.New(provider, s)
+	engine := recall.New(provider, s, nil)
 
 	choices := []recall.Choice{{Text: "a"}, {Text: "b"}}
 	got := engine.GenerateFeedback(context.Background(), "q", choices, 0, 0, "m")
@@ -91,10 +93,10 @@ func TestGenerateFeedbackDegradation(t *testing.T) {
 func TestSynthesizeEmptyConceptsReturnsNil(t *testing.T) {
 	s := setupCache(t)
 	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
-	engine := recall.New(provider, s)
+	engine := recall.New(provider, s, nil)
 
 	synth := recall.SynthesisContext{}
-	q, err := engine.Synthesize(context.Background(), "/repo", "main", "intermediate", "m", synth)
+	q, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -109,12 +111,12 @@ func TestSynthesizeEmptyConceptsReturnsNil(t *testing.T) {
 func TestSynthesizeEmptyRepoReturnsNil(t *testing.T) {
 	s := setupCache(t)
 	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
-	engine := recall.New(provider, s)
+	engine := recall.New(provider, s, nil)
 
 	synth := recall.SynthesisContext{
 		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.9, Source: "code", SeenAt: time.Now()}},
 	}
-	q, err := engine.Synthesize(context.Background(), "", "main", "intermediate", "m", synth)
+	q, err := engine.Synthesize(context.Background(), "", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -126,7 +128,7 @@ func TestSynthesizeEmptyRepoReturnsNil(t *testing.T) {
 func TestSynthesizePopulatesUserTurnWithWeights(t *testing.T) {
 	s := setupCache(t)
 	provider := &mockProvider{response: `{"question":"q","choices":["a","b","c"]}`}
-	engine := recall.New(provider, s)
+	engine := recall.New(provider, s, &config.RecallConfig{Difficulty: "hard"})
 
 	synth := recall.SynthesisContext{
 		Concepts: []cache.ConceptRow{
@@ -136,7 +138,7 @@ func TestSynthesizePopulatesUserTurnWithWeights(t *testing.T) {
 		CommitMsg:   "fix: handle race in cache.Save",
 		DiffSnippet: "+ func retry() {}",
 	}
-	q, err := engine.Synthesize(context.Background(), "/repo", "main", "hard", "m", synth)
+	q, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,19 +162,169 @@ func TestSynthesizePopulatesUserTurnWithWeights(t *testing.T) {
 func TestSynthesizeUserTurnOmitsCommitContextWhenEmpty(t *testing.T) {
 	s := setupCache(t)
 	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
-	engine := recall.New(provider, s)
+	engine := recall.New(provider, s, nil)
 
 	synth := recall.SynthesisContext{
 		Concepts: []cache.ConceptRow{
 			{Concept: "caching", Weight: 0.5, Source: "code", SeenAt: time.Now()},
 		},
 	}
-	_, err := engine.Synthesize(context.Background(), "/repo", "main", "intermediate", "m", synth)
+	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.Contains(provider.lastReq.UserTurn, "Recent commit context") {
 		t.Fatalf("expected NO commit context section when CommitMsg and DiffSnippet are empty, got %q", provider.lastReq.UserTurn)
+	}
+}
+
+// TestSynthesizeWithStaticResolverHard verifies the resolver's value reaches
+// the system turn as the difficulty directive.
+func TestSynthesizeWithStaticResolverHard(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	synth := recall.SynthesisContext{
+		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()}},
+	}
+	resolver := difficulty.Static{Value: "hard"}
+	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(provider.lastReq.System, "hard") {
+		t.Fatalf("expected system turn to contain hard difficulty directive, got %q", provider.lastReq.System)
+	}
+}
+
+// countingResolver implements difficulty.Resolver and counts Resolve calls,
+// letting tests assert the resolver was or was not consulted.
+type countingResolver struct {
+	calls int
+	value string
+}
+
+func (c *countingResolver) Resolve(_ context.Context, _ difficulty.SynthesisContext) string {
+	c.calls++
+	return c.value
+}
+
+// TestSynthesizeResolverNotCalledForEmptyRepo asserts the empty-repo
+// short-circuit returns before the resolver is consulted.
+func TestSynthesizeResolverNotCalledForEmptyRepo(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	resolver := &countingResolver{value: "hard"}
+	q, err := engine.Synthesize(context.Background(), "", "main", "m", recall.SynthesisContext{}, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if q != nil {
+		t.Fatalf("expected nil question for empty repo, got %+v", q)
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("expected resolver not to be called for empty repo, got %d calls", resolver.calls)
+	}
+}
+
+// TestSynthesizeEmptyResolverResultFallsBackToIntermediate asserts the
+// safety-net substitution when a resolver returns "".
+func TestSynthesizeEmptyResolverResultFallsBackToIntermediate(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	synth := recall.SynthesisContext{
+		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()}},
+	}
+	resolver := &countingResolver{value: ""}
+	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("expected resolver to be called once, got %d calls", resolver.calls)
+	}
+	if !strings.Contains(provider.lastReq.System, "intermediate") {
+		t.Fatalf("expected system turn to contain intermediate fallback, got %q", provider.lastReq.System)
+	}
+}
+
+// TestEngineNewAdaptiveConfigUsesAdaptiveResolver asserts an Engine built
+// with difficulty "adaptive" resolves a concrete level via the heuristics
+// (high-cluster signals → "hard") instead of passing "adaptive" through.
+func TestEngineNewAdaptiveConfigUsesAdaptiveResolver(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, &config.RecallConfig{Difficulty: "adaptive"})
+
+	synth := recall.SynthesisContext{
+		Concepts: []cache.ConceptRow{
+			{Concept: "a", Weight: 0.9, Source: "code", SeenAt: time.Now()},
+			{Concept: "b", Weight: 0.8, Source: "code", SeenAt: time.Now()},
+			{Concept: "c", Weight: 0.7, Source: "code", SeenAt: time.Now()},
+		},
+	}
+	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(provider.lastReq.System, "adaptive") {
+		t.Fatalf("expected literal adaptive to never reach the prompt, got %q", provider.lastReq.System)
+	}
+	if !strings.Contains(provider.lastReq.System, "hard") {
+		t.Fatalf("expected resolved hard difficulty directive, got %q", provider.lastReq.System)
+	}
+}
+
+// TestEngineNewHardConfigUsesStaticResolver asserts an Engine built with
+// difficulty "hard" passes the value through verbatim without consulting the
+// adaptive heuristics.
+func TestEngineNewHardConfigUsesStaticResolver(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, &config.RecallConfig{Difficulty: "hard"})
+
+	// Diffuse low-weight concepts would resolve "easy" under the adaptive
+	// heuristics — with the Static resolver the value must stay "hard".
+	synth := recall.SynthesisContext{
+		Concepts: []cache.ConceptRow{
+			{Concept: "a", Weight: 0.2, Source: "code", SeenAt: time.Now()},
+			{Concept: "b", Weight: 0.2, Source: "code", SeenAt: time.Now()},
+			{Concept: "c", Weight: 0.2, Source: "code", SeenAt: time.Now()},
+			{Concept: "d", Weight: 0.2, Source: "code", SeenAt: time.Now()},
+			{Concept: "e", Weight: 0.2, Source: "code", SeenAt: time.Now()},
+		},
+	}
+	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(provider.lastReq.System, "hard") {
+		t.Fatalf("expected verbatim hard difficulty directive, got %q", provider.lastReq.System)
+	}
+}
+
+// TestEngineNewEmptyConfigDefaultsToAdaptive asserts an Engine built with an
+// unset difficulty routes through the adaptive chain (fallback intermediate).
+func TestEngineNewEmptyConfigDefaultsToAdaptive(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, &config.RecallConfig{})
+
+	synth := recall.SynthesisContext{
+		Concepts: []cache.ConceptRow{
+			{Concept: "a", Weight: 0.5, Source: "code", SeenAt: time.Now()},
+			{Concept: "b", Weight: 0.5, Source: "conversation", SeenAt: time.Now()},
+			{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()},
+		},
+	}
+	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(provider.lastReq.System, "intermediate") {
+		t.Fatalf("expected intermediate fallback for unset config, got %q", provider.lastReq.System)
 	}
 }
 
