@@ -48,7 +48,7 @@ torec serve             # runs on `localhost:7331` & must be running for hooks &
 
 # New terminal
 torec status            # Check daemon status (shows the daemon pid)
-torec stop              # Gracefully stop the daemon (drains in-flight work)
+# torec stop            # Gracefully stop the daemon when you're done (drains in-flight work)
 
 # Init in a repo
 cd your-project/
