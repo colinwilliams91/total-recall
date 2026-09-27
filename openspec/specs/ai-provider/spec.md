@@ -27,7 +27,7 @@ The `ai.Provider` interface SHALL expose a single method: `Complete(ctx context.
 ---
 
 ### Requirement: Named provider registry resolves base URLs
-`ai.New(cfg AIConfig)` SHALL look up `cfg.Provider` in a named registry. If the provider is a known preset (`anthropic`, `openai`, `ollama`, `groq`, `lm-studio`, `qwen`, `minimax`, `deepseek`, `openrouter`), the registry base URL is used and `cfg.BaseURL` is ignored. If the provider is `custom`, `cfg.BaseURL` is required and `ai.New` returns `ErrNoProvider` if it is empty. Unknown provider names also return `ErrNoProvider`.
+`ai.New(cfg AIConfig)` SHALL look up `cfg.Provider` in a named registry. If the provider is a known preset (`anthropic`, `openai`, `ollama`, `groq`, `lm-studio`, `qwen`, `minimax`, `deepseek`, `openrouter`, `opencode`), the registry base URL is used and `cfg.BaseURL` is ignored. If the provider is `custom`, `cfg.BaseURL` is required and `ai.New` returns `ErrNoProvider` if it is empty. Unknown provider names also return `ErrNoProvider`.
 
 #### Scenario: Known provider resolves without BaseURL
 - **WHEN** `cfg.Provider` is `"ollama"` and `cfg.BaseURL` is empty
@@ -48,6 +48,25 @@ The `ai.Provider` interface SHALL expose a single method: `Complete(ctx context.
 #### Scenario: OpenRouter provider resolves without BaseURL
 - **WHEN** `cfg.Provider` is `"openrouter"` and `cfg.BaseURL` is empty
 - **THEN** `ai.New()` returns an openai-package client pointed at `https://openrouter.ai/api/v1`
+
+#### Scenario: OpenCode provider resolves without BaseURL
+- **WHEN** `cfg.Provider` is `"opencode"` and `cfg.BaseURL` is empty
+- **THEN** `ai.New()` returns an openai-package client pointed at `https://opencode.ai/zen/go/v1`
+
+---
+
+### Requirement: OpenCode Go preset resolves without BaseURL
+The provider registry SHALL include `opencode` as a known preset whose base URL is `https://opencode.ai/zen/go/v1`, served by the `openai` package adapter (Chat Completions API). The engine appends `/chat/completions`, matching the OpenCode Go chat-completions endpoint shape. The default starting model for the preset is `glm-5.3-flash` (chat-completions-routed; OpenCode Go routes Grok/GPT-Luna models via the OpenAI Responses API and Qwen/MiniMax via the Anthropic Messages API — those routes are out of scope for this preset). The API key is expected from the `OPENCODE_API_KEY` environment variable via the `env:` pattern.
+
+#### Scenario: OpenCode default model
+- **WHEN** `torec init` is run and the user selects `OpenCode Go` with no prior model configured
+- **THEN** the model field is pre-filled with `glm-5.3-flash` and the API key input with `env:OPENCODE_API_KEY`
+
+#### Scenario: OpenCode Go provider picker exposes the preset
+- **WHEN** `torec init` presents the AI provider picker
+- **THEN** an `OpenCode Go` option is present alongside the other cloud providers
+
+---
 
 #### Scenario: Custom provider requires BaseURL
 - **WHEN** `cfg.Provider` is `"custom"` and `cfg.BaseURL` is empty

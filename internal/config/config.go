@@ -33,27 +33,31 @@ type AIConfig struct {
 // The adapter column is determined by which package handles each provider:
 //
 //		anthropic → internal/ai/anthropic (native Messages API)
-//		openai    → internal/ai/openai    (OpenAI Chat Completions API)
+//	 openai    → internal/ai/openai    (OpenAI Chat Completions API)
 //		ollama    → internal/ai/openai    (OpenAI-compatible)
 //		groq      → internal/ai/openai    (OpenAI-compatible)
 //	 qwen      → internal/ai/openai    (OpenAI-compatible)
 //	 minimax   → internal/ai/openai    (OpenAI-compatible)
 //	 deepseek  → internal/ai/openai    (OpenAI-compatible)
+//	 openrouter → internal/ai/openai   (OpenAI-compatible, unified model catalog)
+//	 opencode   → internal/ai/openai   (OpenAI-compatible, Zen API / Go subscription)
 //		lm-studio → internal/ai/openai    (OpenAI-compatible)
 //		custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
 //
 // For named presets, BaseURL in AIConfig is ignored — the registry value is used.
 // For "custom", AIConfig.BaseURL is required; ai.New returns ErrNoProvider if empty.
 var KnownProviders = map[string]string{
-	"anthropic": "https://api.anthropic.com",
-	"openai":    "https://api.openai.com/v1",
-	"ollama":    "http://localhost:11434/v1",
-	"groq":      "https://api.groq.com/openai/v1",
-	"qwen":      "https://dashscope.aliyuncs.com/compatible-mode/v1",
-	"minimax":   "https://api.minimaxi.com/v1",
-	"deepseek":  "https://api.deepseek.com/v1",
-	"lm-studio": "http://localhost:1234/v1",
-	"custom":    "", // user must supply BaseURL
+	"anthropic":  "https://api.anthropic.com",
+	"openai":     "https://api.openai.com/v1",
+	"ollama":     "http://localhost:11434/v1",
+	"groq":       "https://api.groq.com/openai/v1",
+	"qwen":       "https://dashscope.aliyuncs.com/compatible-mode/v1",
+	"minimax":    "https://api.minimaxi.com/v1",
+	"deepseek":   "https://api.deepseek.com/v1",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"opencode":   "https://opencode.ai/zen/go/v1",
+	"lm-studio":  "http://localhost:1234/v1",
+	"custom":     "", // user must supply BaseURL
 }
 
 // ResolvedAPIKey returns the actual API key value.
