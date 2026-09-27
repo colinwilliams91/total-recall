@@ -86,7 +86,7 @@ privacy:
   conversation_analysis: {{.Privacy.ConversationAnalysis}}
 
 ai:
-  # Provider: anthropic | openai | ollama | groq | lm-studio | custom
+  # Provider: anthropic | openai | ollama | groq | lm-studio | openrouter | opencode | custom
   # Run 'torec init' to change provider interactively.
   provider: {{.AI.Provider}}
 
