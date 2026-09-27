@@ -40,7 +40,7 @@ type AIConfig struct {
 //	 minimax   → internal/ai/openai    (OpenAI-compatible)
 //	 deepseek  → internal/ai/openai    (OpenAI-compatible)
 //	 openrouter → internal/ai/openai   (OpenAI-compatible, unified model catalog)
-//	 opencode   → internal/ai/openai   (OpenAI-compatible, OpenCode Go subscription)
+//	 opencode   → internal/ai/openai   (OpenAI-compatible, Zen API / Go subscription)
 //		lm-studio → internal/ai/openai    (OpenAI-compatible)
 //		custom    → internal/ai/openai    (OpenAI-compatible; BaseURL required)
 //
