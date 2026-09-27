@@ -21,6 +21,39 @@ type ConceptFingerprint struct {
 	Weight float64 `json:"weight"`
 }
 
+// parseConceptResponse parses a concept-extraction response body. The
+// shipped contract is object-wrapped ({"concepts":[...]}, the shape most
+// json_object-enforcing providers accept); bare arrays and single bare
+// objects are accepted as legacy/terse-model tolerances. Anything else fails
+// the parse and the caller degrades gracefully.
+func parseConceptResponse(raw string) []ConceptFingerprint {
+	// Only accept the wrapper when the literal "concepts" key is present —
+	// unknown-field tolerance would otherwise let any object (including the
+	// single-object legacy shape) parse "successfully" with zero concepts.
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &envelope); err == nil {
+		if conceptsRaw, ok := envelope["concepts"]; ok {
+			var wrapped []ConceptFingerprint
+			if uErr := json.Unmarshal(conceptsRaw, &wrapped); uErr == nil {
+				return wrapped
+			}
+		}
+	}
+
+	var concepts []ConceptFingerprint
+	if err := json.Unmarshal([]byte(raw), &concepts); err == nil {
+		return concepts
+	}
+
+	var single ConceptFingerprint
+	if err := json.Unmarshal([]byte(raw), &single); err == nil {
+		return []ConceptFingerprint{single}
+	}
+
+	log.Printf("[pipeline] extraction parse failed (response: %.200s)", raw)
+	return []ConceptFingerprint{}
+}
+
 // ExtractConcepts derives concept fingerprints from a staged Git diff using the AI provider.
 // Pipeline logs error and continues gracefully on AI or parsing failure.
 func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model string) ([]ConceptFingerprint, error) {
@@ -31,15 +64,5 @@ func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model stri
 		return []ConceptFingerprint{}, nil
 	}
 
-	var concepts []ConceptFingerprint
-	if err := json.Unmarshal([]byte(raw), &concepts); err != nil {
-		var single ConceptFingerprint
-		if err2 := json.Unmarshal([]byte(raw), &single); err2 == nil {
-			return []ConceptFingerprint{single}, nil
-		}
-		log.Printf("[pipeline] extraction parse failed (response: %.200s): %v", raw, err)
-		return []ConceptFingerprint{}, nil
-	}
-
-	return concepts, nil
+	return parseConceptResponse(raw), nil
 }
