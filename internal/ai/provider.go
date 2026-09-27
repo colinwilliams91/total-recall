@@ -58,6 +58,7 @@ type Provider interface {
 //	minimax    → internal/ai/openai    (OpenAI-compatible)
 //	deepseek   → internal/ai/openai    (OpenAI-compatible)
 //	openrouter → internal/ai/openai   (OpenAI-compatible, unified model catalog)
+//	opencode   → internal/ai/openai   (OpenAI-compatible, OpenCode Go subscription)
 //	custom     → internal/ai/openai    (requires BaseURL)
 var ProviderRegistry = map[string]string{
 	"anthropic":  "https://api.anthropic.com",
@@ -69,5 +70,6 @@ var ProviderRegistry = map[string]string{
 	"minimax":    "https://api.minimaxi.com/v1",
 	"deepseek":   "https://api.deepseek.com/v1",
 	"openrouter": "https://openrouter.ai/api/v1",
+	"opencode":   "https://opencode.ai/zen/go/v1",
 	"custom":     "", // user must supply BaseURL via AIConfig.BaseURL
 }
