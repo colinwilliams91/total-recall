@@ -55,7 +55,7 @@ func TestNewProviderRoutesAnthropic(t *testing.T) {
 }
 
 func TestNewProviderRoutesOpenAIFallback(t *testing.T) {
-	providers := []string{"openai", "ollama", "groq", "lm-studio", "qwen", "minimax", "deepseek", "openrouter"}
+	providers := []string{"openai", "ollama", "groq", "lm-studio", "qwen", "minimax", "deepseek", "openrouter", "opencode"}
 	for _, p := range providers {
 		t.Run(p, func(t *testing.T) {
 			cfg := config.AIConfig{
