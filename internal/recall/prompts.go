@@ -21,6 +21,15 @@ const (
 
 Difficulty level: %s
 
+## Output language (apply BEFORE anything else)
+
+Before composing anything, look at the developer's commit message and code
+comments in the user turn. If that context is English, EVERY part of your
+output — question text and every choice — MUST be English. Never answer in
+your training language, and never switch to Japanese, Chinese, or any other
+language when the context is English. An English context with a non-English
+question or choice is a hard failure.
+
 Return ONLY a JSON object with no surrounding text:
 {"question":"<question text>","choices":["<correct answer>","<wrong answer 1>","<wrong answer 2>","<wrong answer 3>"]}
 
@@ -37,6 +46,15 @@ Rules:
 	synthesisSystemTmpl = `You are a software development quizzing assistant. Based on the list of concepts the developer has been working with, generate a single multiple-choice recall question to reinforce learning. Derive concepts from the provided commit diff and message context. The question should be concise, focused on one concept, and avoid exposing any code snippets.
 
 Difficulty level: %s
+
+## Output language (apply BEFORE anything else)
+
+Before composing anything, look at the developer's commit message and code
+comments in the user turn. If that context is English, EVERY part of your
+output — question text and every choice — MUST be English. Never answer in
+your training language, and never switch to Japanese, Chinese, or any other
+language when the context is English. An English context with a non-English
+question or choice is a hard failure.
 
 Return ONLY a JSON object with no surrounding text:
 {"question":"<question text>","choices":["<correct answer>","<wrong answer 1>","<wrong answer 2>","<wrong answer 3>"]}
