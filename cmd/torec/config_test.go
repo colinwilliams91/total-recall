@@ -428,6 +428,99 @@ func TestConfigShowListsPromptAssets(t *testing.T) {
 	}
 }
 
+// Task 4.2.1: an unknown recall.difficulty value triggers a loud load-time
+// warning naming the accepted set.
+func TestConfigRejectsUnknownDifficulty(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+
+	if err := config.WriteUserConfig(&config.UserConfig{
+		Recall: config.RecallConfig{Difficulty: "invalid"},
+	}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	restore := captureStderr(&stderr)
+	_, err := config.LoadUserConfig()
+	restore()
+
+	if err != nil {
+		t.Fatalf("LoadUserConfig failed (expected a warning, not a refusal): %v", err)
+	}
+	if !strings.Contains(stderr.String(), `recall.difficulty "invalid"`) {
+		t.Fatalf("expected invalid-difficulty warning on stderr, got:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "easy | intermediate | hard | adaptive") {
+		t.Fatalf("expected warning to name accepted values, got:\n%s", stderr.String())
+	}
+}
+
+// Task 4.2.2: difficulty "adaptive" loads cleanly with no warning (it is the
+// shipped default).
+func TestConfigAcceptsAdaptive(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+
+	if err := config.WriteUserConfig(&config.UserConfig{
+		Recall: config.RecallConfig{Difficulty: "adaptive"},
+	}); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var stderr bytes.Buffer
+	restore := captureStderr(&stderr)
+	cfg, err := config.LoadUserConfig()
+	restore()
+
+	if err != nil {
+		t.Fatalf("LoadUserConfig failed: %v", err)
+	}
+	if cfg.Recall.Difficulty != "adaptive" {
+		t.Fatalf("expected difficulty adaptive, got %q", cfg.Recall.Difficulty)
+	}
+	if strings.Contains(stderr.String(), "recall.difficulty") {
+		t.Fatalf("expected no difficulty warning for adaptive, got:\n%s", stderr.String())
+	}
+}
+
+// Task 4.2.3: the three concrete difficulty values load cleanly.
+func TestConfigAcceptsEasyIntermediateHard(t *testing.T) {
+	for _, difficulty := range []string{"easy", "intermediate", "hard"} {
+		t.Run(difficulty, func(t *testing.T) {
+			tempDir := t.TempDir()
+			t.Setenv("TR_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("USERPROFILE", tempDir)
+
+			if err := config.WriteUserConfig(&config.UserConfig{
+				Recall: config.RecallConfig{Difficulty: difficulty},
+			}); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			var stderr bytes.Buffer
+			restore := captureStderr(&stderr)
+			cfg, err := config.LoadUserConfig()
+			restore()
+
+			if err != nil {
+				t.Fatalf("LoadUserConfig failed: %v", err)
+			}
+			if cfg.Recall.Difficulty != difficulty {
+				t.Fatalf("expected difficulty %q, got %q", difficulty, cfg.Recall.Difficulty)
+			}
+			if strings.Contains(stderr.String(), "recall.difficulty") {
+				t.Fatalf("expected no difficulty warning for %q, got:\n%s", difficulty, stderr.String())
+			}
+		})
+	}
+}
+
 func TestDaemonPidPath(t *testing.T) {
 	t.Setenv("TR_HOME", t.TempDir())
 	path, err := config.DaemonPidPath()

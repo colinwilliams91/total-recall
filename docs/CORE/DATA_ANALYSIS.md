@@ -163,6 +163,15 @@ increase conceptual questioning depth.
 
 That adaptive difficulty mechanism could become extremely valuable.
 
+> **Implemented:** The §4 recommendation now ships as the adaptive difficulty
+> resolver (`internal/recall/difficulty/adaptive.go`). It applies a first-match
+> heuristic map over per-commit signals — short commit message + large diff
+> (AI-delegation) escalates to `hard`, a tight cluster of high-weight concepts
+> escalates, many dispersed low-weight concepts de-escalate to `easy`, a
+> uniformly code-sourced concept mix escalates one level, and the no-signal
+> fallback stays `intermediate`. Selected via `recall.difficulty: adaptive`
+> (the default); each resolution logs its matched signal for debugging.
+
 ---
 
 # 5. “Generation Then Comprehension” Worked Surprisingly Well
