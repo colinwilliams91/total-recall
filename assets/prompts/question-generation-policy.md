@@ -32,16 +32,18 @@ description: Generate short quiz question when Recall Engine prompts Question Sy
 
 ## GOOD PROMPTS
 
-Questions like:
+Questions like these — shape templates, NOT topic suggestions. Do not copy
+these subjects into your question; substitute the actual concepts from the
+provided concept list and commit context:
 
-- “Why is this pattern used?”
-- “What bug would occur if X changed?”
-- “What problem does this abstraction solve?”
-- “Why is this async primitive safer than Y?”
-- “What invariant is being preserved here?”
-- “What edge case is this retry logic defending against?”
-- “Why would this implementation deadlock?”
-- “What makes this algorithm O(n log n) instead of O(n²)?”
+- “Why is this pattern used?” → “Why is <pattern-from-concept-list> used?”
+- “What bug would occur if X changed?” → “What bug would occur if <concept> changed?”
+- “What problem does this abstraction solve?” → “What problem does <concept> solve?”
+- “Why is this async primitive safer than Y?” → “Why is <concept> safer than <alternative>?”
+- “What invariant is being preserved here?” → “What invariant is <concept> preserving?”
+- “What edge case is this logic defending against?” → “What edge case does <concept> defend against?”
+- “Why would this implementation fail under stress?” → “Why would <concept> fail under <stressor>?”
+- “What makes this algorithm O(n log n) instead of O(n²)?” → “What makes <concept> O(n log n) instead of O(n²)?”
 
 These induce:
 
@@ -71,16 +73,17 @@ That means:
 
 Your questions should intentionally surface “counterfactual debugging.”
 
-Example:
+Example shapes (substitute the real concept — the examples below are template
+placeholders, not topics to quiz):
 
 ```
-What runtime issue would occur if this await were removed?
+What runtime issue would occur if <concept-from-the-list> were removed?
 ```
 
 or:
 
 ```
-Why would this retry loop potentially create a thundering herd problem?
+Why would <concept> create a <failure-mode> problem?
 ```
 
 You are recreating the learning value of encountering errors

@@ -9,9 +9,17 @@ import (
 	"github.com/colinwilliams91/total-recall/assets"
 	"github.com/colinwilliams91/total-recall/internal/ai"
 	"github.com/colinwilliams91/total-recall/internal/cache"
+	"github.com/colinwilliams91/total-recall/internal/config"
+	"github.com/colinwilliams91/total-recall/internal/recall/difficulty"
 )
 
-const defaultDifficulty = "intermediate"
+// SynthesisContext carries the enriched inputs for a single synthesis call:
+// the recent concept rows (with weights, sources, and timestamps), the commit
+// message, and a short diff snippet. All fields are transient — they ride
+// from runPipeline to Synthesize and never touch the SQLite store. It is the
+// difficulty package's SynthesisContext: resolvers inspect the same inputs
+// synthesis consumes, without importing the engine.
+type SynthesisContext = difficulty.SynthesisContext
 
 // Choice is one option of a multiple-choice recall question. IsCorrect is the
 // engine's correctness key for this choice (per the AI contract, exactly one
@@ -33,22 +41,13 @@ type Question struct {
 	CorrectIndex int      `json:"correct_index"`
 }
 
-// SynthesisContext carries the enriched inputs for a single synthesis call:
-// the recent concept rows (with weights, sources, and timestamps), the commit
-// message, and a short diff snippet. All fields are transient — they ride
-// from runPipeline to Synthesize and never touch the SQLite store.
-type SynthesisContext struct {
-	Concepts    []cache.ConceptRow
-	CommitMsg   string
-	DiffSnippet string
-}
-
 // Engine synthesizes recall questions by prompting the AI provider with
 // concepts and context loaded from the cache and the hook envelope.
 type Engine struct {
 	provider ai.Provider
 	store    *cache.Store
 	policy   assets.PromptAsset
+	resolver difficulty.Resolver
 }
 
 // warningQuestionPolicyFallback tells the operator the daemon is quizzing
@@ -65,20 +64,44 @@ func warningQuestionPolicyFallback(err error) {
 }
 
 // New creates an Engine. Both provider and store must be non-nil. The
-// question-generation-policy prompt asset is loaded once at construction;
-// a missing or corrupt asset falls back to SourceFallback and Synthesize
-// uses the legacy inline template.
-func New(provider ai.Provider, store *cache.Store) *Engine {
+// difficulty resolver is constructed from the configured recall difficulty:
+// a concrete value resolves verbatim via Static; "adaptive" (or an unset
+// field, which preserves the prior default behavior) routes to the adaptive
+// heuristics. The question-generation-policy prompt asset is loaded once at
+// construction; a missing or corrupt asset falls back to SourceFallback and
+// Synthesize uses the legacy inline template.
+func New(provider ai.Provider, store *cache.Store, cfg *config.RecallConfig) *Engine {
 	policy, err := assets.Load("question-generation-policy")
 	if err != nil {
 		warningQuestionPolicyFallback(err)
 	}
-	return &Engine{provider: provider, store: store, policy: policy}
+	value := ""
+	if cfg != nil {
+		value = cfg.Difficulty
+	}
+	if value == "" {
+		value = "adaptive"
+	}
+	return &Engine{
+		provider: provider,
+		store:    store,
+		policy:   policy,
+		resolver: difficulty.Static{Value: value},
+	}
+}
+
+// Resolver exposes the engine's difficulty resolver. Synthesize accepts the
+// resolver as a parameter (keeping difficulty selection injectable at the
+// call boundary); the server passes the engine-constructed one through here.
+func (e *Engine) Resolver() difficulty.Resolver {
+	return e.resolver
 }
 
 // Synthesize asks the AI to generate a recall question from the enriched
-// SynthesisContext. Both repo and branch are required.
-func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model string, synth SynthesisContext) (*Question, error) {
+// SynthesisContext. Both repo and branch are required. Difficulty selection
+// is delegated to the resolver — empty contexts (no repo/branch/concepts)
+// return before resolution so they never pay the resolver's cost.
+func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, synth SynthesisContext, resolver difficulty.Resolver) (*Question, error) {
 	if repo == "" || branch == "" {
 		return nil, nil
 	}
@@ -86,8 +109,9 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, difficulty, model
 		return nil, nil
 	}
 
+	difficulty := resolver.Resolve(ctx, synth)
 	if difficulty == "" {
-		difficulty = defaultDifficulty
+		difficulty = "intermediate"
 	}
 
 	req := SynthesisRequest(synth.Concepts, synth.CommitMsg, synth.DiffSnippet, e.policy.Body, difficulty, model)
