@@ -7,6 +7,7 @@
 - [ ] 1.5 Tests `internal/recall/difficulty/static_test.go`: verbatim paths return `Resolution` with empty focus; adaptive delegation reaches heuristics; empty-string case preserved
 - [ ] 1.6 Tests `internal/recall/difficulty/adaptive_test.go`: reordered first-match table — dispersed wins over delegation when both fire; delegation still escalates when alone; high-cluster/all-code/fallback scenarios re-asserted; empty-context no-panic preserved
 - [ ] 1.7 Update in-tree callers: `internal/recall/engine.go` (`Synthesize` destructures `Resolution`), `cmd/torec/recall_test.go` stub resolvers, integration test resolver fakes — signature widening only, no behavior change in these call sites beyond adoption
+- [ ] 1.8 Retune the de-escalation rule so `easy` is reachable in production traffic: per the 2026-09-28 spike (`docs/CORE/ADAPTIVE_SPIKE.md`, run 2 — 0/49 `dispersed` resolutions; extraction pins `weight` ~0.5–0.9 and `source` always "code"), choose and implement one of: weight-semantics redefinition, source-mix-based `dispersed`, or threshold re-anchoring against observed extraction distribution. Test suite must exercise the easy path with values matching real extraction behavior, not just hand-crafted 0.2-weight rows
 
 ## 2. Mastery aggregation (`internal/cache`)
 

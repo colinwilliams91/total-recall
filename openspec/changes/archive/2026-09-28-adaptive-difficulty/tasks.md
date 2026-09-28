@@ -47,7 +47,7 @@
 ## 5. A/B spike (manual exploration tool)
 
 - [x] 5.1 Write `scripts/e2e/adaptive-ab.ps1` (and `.sh` for cross-platform parity per the `hooks/` convention): sets up a scratch repo with synthetic commits bracketing each adaptive signal (one commit triggering AI-delegation, one triggering high-cluster, one dispersed, one all-code, one no-signal); runs `tr serve` and `tr ask` after each; logs the resolved difficulty (the resolver should log `[recall] adaptive resolver selected <level> (signals: <list>)` per task 6.1); captures 10 questions per signal arm for human side-by-side comparison. Not a CI test; documented as an exploration tool in `scripts/e2e/README.md`
-- [ ] 5.2 Run the spike locally, capture observations in `DOCS/CORE/DATA_ANALYSIS.md` appendix or a new `DOCS/CORE/ADAPTIVE_SPIKE.md` — anecdotal data on which signals produce which question quality. Not blocking; informs future threshold tuning
+- [x] 5.2 Run the spike locally, capture observations in `DOCS/CORE/DATA_ANALYSIS.md` appendix or a new `DOCS/CORE/ADAPTIVE_SPIKE.md` — anecdotal data on which signals produce which question quality. Not blocking; informs future threshold tuning
 
 ## 6. Observability + documentation sync
 
@@ -62,5 +62,5 @@
 - [x] 7.2 `go vet ./...`
 - [x] 7.3 `go test ./...`
 - [x] 7.4 `golangci-lint run` (if installed)
-- [ ] 7.5 Manual: configure `~/.tr/config.yaml` with `recall.difficulty: adaptive`. Commit an AI-delegation-shaped commit (large diff, "fix:" 5-char message) in a scratch repo. Tail the daemon log. Verify the resolver emits `selected "hard" (signals: ai-delegation)`. Commit a small hand-written change. Verify the resolver emits `selected "intermediate" (signals: fallback)` or an escalated variant
-- [ ] 7.6 Manual: switch config to `recall.difficulty: hard`. Repeat the same commits. Verify the resolver always emits `selected "hard"` (Static passthrough); the prompt reflects `"hard"`; adaptive signals are not consulted
+- [x] 7.5 Manual: configure `~/.tr/config.yaml` with `recall.difficulty: adaptive`. Commit an AI-delegation-shaped commit (large diff, "fix:" 5-char message) in a scratch repo. Tail the daemon log. Verify the resolver emits `selected "hard" (signals: ai-delegation)`. Commit a small hand-written change. Verify the resolver emits `selected "intermediate" (signals: fallback)` or an escalated variant
+- [x] 7.6 Manual: switch config to `recall.difficulty: hard`. Repeat the same commits. Verify the resolver always emits `selected "hard"` (Static passthrough); the prompt reflects `"hard"`; adaptive signals are not consulted

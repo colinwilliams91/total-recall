@@ -24,6 +24,22 @@ The `internal/recall/difficulty` package exposes a `Resolver` interface with a s
 
 The thresholds are package-private constants in `internal/recall/difficulty/adaptive.go`: `adaptiveHighClusterWeight = 0.7`, `adaptiveDispersedWeight = 0.3`, `adaptiveMinHighClusterConcepts = 3`, `adaptiveMinDispersedConcepts = 5`, `adaptiveDelegationMsgMaxChars = 50`, `adaptiveDelegationSnippetMinChars = 400`, `adaptiveMinAllCodeSourceConcepts = 5`.
 
+#### Scenario: AI-delegation signal fires
+- **WHEN** `synth.CommitMsg = "fix:"` (5 chars) and `synth.DiffSnippet` is 500 chars, with no concept-structure signal present
+- **THEN** `Adaptive{}.Resolve` returns `"hard"` — the rule is demoted to the last commit-shape rule, not removed
+
+#### Scenario: High-cluster threshold not met (too few concepts)
+- **WHEN** `synth.Concepts` has 2 entries with weights `[0.9, 0.9]` (avg = 0.9 but `len < 3`)
+- **THEN** the high-cluster heuristic does not match; evaluation continues and resolves `"intermediate"` (too few concepts for the dispersed and all-code rules as well)
+
+#### Scenario: AI-delegation wins over high-cluster when both fire
+- **WHEN** both AI-delegation (short msg, large snippet) and high-cluster signals are present
+- **THEN** `Adaptive{}.Resolve` returns `"hard"` (both produce `"hard"`; the reordered first-match does not conflict or double-escalate)
+
+#### Scenario: High-cluster wins over dispersed when both match
+- **WHEN** `synth.Concepts` has 5 entries with avg weight `0.8` (matches high-cluster AND exceeds the dispersed minimum count)
+- **THEN** `Adaptive{}.Resolve` returns `"hard"` (high-cluster is evaluated before dispersed per the ordering)
+
 #### Scenario: AI-delegation no longer outranks the concept-structure signals
 - **WHEN** `synth` carries both the AI-delegation shape (short message + large snippet) and 5 concepts at avg weight 0.2
 - **THEN** the resolved difficulty is `"easy"` (the dispersed rule is evaluated first; delegation is the final commit-shape rule)
