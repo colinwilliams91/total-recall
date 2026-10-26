@@ -74,8 +74,8 @@ func TestSaveAndRetrieveConcepts(t *testing.T) {
 	ctx := context.Background()
 
 	concepts := []cache.Fingerprint{
-		{Concept: "exponential-backoff", Source: "code", Weight: 1.0},
-		{Concept: "circuit-breaker", Source: "code", Weight: 0.8},
+		{Concept: "exponential-backoff", Slug: "exponential_backoff", Source: "code", Weight: 1.0},
+		{Concept: "circuit-breaker", Slug: "circuit_breaker", Source: "code", Weight: 0.8},
 	}
 	if err := s.Save(ctx, "/repo/test", "main", concepts); err != nil {
 		t.Fatalf("Save failed: %v", err)
@@ -98,13 +98,13 @@ func TestSaveMultipleConceptsAndOrderBySeenAt(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
-		{Concept: "first", Source: "code", Weight: 1.0},
+		{Concept: "first", Slug: "first_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("first Save failed: %v", err)
 	}
 
 	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
-		{Concept: "second", Source: "code", Weight: 1.0},
+		{Concept: "second", Slug: "second_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("second Save failed: %v", err)
 	}
@@ -126,12 +126,12 @@ func TestRecentConceptsScopedToRepo(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.Save(ctx, "/repo/x", "main", []cache.Fingerprint{
-		{Concept: "x-concept", Source: "code", Weight: 1.0},
+		{Concept: "x-concept", Slug: "x_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("save for repo X failed: %v", err)
 	}
 	if err := s.Save(ctx, "/repo/y", "main", []cache.Fingerprint{
-		{Concept: "y-concept", Source: "code", Weight: 1.0},
+		{Concept: "y-concept", Slug: "y_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("save for repo Y failed: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestRecentConceptsScopedToBranch(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.Save(ctx, "/r", "feature-X", []cache.Fingerprint{
-		{Concept: "x-branch-concept", Source: "code", Weight: 1.0},
+		{Concept: "x-branch-concept", Slug: "x_branch_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("save for feature-X: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestSaveRefusesEmptyRepoOrBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	concepts := []cache.Fingerprint{{Concept: "should-not-save", Source: "code", Weight: 1.0}}
+	concepts := []cache.Fingerprint{{Concept: "should-not-save", Slug: "should_not_save", Source: "code", Weight: 1.0}}
 
 	if err := s.Save(ctx, "", "main", concepts); err != nil {
 		t.Fatalf("Save with empty repo: expected nil error, got %v", err)
@@ -210,7 +210,7 @@ func TestRecentRefusesEmptyRepoOrBranch(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.Save(ctx, "/r", "main", []cache.Fingerprint{
-		{Concept: "real", Source: "code", Weight: 1.0},
+		{Concept: "real", Slug: "real_concept", Source: "code", Weight: 1.0},
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -235,10 +235,10 @@ func TestSaveQuestionRefusesEmptyRepoOrBranch(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "", "main", "q", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "", "main", "q", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion with empty repo: expected nil error, got %v", err)
 	}
-	if err := s.SaveQuestion(ctx, "/r", "", "q", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/r", "", "q", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion with empty branch: expected nil error, got %v", err)
 	}
 	depth, err := s.QueueDepth(ctx, "/r", "main")
@@ -254,7 +254,7 @@ func TestSaveQuestionAndClaim(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "What is a goroutine?", buildChoices([]string{"a", "b", "c"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "What is a goroutine?", buildChoices([]string{"a", "b", "c"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestNextQuestionIdempotent(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "single question", buildChoices([]string{"x", "y"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "single question", buildChoices([]string{"x", "y"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -318,7 +318,7 @@ func TestNextQuestionRepoIsolation(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/x", "main", "X's question", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/x", "main", "X's question", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion for repo X failed: %v", err)
 	}
 
@@ -346,7 +346,7 @@ func TestSubmitSelection(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "test question", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "test question", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -391,7 +391,7 @@ func TestQueueDepthIncrementsOnSave(t *testing.T) {
 		t.Fatalf("expected initial depth 0, got %d", n)
 	}
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "q1", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "q1", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	n, err = s.QueueDepth(ctx, "/repo/test", "main")
@@ -418,10 +418,10 @@ func TestQueueDepthScopedToRepo(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/x", "main", "q1", buildChoices([]string{"a"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/x", "main", "q1", buildChoices([]string{"a"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion for repo X failed: %v", err)
 	}
-	if err := s.SaveQuestion(ctx, "/repo/y", "main", "q2", buildChoices([]string{"a"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/y", "main", "q2", buildChoices([]string{"a"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion for repo Y failed: %v", err)
 	}
 
@@ -479,7 +479,7 @@ func TestSaveQuestionPersistsIsCorrectOnChoice(t *testing.T) {
 
 	// correct is index 2 ("c")
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "correct-index question",
-		buildChoices([]string{"a", "b", "c"}, 2), ""); err != nil {
+		buildChoices([]string{"a", "b", "c"}, 2), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 
@@ -553,7 +553,7 @@ func TestGetQuestionReturnsFullRow(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "full row question",
-		buildChoices([]string{"x", "y", "z"}, 1), ""); err != nil {
+		buildChoices([]string{"x", "y", "z"}, 1), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -598,7 +598,7 @@ func TestSetFeedback(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback column question",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -644,7 +644,7 @@ func TestSkipQuestionWritesEventAndStatus(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skip me", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skip me", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -705,7 +705,7 @@ func TestSubmitSelectionWritesUserActor(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestion(ctx, "/repo/test", "main", "answer me", buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "answer me", buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -737,7 +737,7 @@ func TestSubmitSelectionWithFeedback(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "feedback question",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -781,7 +781,7 @@ func TestSubmitSelectionEmptyFeedbackStoresNull(t *testing.T) {
 	ctx := context.Background()
 
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "empty feedback question",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion failed: %v", err)
 	}
 	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -817,7 +817,7 @@ func TestRecentAnsweredExcludesSkippedAndSkipsGetIt(t *testing.T) {
 
 	// q1: correct, with feedback
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "terminal-style",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion q1: %v", err)
 	}
 	q1, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -830,7 +830,7 @@ func TestRecentAnsweredExcludesSkippedAndSkipsGetIt(t *testing.T) {
 
 	// q2: incorrect, no feedback
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "mcp-style",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion q2: %v", err)
 	}
 	q2, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -843,7 +843,7 @@ func TestRecentAnsweredExcludesSkippedAndSkipsGetIt(t *testing.T) {
 
 	// q3: skipped
 	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skipped-one",
-		buildChoices([]string{"a", "b"}, 0), ""); err != nil {
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
 		t.Fatalf("SaveQuestion q3: %v", err)
 	}
 	q3, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -901,6 +901,452 @@ func TestRecentAnsweredExcludesSkippedAndSkipsGetIt(t *testing.T) {
 	}
 	if statusByQuestion["skipped-one"] != "skipped" {
 		t.Fatal("skipped-one should be 'skipped'")
+	}
+}
+
+// ── identity + provenance tests (concept-provenance change) ─────────────────
+
+// TestOpenCreatesIdentityTables validates the two-layer schema reshape: the
+// three new tables are present in sqlite_master on a fresh store.
+func TestOpenCreatesIdentityTables(t *testing.T) {
+	setupCache(t)
+	db := openRawDB(t)
+
+	for _, table := range []string{"concept_registry", "concept_aliases", "question_concepts"} {
+		var name string
+		err := db.QueryRowContext(context.Background(),
+			`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, table).Scan(&name)
+		if err == sql.ErrNoRows {
+			t.Fatalf("table %s not found in sqlite_master", table)
+		}
+		if err != nil {
+			t.Fatalf("querying sqlite_master for %s: %v", table, err)
+		}
+		if name != table {
+			t.Fatalf("expected table %s, got %s", table, name)
+		}
+	}
+
+	// The reshaped sightings table carries the registry FK column.
+	var slugCol int
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM pragma_table_info('concepts') WHERE name = 'slug'`).Scan(&slugCol); err != nil {
+		t.Fatalf("pragma_table_info query: %v", err)
+	}
+	if slugCol != 1 {
+		t.Fatal("expected concepts.slug column after reshape")
+	}
+}
+
+// TestQuestionConceptsRoundTrip inserts provenance rows through SaveQuestion
+// and reads them back at the column level (slug + weight snapshot).
+func TestQuestionConceptsRoundTrip(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+		{Concept: "sql joins", Slug: "sql_joins", Source: "code", Weight: 0.8},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	fed := []cache.ConceptRef{
+		{Slug: "go_interfaces", Weight: 0.9},
+		{Slug: "sql_joins", Weight: 0.8},
+	}
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "which table does it join?",
+		buildChoices([]string{"a", "b"}, 0), "", fed); err != nil {
+		t.Fatalf("SaveQuestion: %v", err)
+	}
+
+	db := openRawDB(t)
+	rows, err := db.QueryContext(ctx,
+		`SELECT slug, weight FROM question_concepts ORDER BY id ASC`)
+	if err != nil {
+		t.Fatalf("provenance query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []cache.ConceptRef
+	for rows.Next() {
+		var ref cache.ConceptRef
+		if err := rows.Scan(&ref.Slug, &ref.Weight); err != nil {
+			t.Fatalf("scan provenance row: %v", err)
+		}
+		got = append(got, ref)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("provenance rows err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 provenance rows, got %d", len(got))
+	}
+	if got[0].Slug != "go_interfaces" || got[0].Weight != 0.9 {
+		t.Fatalf("unexpected first provenance row: %+v", got[0])
+	}
+	if got[1].Slug != "sql_joins" || got[1].Weight != 0.8 {
+		t.Fatalf("unexpected second provenance row: %+v", got[1])
+	}
+}
+
+// registryCount queries the concept_registry row count (and first_seen for
+// a single slug) for identity-minting assertions.
+func registryCount(t *testing.T, slug string) int {
+	t.Helper()
+	db := openRawDB(t)
+	var n int
+	var query string
+	var args []any
+	if slug == "" {
+		query, args = `SELECT COUNT(*) FROM concept_registry`, nil
+	} else {
+		query, args = `SELECT COUNT(*) FROM concept_registry WHERE slug = ?`, []any{slug}
+	}
+	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&n); err != nil {
+		t.Fatalf("registry count: %v", err)
+	}
+	return n
+}
+
+func firstSeenOf(t *testing.T, slug string) string {
+	t.Helper()
+	db := openRawDB(t)
+	var ts string
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT first_seen FROM concept_registry WHERE slug = ?`, slug).Scan(&ts); err != nil {
+		t.Fatalf("reading first_seen for %q: %v", slug, err)
+	}
+	return ts
+}
+
+func registryProseOf(t *testing.T, slug string) string {
+	t.Helper()
+	db := openRawDB(t)
+	var prose string
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT prose FROM concept_registry WHERE slug = ?`, slug).Scan(&prose); err != nil {
+		t.Fatalf("reading prose for %q: %v", slug, err)
+	}
+	return prose
+}
+
+// TestSaveIdentityResolution is the table-driven contract for identity
+// validation at the write boundary: valid slugs mint on first sighting and
+// reuse on repeat; malformed and missing slugs drop their element (with a
+// logged warning) while the rest of the batch continues.
+func TestSaveIdentityResolution(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	// First sighting of two slugs mints exactly one registry row per slug.
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+		{Concept: "sql joins", Slug: "sql_joins", Source: "code", Weight: 0.8},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if got := registryCount(t, "go_interfaces"); got != 1 {
+		t.Fatalf("expected registry to contain go_interfaces once, got %d rows", got)
+	}
+	if got := registryCount(t, "sql_joins"); got != 1 {
+		t.Fatalf("expected registry to contain sql_joins once, got %d rows", got)
+	}
+	firstSeen := firstSeenOf(t, "go_interfaces")
+	if prose := registryProseOf(t, "go_interfaces"); prose != "go interfaces" {
+		t.Fatalf("expected registry prose to be the first-seen fingerprint, got %q", prose)
+	}
+
+	// Repeat sighting reuses the identity: registry row count unchanged, and
+	// first_seen untouched.
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces round 2", Slug: "go_interfaces", Source: "code", Weight: 0.7},
+	}); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+	if got := registryCount(t, "go_interfaces"); got != 1 {
+		t.Fatalf("expected registry count 1 after repeat sighting, got %d", got)
+	}
+	if again := firstSeenOf(t, "go_interfaces"); again != firstSeen {
+		t.Fatalf("first_seen changed on repeat sighting: %q -> %q", firstSeen, again)
+	}
+	// Repeat sighting prose does NOT overwrite the first-seen fingerprint.
+	if prose := registryProseOf(t, "go_interfaces"); prose != "go interfaces" {
+		t.Fatalf("expected first-seen prose untouched on repeat, got %q", prose)
+	}
+
+	// Malformed / missing slugs drop their element; the rest of the batch is
+	// saved normally.
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "prose slug", Slug: "Handle HTTP Middleware Chaining", Source: "code", Weight: 0.9},
+		{Concept: "no slug", Source: "code", Weight: 0.9},
+		{Concept: "mixed case", Slug: "GoInterfaces", Source: "code", Weight: 0.9},
+		{Concept: "sibling survives", Slug: "middleware_chain", Source: "code", Weight: 0.5},
+	}); err != nil {
+		t.Fatalf("Save with malformed slugs: %v", err)
+	}
+	if got := registryCount(t, ""); got != 3 { // go_interfaces, sql_joins, middleware_chain
+		t.Fatalf("expected 3 registry rows after malformed batch, got %d", got)
+	}
+	recent, err := s.Recent(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	found := map[string]int{}
+	for _, row := range recent {
+		found[row.Slug]++
+	}
+	if n := found["middleware_chain"]; n != 1 {
+		t.Fatalf("expected sibling element saved despite malformed neighbors, got %d", n)
+	}
+}
+
+// TestSaveEmptyScopeNeverMintsIdentity proves scope-refusal ordering: an
+// empty repo or branch performs NO registry insert — identity is never
+// minted from scope-failed writes.
+func TestSaveEmptyScopeNeverMintsIdentity(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	before := registryCount(t, "")
+	if err := s.Save(ctx, "", "main", []cache.Fingerprint{
+		{Concept: "leaked identity", Slug: "leaked_identity", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("Save with empty repo: %v", err)
+	}
+	if err := s.Save(ctx, "/r", "", []cache.Fingerprint{
+		{Concept: "leaked identity", Slug: "leaked_identity", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("Save with empty branch: %v", err)
+	}
+	if after := registryCount(t, ""); after != before {
+		t.Fatalf("expected registry unchanged after scope refusal (%d -> %d)", before, after)
+	}
+	if got := registryCount(t, "leaked_identity"); got != 0 {
+		t.Fatalf("expected no leaked_identity registry row, got %d", got)
+	}
+}
+
+// TestAliasResolutionOnSave covers the alias pressure valve on the Save
+// path: sightings under an alias land on the target identity, and a
+// mint-time slug colliding with an existing alias resolves to the alias
+// target (open question #3's mandatory edge case).
+func TestAliasResolutionOnSave(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	// Mint the target identity first (register requires an existing target).
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "SQL joins", Slug: "sql_joins", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("Save target: %v", err)
+	}
+	if err := s.AddAlias(ctx, "joining_tables_in_sql", "sql_joins"); err != nil {
+		t.Fatalf("AddAlias: %v", err)
+	}
+
+	// A sighting arriving under the alias lands on the target identity.
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "joining tables", Slug: "joining_tables_in_sql", Source: "code", Weight: 0.8},
+	}); err != nil {
+		t.Fatalf("Save under alias: %v", err)
+	}
+	if got := registryCount(t, "joining_tables_in_sql"); got != 0 {
+		t.Fatalf("expected no registry row minted for the alias, got %d", got)
+	}
+	if got := registryCount(t, "sql_joins"); got != 1 {
+		t.Fatalf("expected alias sighting to land on sql_joins, got %d rows", got)
+	}
+
+	// Mint-time collision: a NEW fingerprint whose slug IS an existing alias
+	// resolves to the alias target too (no second registry row).
+	if err := s.Save(ctx, "/repo/other", "feat", []cache.Fingerprint{
+		{Concept: "join semantics from another repo", Slug: "joining_tables_in_sql", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("Save mint-time collision: %v", err)
+	}
+	if got := registryCount(t, "sql_joins"); got != 1 {
+		t.Fatalf("expected still exactly one sql_joins registry row, got %d", got)
+	}
+	crossRepo, err := s.Recent(ctx, "/repo/other", "feat", 10)
+	if err != nil {
+		t.Fatalf("Recent cross-repo: %v", err)
+	}
+	if len(crossRepo) != 1 || crossRepo[0].Slug != "sql_joins" {
+		t.Fatalf("expected cross-repo sighting resolved to sql_joins, got %+v", crossRepo)
+	}
+}
+
+// TestAddAliasValidation covers the alias-write-time rejections: dangling
+// targets and non-slug-shaped aliases are refused explicitly.
+func TestAddAliasValidation(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	// Dangling target rejected at alias-write time.
+	err := s.AddAlias(ctx, "dangling_alias", "never_minted")
+	if err == nil {
+		t.Fatal("expected explicit error adding alias with nonexistent target")
+	}
+	if !strings.Contains(err.Error(), "no registry identity") {
+		t.Fatalf("expected dangling-target error, got %v", err)
+	}
+	if got := registryCount(t, ""); got != 0 {
+		t.Fatalf("expected dangling alias write to leave no registry rows, got %d", got)
+	}
+
+	// Non-slug-shaped alias rejected.
+	if err := s.Save(ctx, "/r", "main", []cache.Fingerprint{
+		{Concept: "real", Slug: "real_concept", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := s.AddAlias(ctx, "not a slug", "real_concept"); err == nil {
+		t.Fatal("expected error for malformed alias shape")
+	}
+	if err := s.AddAlias(ctx, "real_concept_alias", "real_concept"); err != nil {
+		t.Fatalf("valid alias add: %v", err)
+	}
+	list, err := s.Aliases(ctx)
+	if err != nil {
+		t.Fatalf("Aliases: %v", err)
+	}
+	if len(list) != 1 || list[0].Alias != "real_concept_alias" || list[0].Target != "real_concept" {
+		t.Fatalf("unexpected alias listing: %+v", list)
+	}
+	removed, err := s.RemoveAlias(ctx, "real_concept_alias")
+	if err != nil || !removed {
+		t.Fatalf("RemoveAlias: removed=%v err=%v", removed, err)
+	}
+	if removedAgain, err := s.RemoveAlias(ctx, "real_concept_alias"); err != nil || removedAgain {
+		t.Fatalf("expected second remove to report no-op, got removed=%v err=%v", removedAgain, err)
+	}
+}
+
+// TestSaveQuestionProvenanceAtomicity proves the provenance insert rides the
+// same transaction as the question: any rejected SaveQuestion leaves zero
+// partial provenance rows.
+func TestSaveQuestionProvenanceAtomicity(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	fed := []cache.ConceptRef{{Slug: "go_interfaces", Weight: 0.9}, {Slug: "sql_joins", Weight: 0.8}}
+
+	// Rejected save (empty question text) → explicit error, nothing written.
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "", buildChoices([]string{"a", "b"}, 0), "", fed); err == nil {
+		t.Fatal("expected error refusing empty question text")
+	}
+	// Rejected save (scope refusal) → nil error, nothing written.
+	if err := s.SaveQuestion(ctx, "", "main", "q", buildChoices([]string{"a", "b"}, 0), "", fed); err != nil {
+		t.Fatalf("SaveQuestion scope refusal: %v", err)
+	}
+
+	db := openRawDB(t)
+	var questionRows, provenanceRows int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM questions`).Scan(&questionRows); err != nil {
+		t.Fatalf("count questions: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM question_concepts`).Scan(&provenanceRows); err != nil {
+		t.Fatalf("count question_concepts: %v", err)
+	}
+	if questionRows != 0 || provenanceRows != 0 {
+		t.Fatalf("expected zero partial rows after rejected saves (questions=%d, provenance=%d)",
+			questionRows, provenanceRows)
+	}
+
+	// Empty concept batch persists the question with zero provenance rows
+	// rather than erroring (spec: bypass paths, e.g., no feed context).
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "no context question",
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
+		t.Fatalf("SaveQuestion with empty batch: %v", err)
+	}
+	var provenance int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM question_concepts`).Scan(&provenance); err != nil {
+		t.Fatalf("count provenance: %v", err)
+	}
+	if provenance != 0 {
+		t.Fatalf("expected zero provenance rows for empty fed batch, got %d", provenance)
+	}
+}
+
+// TestRecentCarriesResolvedSlug proves Recent reads surface the resolved
+// registry slug next to the sighting prose — including alias-resolved
+// sightings (the read always carries the target).
+func TestRecentCarriesResolvedSlug(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	recent, err := s.Recent(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(recent) != 1 || recent[0].Slug != "go_interfaces" || recent[0].Concept != "go interfaces" {
+		t.Fatalf("expected slug round-trip, got %+v", recent)
+	}
+
+	if err := s.AddAlias(ctx, "golang_interfaces", "go_interfaces"); err != nil {
+		t.Fatalf("AddAlias: %v", err)
+	}
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "alias sighting", Slug: "golang_interfaces", Source: "code", Weight: 0.5},
+	}); err != nil {
+		t.Fatalf("Save under alias: %v", err)
+	}
+	recent, err = s.Recent(ctx, "/repo/test", "main", 10)
+	if err != nil {
+		t.Fatalf("Recent after alias: %v", err)
+	}
+	var sawAliasTarget bool
+	for _, row := range recent {
+		if row.Concept == "alias sighting" && row.Slug == "go_interfaces" {
+			sawAliasTarget = true
+		}
+	}
+	if !sawAliasTarget {
+		t.Fatalf("expected alias sighting to read back with target slug, got %+v", recent)
+	}
+}
+
+// TestRecentFeedExcludesOutOfSurfaceConcepts is the working-surface-first
+// regression: even when the user-scoped registry links sightings across
+// repos, Recent for a (repo, branch) surface never widens to include them.
+func TestRecentFeedExcludesOutOfSurfaceConcepts(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	// Two surfaces mint the SAME identity — the registry row is shared.
+	if err := s.Save(ctx, "/repo/a", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("Save repo A: %v", err)
+	}
+	if err := s.Save(ctx, "/repo/b", "feat-db", []cache.Fingerprint{
+		{Concept: "go interfaces elsewhere", Slug: "go_interfaces", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("Save repo B: %v", err)
+	}
+	if got := registryCount(t, "go_interfaces"); got != 1 {
+		t.Fatalf("expected one shared registry identity across repos, got %d", got)
+	}
+
+	feedA, err := s.Recent(ctx, "/repo/a", "main", 20)
+	if err != nil {
+		t.Fatalf("Recent repo A: %v", err)
+	}
+	if len(feedA) != 1 || feedA[0].Concept != "go interfaces" {
+		t.Fatalf("repo A feed must contain only its own sighting, got %+v", feedA)
+	}
+	feedB, err := s.Recent(ctx, "/repo/b", "feat-db", 20)
+	if err != nil {
+		t.Fatalf("Recent repo B: %v", err)
+	}
+	if len(feedB) != 1 || feedB[0].Concept != "go interfaces elsewhere" {
+		t.Fatalf("repo B feed must contain only its own sighting, got %+v", feedB)
 	}
 }
 

@@ -102,6 +102,9 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /recall/next", s.handleRecallNext)
 	s.mux.HandleFunc("POST /recall/select", s.handleRecallSelect)
 	s.mux.HandleFunc("GET /recall/stale", s.handleRecallStale)
+	s.mux.HandleFunc("GET /alias/list", s.handleAliasList)
+	s.mux.HandleFunc("POST /alias/add", s.handleAliasAdd)
+	s.mux.HandleFunc("POST /alias/remove", s.handleAliasRemove)
 	s.mux.Handle("/mcp/", mcpHandler(s.mcpServer))
 }
 
@@ -172,6 +175,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	for i, c := range concepts {
 		fingerprints[i] = cache.Fingerprint{
 			Concept: c.Concept,
+			Slug:    c.Slug,
 			Source:  c.Source,
 			Weight:  c.Weight,
 		}
@@ -215,7 +219,14 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	for i, c := range q.Choices {
 		cacheChoices[i] = cache.Choice{Text: c.Text, IsCorrect: c.IsCorrect, Position: i}
 	}
-	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice"); err != nil {
+
+	// Provenance: the fed concept batch IS the synthesis context — free
+	// capture of what drove this question (weights frozen at synthesis time).
+	fed := make([]cache.ConceptRef, len(recentRows))
+	for i, row := range recentRows {
+		fed[i] = cache.ConceptRef{Slug: row.Slug, Weight: row.Weight}
+	}
+	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice", fed); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -372,6 +383,68 @@ func (s *Server) handleRecallSelect(w http.ResponseWriter, r *http.Request) {
 		"correct_answer": correctText,
 		"feedback":       feedbackOut,
 	})
+}
+
+// ── alias routes ──────────────────────────────────────────────────────────────
+
+// The alias surface is the concept-identity repair tool: a thin HTTP client
+// path from `torec alias add|list|remove` to the store's exact-match alias
+// valve. All validation lives in the store — these handlers only shape JSON
+// and translate errors to status codes.
+
+func (s *Server) handleAliasAdd(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no store running — start the daemon with an AI provider configured"})
+		return
+	}
+	var body struct {
+		Alias  string `json:"alias"`
+		Target string `json:"target"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := s.store.AddAlias(r.Context(), body.Alias, body.Target); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleAliasRemove(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no store running — start the daemon with an AI provider configured"})
+		return
+	}
+	var body struct {
+		Alias string `json:"alias"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	removed, err := s.store.RemoveAlias(r.Context(), body.Alias)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "removed": removed})
+}
+
+func (s *Server) handleAliasList(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no store running — start the daemon with an AI provider configured"})
+		return
+	}
+	aliases, err := s.store.Aliases(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Aliases returns rows ordered by alias; preserve that order on the wire —
+	// the CLI contract reads it as "alias list output ordering".
+	writeJSON(w, http.StatusOK, map[string]any{"aliases": aliases})
 }
 
 // handleRecallStale returns per-branch counts of undelivered questions for the

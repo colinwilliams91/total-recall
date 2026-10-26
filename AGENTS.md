@@ -19,7 +19,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 - **Provider factory**: `cmd/torec/wire.go` — lives in cmd layer intentionally to avoid import cycles between `internal/ai` and its adapter sub-packages
 - **Daemon**: `torec serve` binds `localhost:7331`; Git hooks are thin HTTP clients that POST to it. Lifecycle: pidfile at `<data-dir>/daemon.pid`, graceful stop via `torec stop` (SIGTERM / `taskkill /PID` best-effort on Windows)
 - **Config**: `~/.tr/config.yaml` (user) deep-merged with `.tr.yaml` (repo). `privacy.*` and `ai.*` keys in `.tr.yaml` are silently discarded — those are user-level only. `TR_HOME` env var overrides the data directory (default `~/.tr`) for test/CI isolation
-- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concepts`, `questions`, `choices`, `selections`, `question_events`. Concepts and questions are scoped per-repo AND per-branch (no global pool). Empty `repo` or `branch` is refused at the store layer. **Schema migrations are manual**: `Open()` uses `CREATE TABLE IF NOT EXISTS` (no `ALTER TABLE` path); after a schema-changing build, delete `~/.tr/memory.db` (or `$TR_HOME/memory.db`) before starting the daemon — stale schema + `IF NOT EXISTS` = silent half-migration.
+- **Cache**: SQLite at `~/.tr/memory.db` via `modernc.org/sqlite` (pure Go, no CGo) — tables: `concept_registry`, `concepts`, `concept_aliases`, `questions`, `choices`, `selections`, `question_events`, `question_concepts`. Two-layer concept identity: `concept_registry` is user-scoped (one canonical slug per concept, global across repos/branches; aliases are an exact alias → target pressure valve), while `concepts` sightings and all question tables stay scoped per-repo AND per-branch (no global pool; empty `repo`/`branch` refused at the store layer — a scope-failed write never mints a registry identity). `question_concepts` is the provenance join written in the same transaction as each saved question. **Schema migrations are manual**: `Open()` uses `CREATE TABLE IF NOT EXISTS` (no `ALTER TABLE` path); after a schema-changing build, delete `~/.tr/memory.db` (or `$TR_HOME/memory.db`) before starting the daemon — stale schema + `IF NOT EXISTS` = silent half-migration.
 - **MCP server**: mounted at `/mcp/` inside the daemon
 - **Install & layer model**: five independent layers (binary / user config / user cache / repo config / git hooks) with a small set of explicit leak points. Rebuilding the binary does NOT update installed hook files — re-run `torec repo` for that. See [DOCS/ARCHITECTURE/INSTALL_LAYERS.md](DOCS/ARCHITECTURE/INSTALL_LAYERS.md) for the full model, canonical new-user install flow, and the testing simulation rules (scratch must be its own repo; re-`torec repo` after hook-body changes)
 
@@ -75,7 +75,8 @@ All automated tests are Go-native, collocated in `cmd/torec/*_test.go`. No exter
 
 ### Manual e2e
 
-`scripts/e2e/manual-init.ps1` — the only manual test. Covers `torec init` TUI flow (huh forms require a real TTY; accessible mode has a `bufio.Scanner` buffering bug). See `scripts/e2e/README.md` for details.
+Two manual tools live under `scripts/e2e/` (see `scripts/e2e/README.md`):
+`manual-init.ps1` covers `torec init` TUI flow (huh forms require a real TTY; accessible mode has a `bufio.Scanner` buffering bug), and `adaptive-ab.sh` / `adaptive-ab.ps1` drive the daemon's hook HTTP contract headless as an adaptive-difficulty A/B exploration tool (scratch data dir, real AI provider).
 
 ### When adding or extending features
 

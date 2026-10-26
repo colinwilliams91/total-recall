@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -19,12 +20,37 @@ const (
 	createConceptsTableSQL = `
 CREATE TABLE IF NOT EXISTS concepts (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug      TEXT    NOT NULL REFERENCES concept_registry(slug),
   concept   TEXT    NOT NULL,
   source    TEXT    NOT NULL DEFAULT 'code',
   weight    REAL    NOT NULL DEFAULT 1.0,
   repo      TEXT    NOT NULL,
   branch    TEXT    NOT NULL,
   seen_at   DATETIME NOT NULL
+);
+`
+
+	createConceptRegistryTableSQL = `
+CREATE TABLE IF NOT EXISTS concept_registry (
+  slug       TEXT PRIMARY KEY,
+  prose      TEXT NOT NULL,
+  first_seen DATETIME NOT NULL
+);
+`
+
+	createConceptAliasesTableSQL = `
+CREATE TABLE IF NOT EXISTS concept_aliases (
+  alias  TEXT PRIMARY KEY,
+  target TEXT NOT NULL REFERENCES concept_registry(slug)
+);
+`
+
+	createQuestionConceptsTableSQL = `
+CREATE TABLE IF NOT EXISTS question_concepts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  slug        TEXT NOT NULL REFERENCES concept_registry(slug),
+  weight      REAL NOT NULL DEFAULT 1.0
 );
 `
 
@@ -74,10 +100,13 @@ CREATE TABLE IF NOT EXISTS question_events (
 `
 )
 
-// ConceptRow is a persisted concept fingerprint from the cache.
+// ConceptRow is a persisted concept fingerprint from the cache. Slug is the
+// resolved registry identity the sighting links to; Concept is the free-form
+// prose of that sighting.
 type ConceptRow struct {
 	ID      int64
 	Concept string
+	Slug    string
 	Source  string
 	Weight  float64
 	SeenAt  time.Time
@@ -131,18 +160,18 @@ type Store struct {
 // Open opens (or creates) the memory store at $TR_HOME/memory.db, or
 // ~/.tr/memory.db when TR_HOME is unset. Returns a non-nil *Store on success.
 //
-// MIGRATION: this version reshapes the `questions` table a second time —
-// it drops the free-text correctness-key column `correct_answer` and
-// narrows the `question_type` CHECK constraint to
-// ('multiple_choice','multi_select') (removing 'free_text'). This is on top
-// of the earlier reshape that dropped the `correct_index`, `answer_index`,
-// `choices` JSON, `answer`, `correct`, `delivered_at`, `claimed_by`,
-// `answered_at`, `queued_at`, `feedback`-as-row columns and added `choices`,
-// `selections`, `question_events` tables. There is no in-code migration
-// path. If a prior `memory.db` exists, Open()'s `CREATE TABLE IF NOT EXISTS`
-// is a no-op against the stale `questions` table — the maintainer must run
-// the teardown SQL (`DROP TABLE IF EXISTS questions;`) or delete the data
-// file before the new build runs. See MIGRATION.md in this package.
+// MIGRATION: this version reshapes the `concepts` table into the two-layer
+// identity model — `concepts` gains a `slug` FK into the new user-scoped
+// `concept_registry`, and `concept_aliases` / `question_concepts` join the
+// schema. This is on top of the prior reshapes of the `questions` table
+// (dropped `correct_answer` and the 'free_text' CHECK value, and before that
+// the multi-column reshape that added `choices`, `selections`, and
+// `question_events`). There is no in-code migration path. If a prior
+// `memory.db` exists, Open()'s `CREATE TABLE IF NOT EXISTS` is a no-op
+// against the stale `concepts` table — sightings inserts reference
+// `concepts.slug`, which cannot exist there, so saves fail loudly. The
+// maintainer must delete the data file before the new build runs. See
+// MIGRATION.md in this package.
 func Open() (*Store, error) {
 	dir, err := trDir()
 	if err != nil {
@@ -169,38 +198,54 @@ func Open() (*Store, error) {
 	db.SetMaxOpenConns(1)
 
 	bg := context.Background()
+	if _, err := db.ExecContext(bg, createConceptRegistryTableSQL); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initializing concept_registry schema: %w", err)
+	}
 	if _, err := db.ExecContext(bg, createConceptsTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing concepts schema: %w", err)
 	}
+	if _, err := db.ExecContext(bg, createConceptAliasesTableSQL); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initializing concept_aliases schema: %w", err)
+	}
 	if _, err := db.ExecContext(bg, createQuestionsTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing questions schema: %w", err)
 	}
 	if _, err := db.ExecContext(bg, createChoicesTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing choices schema: %w", err)
 	}
 	if _, err := db.ExecContext(bg, createSelectionsTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing selections schema: %w", err)
 	}
 	if _, err := db.ExecContext(bg, createQuestionEventsTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initializing question_events schema: %w", err)
+	}
+	if _, err := db.ExecContext(bg, createQuestionConceptsTableSQL); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initializing question_concepts schema: %w", err)
 	}
 
 	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_concepts_repo_branch_seen ON concepts(repo, branch, seen_at DESC)`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("creating idx_concepts_repo_branch_seen: %w", err)
 	}
 	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_choices_qid ON choices(question_id)`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("creating idx_choices_qid: %w", err)
 	}
 	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_qe_qid_time ON question_events(question_id, occurred_at DESC) WHERE event_type = 'queued'`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("creating idx_qe_qid_time: %w", err)
+	}
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_question_concepts_qid ON question_concepts(question_id)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("creating idx_question_concepts_qid: %w", err)
 	}
 
 	return &Store{db: db}, nil
@@ -208,8 +253,12 @@ func Open() (*Store, error) {
 
 // Fingerprint are lightweight metadata only — no raw diff text.
 // Save persists a batch of concept fingerprints to the cache, tagged with repo.
+// Slug is the canonical identity key: it is resolved against concept_registry
+// (aliases included) and minted on first sighting; Concept stays the free-form
+// prose fingerprint.
 type Fingerprint struct {
 	Concept string
+	Slug    string
 	Source  string
 	Weight  float64
 }
@@ -228,7 +277,7 @@ func (s *Store) Save(ctx context.Context, repo, branch string, concepts []Finger
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO concepts (concept, source, weight, repo, branch, seen_at) VALUES (?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO concepts (slug, concept, source, weight, repo, branch, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("preparing insert: %w", err)
 	}
@@ -236,11 +285,134 @@ func (s *Store) Save(ctx context.Context, repo, branch string, concepts []Finger
 
 	now := time.Now().UTC()
 	for _, c := range concepts {
-		if _, err := stmt.ExecContext(ctx, c.Concept, c.Source, c.Weight, repo, branch, now); err != nil {
+		slug, ok := resolveIdentity(ctx, tx, c.Slug, c.Concept)
+		if !ok {
+			// Element-level skip: a malformed/missing slug degrades this
+			// sighting only, never the batch or the pipeline.
+			continue
+		}
+		if _, err := stmt.ExecContext(ctx, slug, c.Concept, c.Source, c.Weight, repo, branch, now); err != nil {
 			return fmt.Errorf("inserting concept %q: %w", c.Concept, err)
 		}
 	}
 	return tx.Commit()
+}
+
+// resolveIdentity resolves one fingerprint's canonical slug inside tx:
+// alias lookup first (alias → target), then exact registry match, then mint.
+// It returns ok=false (with a logged warning) for malformed or missing slugs —
+// the caller skips that element and keeps the batch. The registry row is
+// minted with the fingerprint's prose on first sighting (first_seen and prose
+// are never touched on reuse).
+func resolveIdentity(ctx context.Context, tx *sql.Tx, slug, prose string) (string, bool) {
+	if slug == "" {
+		log.Printf("[store] dropping sighting: empty slug")
+		return "", false
+	}
+	if !IsValidSlug(slug) {
+		log.Printf("[store] dropping sighting with malformed slug %q (want [a-z0-9_]+)", slug)
+		return "", false
+	}
+	// Alias pressure valve: exact lookup only. An alias row redirects the
+	// identity here; resolution stays non-fuzzy by construction.
+	var target string
+	err := tx.QueryRowContext(ctx, `SELECT target FROM concept_aliases WHERE alias = ?`, slug).Scan(&target)
+	if err == nil {
+		slug = target
+	} else if err != sql.ErrNoRows {
+		log.Printf("[store] alias lookup for %q: %v", slug, err)
+		return "", false
+	}
+
+	// Mint on first sighting; reuse (first_seen + first-seen prose untouched)
+	// on later ones.
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO concept_registry (slug, prose, first_seen)
+VALUES (?, ?, COALESCE((SELECT first_seen FROM concept_registry WHERE slug = ?), ?))
+ON CONFLICT(slug) DO NOTHING`,
+		slug, prose, slug, time.Now().UTC()); err != nil {
+		log.Printf("[store] registry mint for %q: %v", slug, err)
+		return "", false
+	}
+	return slug, true
+}
+
+// slugValuePattern is the canonical slug shape: lowercase letters, digits,
+// and underscores only. Prose-shaped text (spaces, mixed case, punctuation)
+// never matches, so validation is a single comparison.
+var slugValuePattern = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+// IsValidSlug reports whether the string conforms to the canonical slug shape.
+func IsValidSlug(slug string) bool {
+	return slugValuePattern.MatchString(slug)
+}
+
+// Alias is one alias → target mapping from the concept_aliases pressure
+// valve. Resolve is exact-match at the write boundary; this type is the
+// listing/management projection.
+type Alias struct {
+	Alias  string
+	Target string
+}
+
+// AddAlias maps alias onto target after validating both the alias shape and
+// that the target already exists in the registry. A dangling target is
+// rejected with an explicit error (never created as a silent dangling row).
+func (s *Store) AddAlias(ctx context.Context, alias, target string) error {
+	if !IsValidSlug(alias) {
+		return fmt.Errorf("invalid alias %q: want [a-z0-9_]+", alias)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM concept_registry WHERE slug = ?`, target).Scan(&exists); err != nil {
+		return fmt.Errorf("reading registry for target %q: %w", target, err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("cannot add alias %q: target %q has no registry identity", alias, target)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO concept_aliases (alias, target) VALUES (?, ?)`, alias, target); err != nil {
+		return fmt.Errorf("inserting alias %q: %w", alias, err)
+	}
+	return tx.Commit()
+}
+
+// RemoveAlias deletes the alias row by exact name and reports whether a row
+// was removed. Unknown aliases are not an error — removal is a repair tool.
+func (s *Store) RemoveAlias(ctx context.Context, alias string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM concept_aliases WHERE alias = ?`, alias)
+	if err != nil {
+		return false, fmt.Errorf("removing alias %q: %w", alias, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("reading rows affected for alias %q: %w", alias, err)
+	}
+	return n > 0, nil
+}
+
+// Aliases lists all alias → target pairs ordered by alias.
+func (s *Store) Aliases(ctx context.Context) ([]Alias, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT alias, target FROM concept_aliases ORDER BY alias ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("querying aliases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Alias
+	for rows.Next() {
+		var a Alias
+		if err := rows.Scan(&a.Alias, &a.Target); err != nil {
+			return nil, fmt.Errorf("scanning alias row: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // Recent returns up to n concept rows for repo+branch, ordered by most recently
@@ -255,7 +427,7 @@ func (s *Store) Recent(ctx context.Context, repo, branch string, n int) ([]Conce
 		n = recentLimit
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, concept, source, weight, seen_at FROM concepts WHERE repo = ? AND branch = ? ORDER BY seen_at DESC LIMIT ?`, repo, branch, n)
+		`SELECT id, slug, concept, source, weight, seen_at FROM concepts WHERE repo = ? AND branch = ? ORDER BY seen_at DESC LIMIT ?`, repo, branch, n)
 	if err != nil {
 		return nil, fmt.Errorf("querying recent concepts: %w", err)
 	}
@@ -264,7 +436,7 @@ func (s *Store) Recent(ctx context.Context, repo, branch string, n int) ([]Conce
 	var result []ConceptRow
 	for rows.Next() {
 		var r ConceptRow
-		if err := rows.Scan(&r.ID, &r.Concept, &r.Source, &r.Weight, &r.SeenAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Slug, &r.Concept, &r.Source, &r.Weight, &r.SeenAt); err != nil {
 			return nil, fmt.Errorf("scanning concept row: %w", err)
 		}
 		result = append(result, r)
@@ -272,14 +444,28 @@ func (s *Store) Recent(ctx context.Context, repo, branch string, n int) ([]Conce
 	return result, rows.Err()
 }
 
+// ConceptRef is one fed concept as provenance input to SaveQuestion: the
+// resolved registry slug plus the sighting weight at synthesis time. The
+// weight is a per-write snapshot of what drove the question; the live weight
+// lives on the sighting row.
+type ConceptRef struct {
+	Slug   string
+	Weight float64
+}
+
 // SaveQuestion persists a synthesized question and its choices in one
 // transaction, plus a 'queued' question_events row marking the question's
-// creation. Both repo and branch are required; empty values are a no-op.
-// questionType defaults to 'multiple_choice' when empty.
-func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []Choice, questionType string) error {
+// creation, plus one question_concepts provenance row per fed concept
+// (fedConcepts). Both repo and branch are required; empty values are a no-op.
+// questionType defaults to 'multiple_choice' when empty. An empty concept
+// batch persists the question with zero provenance rows rather than erroring.
+func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef) error {
 	if repo == "" || branch == "" {
 		log.Printf("[store] skipping savequestion: empty repo or branch")
 		return nil
+	}
+	if question == "" {
+		return fmt.Errorf("refusing to save empty question text")
 	}
 	if questionType == "" {
 		questionType = "multiple_choice"
@@ -321,6 +507,19 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 		`INSERT INTO question_events (question_id, event_type, actor) VALUES (?, 'queued', 'system')`,
 		questionID); err != nil {
 		return fmt.Errorf("inserting queued event: %w", err)
+	}
+
+	// Provenance: one row per fed concept, same transaction. A rejected
+	// SaveQuestion therefore leaves zero partial provenance rows.
+	fedStmt, err := tx.PrepareContext(ctx, `INSERT INTO question_concepts (question_id, slug, weight) VALUES (?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("preparing provenance insert: %w", err)
+	}
+	defer func() { _ = fedStmt.Close() }()
+	for _, ref := range fed {
+		if _, err := fedStmt.ExecContext(ctx, questionID, ref.Slug, ref.Weight); err != nil {
+			return fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, ref.Slug, err)
+		}
 	}
 
 	return tx.Commit()
