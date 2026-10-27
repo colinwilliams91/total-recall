@@ -10,12 +10,24 @@ erDiagram
 
     concepts {
         INTEGER id PK "AUTOINCREMENT"
-        TEXT concept "NOT NULL"
+        TEXT slug FK "> concept_registry.slug — resolved identity"
+        TEXT concept "NOT NULL — prose fingerprint on the sighting"
         TEXT source "NOT NULL, default 'code'"
         REAL weight "NOT NULL, default 1.0"
         TEXT repo "NOT NULL — scope key"
         TEXT branch "NOT NULL — scope key"
         DATETIME seen_at "NOT NULL, UTC"
+    }
+
+    concept_registry {
+        TEXT slug PK "canonical [a-z0-9_]+ identity — user-scoped: no repo/branch columns"
+        TEXT prose "NOT NULL — first-seen human fingerprint"
+        DATETIME first_seen "NOT NULL — minted once, never touched on reuse"
+    }
+
+    concept_aliases {
+        TEXT alias PK "canonical [a-z0-9_]+ — exact-match pressure valve"
+        TEXT target FK "> concept_registry.slug — must exist at alias-write time"
     }
 
     questions {
@@ -26,6 +38,13 @@ erDiagram
         TEXT repo "NOT NULL — scope key"
         TEXT branch "NOT NULL — scope key"
         TEXT feedback "NULL — AI-generated explanation"
+    }
+
+    question_concepts {
+        INTEGER id PK "AUTOINCREMENT"
+        INTEGER question_id FK "> questions.id, ON DELETE CASCADE"
+        TEXT slug FK "> concept_registry.slug"
+        REAL weight "NOT NULL — per-write snapshot at synthesis time"
     }
 
     choices {
@@ -51,19 +70,22 @@ erDiagram
         TEXT payload "NULL"
     }
 
+    concept_registry ||--o{ concepts : "slug (sightings)"
+    concept_registry ||--o{ concept_aliases : "slug (target—no fuzz; exact lookup only)"
+    concept_registry ||--o{ question_concepts : "slug"
+    questions ||--o{ question_concepts : "question_id — what fed the question"
     questions ||--o{ choices : "question_id"
     questions ||--o{ selections : "question_id"
     choices  ||--o{ selections : "choice_id"
     questions ||--o{ question_events : "question_id (event log)"
-
-    %% ══════════ Conceptual (non-FK) relationships ══════════
-
-    concepts }o..|| questions : "concepts feed synthesis (per repo+branch, no FK)"
 ```
 
 **Notes on relationships:**
 
-- `questions`, `concepts`, and their children are scoped by the `(repo, branch)` pair — no FK, no global pool. Empty repo/branch is refused at the store layer.
+- Two-layer concept identity: `concept_registry` is the user-scoped identity layer (one row per distinct concept — a concept seen on one repo/branch is the same identity on another). `concepts` is the repo/branch-scoped sightings layer and keeps its scope columns; identity never mints from a scope-refused write.
+- `questions` and `concepts` are scoped by the `(repo, branch)` pair — no global pool. Empty repo/branch is refused at the store layer. `concept_registry` is deliberately NOT scope-keyed (single-user premise).
+- `concept_aliases` is an exact alias → target lookup, validated at alias-write time (target must exist). It is a repair tool, not a matching system.
+- `question_concepts` is the provenance join: one row per concept fed to synthesis, written in the same transaction as the question/choices/queued-event. `weight` is the per-write snapshot of what drove the question; the live weight stays on the sighting.
 - `selections` is an association table; `UNIQUE(question_id, choice_id)` prevents duplicate picks and defensively blocks cross-question choice IDs. It carries **no timestamp** — the parent question's `answered` event is the authoritative "when".
 - `is_correct` on `choices` is the sole correctness key. `CorrectIndex` in `StoredQuestion` is derived post-hoc and is a **presentation aid only** (sentinel `-1` = none correct).
 - `questions.status` is a denormalized cache of lifecycle state; the **source of truth is the latest `question_events` row**. Queue order is derived from the `queued` event's `occurred_at` (partial index `idx_qe_qid_time WHERE event_type='queued'`).
@@ -97,22 +119,30 @@ classDiagram
     class ConceptFingerprint {
         <<pipeline — extract-and-discard output>>
         +Concept string
+        +Slug string "canonical identity, minted by the AI"
         +Source string
         +Weight float64 "[0.0, 1.0]"
     }
     class Fingerprint {
         <<cache.Store batch input>>
         +Concept string
+        +Slug string "identity key — resolved/minted in Store.Save"
         +Source string
         +Weight float64
     }
     class ConceptRow {
         <<cache read model>>
         +ID int64
+        +Slug string "resolved registry identity"
         +Concept string
         +Source string
         +Weight float64
         +SeenAt time
+    }
+    class ConceptRef {
+        <<SaveQuestion provenance input>>
+        +Slug string
+        +Weight float64 "snapshot at synthesis time"
     }
     class SynthesisContext {
         <<transient — rides runPipeline → Synthesize>>
@@ -151,7 +181,7 @@ classDiagram
     StoredQuestion o-- Selection : joined, insertion order
 ```
 
-**Flow:** `git diff` → `pipeline.ExtractConcepts` → `ConceptFingerprint`(s) → `Store.Save` as `Fingerprint` → `concepts` rows → `recall.Engine` reads `Recent(repo, branch)` → `SynthesisContext` → AI provider → shuffled `Question` → `Store.SaveQuestion` → `questions` + `choices` + `queued` event.
+**Flow:** `git diff` → `pipeline.ExtractConcepts` → `ConceptFingerprint`(s, slug minted by the AI) → `Store.Save` as `Fingerprint` (alias/exact resolve → registry mint on first sighting) → `concepts` sighting rows (FK to `concept_registry`) → `recall.Engine` reads `Recent(repo, branch)` (working-surface feed, now carrying slugs) → `SynthesisContext` → AI provider → shuffled `Question` → `Store.SaveQuestion` → `questions` + `choices` + `queued` event + `question_concepts` provenance rows (one per fed concept, same transaction).
 
 ## Config model (two-tier YAML deep-merge)
 
@@ -218,7 +248,7 @@ classDiagram
 
 ```
 ~/.tr/ (or $TR_HOME)          ← single data dir, 0700
-├── memory.db                 ← SQLite: concepts, questions, choices, selections, question_events
+├── memory.db                 ← SQLite: concept_registry, concepts, concept_aliases, questions, choices, selections, question_events, question_concepts
 └── config.yaml               ← UserConfig
 ```
 
