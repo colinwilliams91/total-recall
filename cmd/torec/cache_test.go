@@ -962,7 +962,7 @@ func TestQuestionConceptsRoundTrip(t *testing.T) {
 
 	db := openRawDB(t)
 	rows, err := db.QueryContext(ctx,
-		`SELECT slug, weight FROM question_concepts ORDER BY id ASC`)
+		`SELECT slug, weight FROM question_concepts ORDER BY slug ASC`)
 	if err != nil {
 		t.Fatalf("provenance query: %v", err)
 	}
@@ -981,11 +981,80 @@ func TestQuestionConceptsRoundTrip(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 provenance rows, got %d", len(got))
 	}
+	// Ordered by slug: go_interfaces before sql_joins. Asserting on sorted
+	// order rather than insertion order — the dedupe keeps values, not
+	// positions, and map iteration is deliberately unordered.
 	if got[0].Slug != "go_interfaces" || got[0].Weight != 0.9 {
 		t.Fatalf("unexpected first provenance row: %+v", got[0])
 	}
 	if got[1].Slug != "sql_joins" || got[1].Weight != 0.8 {
 		t.Fatalf("unexpected second provenance row: %+v", got[1])
+	}
+}
+
+// TestSaveQuestionCollapsesDuplicateFedConcepts proves distinct-concept
+// provenance: the sighting feed can present one concept several times, but
+// the join persists exactly one row per (question, slug), keeping the MAXIMUM
+// weight from the batch — order-independently.
+func TestSaveQuestionCollapsesDuplicateFedConcepts(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+		{Concept: "sql joins", Slug: "sql_joins", Source: "code", Weight: 0.5},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// One slug 4× (weights scattered, two arriving at the 0.9 max) plus one
+	// distinct slug — order scrambled on purpose (dedupe must not depend on
+	// the batch being sorted).
+	fed := []cache.ConceptRef{
+		{Slug: "go_interfaces", Weight: 0.9},
+		{Slug: "sql_joins", Weight: 0.5},
+		{Slug: "go_interfaces", Weight: 0.4},
+		{Slug: "go_interfaces", Weight: 0.2},
+		{Slug: "go_interfaces", Weight: 0.9},
+	}
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "collapsed provenance question",
+		buildChoices([]string{"a", "b"}, 0), "", fed); err != nil {
+		t.Fatalf("SaveQuestion: %v", err)
+	}
+
+	db := openRawDB(t)
+	rows, err := db.QueryContext(ctx,
+		`SELECT slug, weight FROM question_concepts ORDER BY slug ASC`)
+	if err != nil {
+		t.Fatalf("provenance query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []cache.ConceptRef
+	for rows.Next() {
+		var ref cache.ConceptRef
+		if err := rows.Scan(&ref.Slug, &ref.Weight); err != nil {
+			t.Fatalf("scan provenance row: %v", err)
+		}
+		got = append(got, ref)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("provenance rows err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 rows (one per DISTINCT fed concept), got %d: %+v", len(got), got)
+	}
+	// Ordered by slug: go_interfaces first.
+	if got[0].Slug != "go_interfaces" || got[0].Weight != 0.9 {
+		t.Fatalf("expected max-weight collapse for go_interfaces, got %+v", got[0])
+	}
+	if got[1].Slug != "sql_joins" || got[1].Weight != 0.5 {
+		t.Fatalf("expected distinct concept stored row-per-slug, got %+v", got[1])
+	}
+
+	// The uniqueness invariant is load-bearing at the schema level too.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO question_concepts (question_id, slug, weight)
+		 SELECT question_id, slug, weight FROM question_concepts LIMIT 1`); err == nil {
+		t.Fatal("expected UNIQUE(question_id, slug) to reject a duplicate copy")
 	}
 }
 

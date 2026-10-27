@@ -60,9 +60,11 @@ The registry is deliberately minimal: no repo/branch columns at all. A registry 
 - *Deriving slugs from prose mechanically at write time (client-side normalize of `concept`).* Rejected as the primary mint: the AI has the context to pick a *general name* ("interface dispatch and dispatch tables" → `go_interfaces`); a client lexer can only lowercase words — every variant phrase becomes a distinct identity, worst of both worlds.
 - *Mint slug at registry insert from prose after the fact.* Rejected: post-hoc renaming means identity churn on already-written provenance rows.
 
-### Decision: Provenance is engine-derived and written in the `SaveQuestion` transaction
+### Decision: Provenance is engine-derived, distinct-concept, and written in the `SaveQuestion` transaction
 
-`question_concepts(question_id, slug, weight)` is populated from the batch in `SynthesisContext` — the same list of `ConceptRow`s already in memory at `runPipeline`. No new AI contract, no new provider call. The weight recorded is the sighting's weight *at synthesis time*, freezing the confidence snapshot that drove the question (the registry/sighting rows may move on later; the provenance read doesn't rewrite-watching).
+`question_concepts(question_id, slug, weight)` is populated from the batch in `SynthesisContext` — the same list of `ConceptRow`s already in memory at `runPipeline`. No new AI contract, no new provider call. The recorded weight is the sighting's weight *at synthesis time*, freezing the confidence snapshot that drove the question (the registry/sighting rows may move on later; the provenance read doesn't rewrite-watching).
+
+The join carries **exactly one row per distinct (question, concept)**, enforced by `UNIQUE(question_id, slug)`. The feeding feed is row-shaped (sightings, so repeated commits on the same idea can present a concept multiple times with different per-sighting weights), and `SaveQuestion` collapses duplicates order-independently, keeping the **maximum** weight — the strongest signal in the feed. The trade-off: feed multiplicity ("this question drew on 4 sightings of one concept") is not preserved in provenance; a raw count stays readable from the sightings log, which is the authoritative multiplicity record anyway. Concept-level consumers read set membership ("was this concept in the feed for that question?"), and the duplicate rows observed in the adaptive-ab scratch run (identical `(question_id, slug, weight)` triples) carried no information beyond the first — so the collapsed shape is both cleaner and information-identical.
 
 ```mermaid
 sequenceDiagram
@@ -134,5 +136,6 @@ Because `CREATE TABLE IF NOT EXISTS` makes `Open()` a no-op against a stale sche
 ## Open Questions
 
 - ~~**Alias authoring surface**~~ — resolved in the Decisions section: `torec alias add|list|remove` thin client, deliberately late ordering in tasks.
-- **Provenance for skipped/failed synthesis attempts:** should failed synthesis attempts (AI returned garbage) also log the fed concepts somewhere (e.g., `question_events` on no question row)? Cheap to add, but no reader today; defaulting to *no*.
+- ~~**Provenance for skipped/failed synthesis attempts:**~~ — defaults to *no* (no reader today; open when a consumer exists).
+- ~~**Duplicate provenance rows for repeated sightings of one concept**~~ — resolved as distinct-concept provenance (one row per `(question, slug)`, max weight) in the provenance decision above; enforced via `UNIQUE(question_id, slug)` with a dedupe regression test.
 - **Exact alias-collision semantics at mint time:** when an AI slug collides with an existing alias (AI mints slug `joining_tables_in_sql`, alias exists pointing it to `sql_joins`), spec behavior is "lands on the target." Implementation detail (resolve-before-insert vs. insert-then-redirect is implementation-level); flagged only so it lands as a test case, not an afterthought.

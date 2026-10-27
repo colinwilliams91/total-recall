@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS question_concepts (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   slug        TEXT NOT NULL REFERENCES concept_registry(slug),
-  weight      REAL NOT NULL DEFAULT 1.0
+  weight      REAL NOT NULL DEFAULT 1.0,
+  UNIQUE (question_id, slug)
 );
 `
 
@@ -509,16 +510,26 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 		return fmt.Errorf("inserting queued event: %w", err)
 	}
 
-	// Provenance: one row per fed concept, same transaction. A rejected
-	// SaveQuestion therefore leaves zero partial provenance rows.
+	// Provenance: one row per DISTINCT fed concept, same transaction. The
+	// feeding feed is row-shaped (repeated commits on the same idea can
+	// present a concept several times), so the batch is collapsed
+	// order-independently keeping the MAXIMUM weight — the strongest signal
+	// in the feed. A rejected SaveQuestion therefore leaves zero partial
+	// provenance rows.
+	best := make(map[string]float64, len(fed))
+	for _, ref := range fed {
+		if cur, seen := best[ref.Slug]; !seen || ref.Weight > cur {
+			best[ref.Slug] = ref.Weight
+		}
+	}
 	fedStmt, err := tx.PrepareContext(ctx, `INSERT INTO question_concepts (question_id, slug, weight) VALUES (?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("preparing provenance insert: %w", err)
 	}
 	defer func() { _ = fedStmt.Close() }()
-	for _, ref := range fed {
-		if _, err := fedStmt.ExecContext(ctx, questionID, ref.Slug, ref.Weight); err != nil {
-			return fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, ref.Slug, err)
+	for slug, weight := range best {
+		if _, err := fedStmt.ExecContext(ctx, questionID, slug, weight); err != nil {
+			return fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, slug, err)
 		}
 	}
 

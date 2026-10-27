@@ -21,6 +21,7 @@
 
 - [x] 4.1 Extend `SaveQuestion` to accept the fed concept batch (slug + weight pairs) and insert `question_concepts` rows in the SAME transaction as the question/choices/queued-event; verify `cache_test.go`: rejected `SaveQuestion` (e.g., empty question) leaves zero partial provenance rows
 - [x] 4.2 Thread the concept batch from `runPipeline`'s `SynthesisContext` through the engine into `SaveQuestion`; verify an integration test (`startTestDaemon` + seeded store) shows a synthesized question carrying N provenance rows matching the N fed concepts, and a failed synthesis (stubbed AI error) carries none
+- [x] 4.3 Enforce distinct-concept provenance: `question_concepts` gains `UNIQUE(question_id, slug)`; `SaveQuestion` dedupes the fed batch order-independently, keeping the MAXIMUM weight per slug; verify `cache_test.go`: a fed batch carrying one slug 4× with varied weights persists exactly 1 row with max weight, distinct slugs persist row-per-slug, and the existing atomicity test still passes (rejected leaves zero rows)
 
 ## 5. Reads surface identity
 
