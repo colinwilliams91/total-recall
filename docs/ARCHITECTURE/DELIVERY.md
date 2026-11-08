@@ -56,7 +56,7 @@ All persistent state lives in a single SQLite file. Both `concepts` and `questio
 
 ```sql
 CREATE TABLE questions (
-    id           INTEGER  PRIMARY KEY AUTOINCREMENT,
+    id           INTEGER  PRIMARY KEY,
     question     TEXT     NOT NULL,
     choices      TEXT     NOT NULL,  -- JSON array
     repo         TEXT     NOT NULL DEFAULT '',  -- absolute repo path

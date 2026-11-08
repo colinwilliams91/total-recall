@@ -1503,3 +1503,135 @@ func TestRepoIndexesExist(t *testing.T) {
 		}
 	}
 }
+
+// TestSchemaPrimaryKeysArePlainRowidAliases is the AUTOINCREMENT regression
+// guard: every INTEGER primary key is a plain rowid alias, so SQLite mints ids
+// from the rowid itself and never maintains the sqlite_sequence bookkeeping
+// table. Uniqueness and auto-assignment must survive the removal — a key that
+// stopped auto-assigning would show up as an id-less row, not as AUTOINCREMENT.
+func TestSchemaPrimaryKeysArePlainRowidAliases(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "what backs an INTEGER PRIMARY KEY?",
+		buildChoices([]string{"the rowid", "a sequence table"}, 0), "", nil); err != nil {
+		t.Fatalf("SaveQuestion: %v", err)
+	}
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "sqlite rowids", Slug: "sqlite_rowids", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	db := openRawDB(t)
+
+	rows, err := db.QueryContext(ctx, `
+SELECT name, sql FROM sqlite_master
+WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		t.Fatalf("querying sqlite_master: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tables int
+	for rows.Next() {
+		var name, ddl string
+		if err := rows.Scan(&name, &ddl); err != nil {
+			t.Fatalf("scanning sqlite_master row: %v", err)
+		}
+		tables++
+		if strings.Contains(strings.ToUpper(ddl), "AUTOINCREMENT") {
+			t.Errorf("table %s declares AUTOINCREMENT: %s", name, ddl)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating sqlite_master: %v", err)
+	}
+	if tables == 0 {
+		t.Fatal("no user tables found in sqlite_master")
+	}
+
+	var seq int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`).Scan(&seq); err != nil {
+		t.Fatalf("counting sqlite_sequence: %v", err)
+	}
+	if seq != 0 {
+		t.Fatal("sqlite_sequence exists — some primary key still declares AUTOINCREMENT")
+	}
+
+	unkeyed := map[string]string{
+		"concepts":  `SELECT COUNT(*) FROM concepts WHERE id IS NULL OR id <= 0`,
+		"questions": `SELECT COUNT(*) FROM questions WHERE id IS NULL OR id <= 0`,
+		"choices":   `SELECT COUNT(*) FROM choices WHERE id IS NULL OR id <= 0`,
+	}
+	for table, query := range unkeyed {
+		var bad int
+		if err := db.QueryRowContext(ctx, query).Scan(&bad); err != nil {
+			t.Fatalf("checking auto-assignment on %s: %v", table, err)
+		}
+		if bad != 0 {
+			t.Errorf("%s has %d rows without a minted rowid — auto-assignment broke", table, bad)
+		}
+	}
+}
+
+// TestStaleAutoincrementDatabaseStillWorks proves the removal is a
+// fresh-database effect: a memory.db whose questions table was declared with
+// AUTOINCREMENT keeps its sequence-backed ids under the new build, which reads
+// and writes it unchanged. Schema changes here are manual teardowns, so a stale
+// table is tolerated rather than reshaped — it must not become a silent break.
+func TestStaleAutoincrementDatabaseStillWorks(t *testing.T) {
+	trHome := t.TempDir()
+	t.Setenv("TR_HOME", trHome)
+
+	legacy, err := sql.Open("sqlite", filepath.Join(trHome, "memory.db"))
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	defer func() { _ = legacy.Close() }()
+
+	if _, err := legacy.ExecContext(context.Background(), `
+CREATE TABLE questions (
+    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    question_type   TEXT     NOT NULL DEFAULT 'multiple_choice',
+    status          TEXT     NOT NULL DEFAULT 'queued',
+    question        TEXT     NOT NULL,
+    repo            TEXT     NOT NULL,
+    branch          TEXT     NOT NULL,
+    feedback        TEXT
+);`); err != nil {
+		t.Fatalf("creating legacy questions table: %v", err)
+	}
+
+	s, err := cache.Open()
+	if err != nil {
+		t.Fatalf("cache.Open against stale schema: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "still writable on the stale table?",
+		buildChoices([]string{"yes", "no"}, 0), "", nil); err != nil {
+		t.Fatalf("SaveQuestion on stale AUTOINCREMENT table: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("question saved to the stale table was never dequeued")
+	}
+	if claimed.ID <= 0 {
+		t.Fatalf("expected a minted id on the stale table, got %d", claimed.ID)
+	}
+
+	db := openRawDB(t)
+	var seqRows int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'questions'`).Scan(&seqRows); err != nil {
+		t.Fatalf("counting sqlite_sequence rows: %v", err)
+	}
+	if seqRows != 1 {
+		t.Fatalf("stale table should still carry its sqlite_sequence row, got %d rows", seqRows)
+	}
+}
