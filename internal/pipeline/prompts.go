@@ -14,17 +14,18 @@ const (
 	extractionSystem = `You are a technical concept extractor. Analyze the provided Git diff and identify the most important technical concepts, design patterns, or software engineering principles demonstrated by the changes.
 
 Return ONLY a JSON object with no surrounding text:
-{"concepts":[{"concept":"<concept>","source":"code","weight":0.0}]}
+{"concepts":[{"concept":"<concept>","slug":"<slug>","source":"code","weight":0.0}]}
 
 Each concept must have exactly these fields:
 - "concept": a concise name for the technical concept (e.g., "dependency inversion principle", "SQL joins", "Go interfaces")
+- "slug": a machine-readable canonical identity for the concept: lowercase letters, digits, and underscores only (e.g., "dependency_inversion", "sql_joins", "go_interfaces"). Choose a stable, GENERAL name for the underlying idea — not a phrase specific to this diff — and reuse the same slug on every future commit touching the same topic, so the same concept maps to the same slug across repos, branches, and time. Never emit metadata or natural language in the slug.
 - "source": always the string "code"
 - "weight": a confidence score between 0.0 and 1.0 (higher = more central to the change)
 
 Aim for 2-4 concepts. Focus on what a developer should understand and remember about these changes.
 
 Example output:
-{"concepts":[{"concept":"dependency inversion principle","source":"code","weight":0.9},{"concept":"reduce coupling with abstractions","source":"code","weight":0.8}]}`
+{"concepts":[{"concept":"dependency inversion principle","slug":"dependency_inversion","source":"code","weight":0.9},{"concept":"reduce coupling with abstractions","slug":"coupling_abstractions","source":"code","weight":0.8}]}`
 )
 
 // ExtractionRequest builds the CompletionRequest used to extract concepts from a staged diff.

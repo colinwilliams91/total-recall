@@ -45,6 +45,7 @@ func main() {
 		statusCmd(),
 		askCmd(),
 		assetCmd(),
+		aliasCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

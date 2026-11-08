@@ -230,7 +230,7 @@ func TestRecallNextWithQuestion(t *testing.T) {
 		{Text: "Don't Run Yaks", IsCorrect: false, Position: 1},
 		{Text: "Digital Repository YAML", IsCorrect: false, Position: 2},
 		{Text: "Deferred Runtime Yielding", IsCorrect: false, Position: 3},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed question: %v", err)
 	}
 
@@ -267,7 +267,7 @@ func TestRecallNextIdempotent(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestRecallAnswer(t *testing.T) {
 		[]cache.Choice{
 		{Text: "choice a", IsCorrect: true, Position: 0},
 		{Text: "choice b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -335,7 +335,7 @@ func TestRecallAnswerSkip(t *testing.T) {
 		[]cache.Choice{
 		{Text: "x", IsCorrect: true, Position: 0},
 		{Text: "y", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -437,7 +437,7 @@ func TestRecallNextRepoScoped(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed for repo X: %v", err)
 	}
 
@@ -460,6 +460,107 @@ func TestRecallNextRepoScoped(t *testing.T) {
 	}
 	if result.Question != "X's question" {
 		t.Fatalf("expected X's question, got %q", result.Question)
+	}
+}
+
+// ── alias routes (concept-provenance) ────────────────────────────────────────
+
+// Task 6.1: POST /alias/add with a nonexistent target is rejected with the
+// store's explicit dangling-target error.
+func TestAliasAddRouteRejectsDanglingTarget(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	_ = store
+
+	resp := mustPOST(t, baseURL, "/alias/add", []byte(`{"alias":"golang_interfaces","target":"never_minted"}`))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for dangling target, got %d", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if !strings.Contains(body["error"], "no registry identity") {
+		t.Fatalf("expected explicit dangling-target error, got %q", body["error"])
+	}
+}
+
+// Task 6.1: a valid alias add is accepted, rows enable resolution in a
+// subsequent Save call, and alias/list returns the mappings ordered by alias.
+func TestAliasAddRouteAcceptsValidAndEnablesResolution(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	ctx := context.Background()
+
+	// Mint the target identity through a real sighting.
+	if err := store.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "go interfaces", Slug: "go_interfaces", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp := mustPOST(t, baseURL, "/alias/add", []byte(`{"alias":"golang_interfaces","target":"go_interfaces"}`))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for valid alias add, got %d", resp.StatusCode)
+	}
+
+	// An alias row enables resolution in a subsequent Save: sighting under
+	// the alias lands on the target identity.
+	if err := store.Save(ctx, "/repo/test", "feat", []cache.Fingerprint{
+		{Concept: "alias sighting", Slug: "golang_interfaces", Source: "code", Weight: 0.5},
+	}); err != nil {
+		t.Fatalf("Save under alias: %v", err)
+	}
+	recent, err := store.Recent(ctx, "/repo/test", "feat", 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(recent) != 1 || recent[0].Slug != "go_interfaces" {
+		t.Fatalf("expected sighting resolved to target identity, got %+v", recent)
+	}
+
+	// List returns the mappings, ordered by alias.
+	listResp := mustGET(t, baseURL, "/alias/list")
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for alias/list, got %d", listResp.StatusCode)
+	}
+	var list struct {
+		Aliases []struct {
+			Alias  string `json:"alias"`
+			Target string `json:"target"`
+		} `json:"aliases"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
+		t.Fatalf("decode alias/list: %v", err)
+	}
+	if len(list.Aliases) != 1 || list.Aliases[0].Alias != "golang_interfaces" || list.Aliases[0].Target != "go_interfaces" {
+		t.Fatalf("unexpected alias listing: %+v", list.Aliases)
+	}
+}
+
+// alias invalid-shape rejection rides the same route (task 6.1).
+func TestAliasAddRouteRejectsMalformedAlias(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	_ = store
+	ctx := context.Background()
+	if err := store.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "real", Slug: "real_concept", Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp := mustPOST(t, baseURL, "/alias/add", []byte(`{"alias":"not a slug","target":"real_concept"}`))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed alias, got %d", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if !strings.Contains(body["error"], "[a-z0-9_]+") {
+		t.Fatalf("expected shape-validation error, got %q", body["error"])
 	}
 }
 
@@ -514,7 +615,7 @@ func waitForUndeliveredQuestion(t *testing.T, store *cache.Store, repo string) *
 // Task 10.1: runPipeline persists concepts tagged with env.Repo.
 func TestPipelineSavesConceptsTaggedWithRepo(t *testing.T) {
 	provider := &scriptedProvider{responses: []string{
-		`[{"concept":"cached-connection","source":"code","weight":1.0}]`,
+		`[{"concept":"cached-connection","slug":"cached_connection","source":"code","weight":1.0}]`,
 	}}
 	_, store, baseURL := startTestDaemonWithPipeline(t, provider, nil)
 
@@ -541,7 +642,7 @@ func TestPipelineSavesConceptsTaggedWithRepo(t *testing.T) {
 // Task 10.2: runPipeline synthesizes and saves questions tagged with env.Repo.
 func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 	provider := &scriptedProvider{responses: []string{
-		`[{"concept":"retry-pattern","source":"code","weight":0.9}]`,
+		`[{"concept":"retry-pattern","slug":"retry_pattern","source":"code","weight":0.9}]`,
 		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
 	}}
 	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
@@ -569,12 +670,113 @@ func TestPipelineSavesQuestionsTaggedWithRepo(t *testing.T) {
 	}
 }
 
+// Task 4.2 (concept-provenance): the concept batch fed through SynthesisContext
+// rides into SaveQuestion as question_concepts provenance rows — the same tx
+// as the question/choices/queued-event.
+func TestPipelineSavesProvenanceWithQuestion(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`[{"concept":"retry-pattern","slug":"retry_pattern","source":"code","weight":0.9},{"concept":"jitter","slug":"jitter_backoff","source":"code","weight":0.8}]`,
+		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func retry() {}")))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+
+	q := waitForUndeliveredQuestion(t, store, "/repo/test")
+
+	// The question carries N provenance rows matching the N fed concepts —
+	// the store feed is the synthesis feed, so count == number of sightings.
+	db := openRawDB(t)
+	var n int
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM question_concepts WHERE question_id = ?`, q.ID).Scan(&n); err != nil {
+		t.Fatalf("provenance count: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected 2 provenance rows (one per fed concept), got %d", n)
+	}
+	var slugs []any
+	rows, err := db.QueryContext(context.Background(),
+		`SELECT slug, weight FROM question_concepts WHERE question_id = ? ORDER BY id`, q.ID)
+	if err != nil {
+		t.Fatalf("provenance rows: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var slug string
+		var weight float64
+		if err := rows.Scan(&slug, &weight); err != nil {
+			t.Fatalf("scan provenance: %v", err)
+		}
+		if weight <= 0 || weight > 1 {
+			t.Fatalf("expected weight snapshot (0, 1], got %f", weight)
+		}
+		slugs = append(slugs, slug)
+	}
+	if len(slugs) != 2 {
+		t.Fatalf("expected 2 provenance slugs, got %v", slugs)
+	}
+}
+
+// Task 4.2 (concept-provenance): a failed synthesis (nil, nil) writes no
+// question and no provenance rows.
+func TestPipelineFailedSynthesisLeavesNoProvenance(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`[{"concept":"retry-pattern","slug":"retry_pattern","source":"code","weight":0.9}]`,
+		`this is not the JSON contract at all`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func retry() {}")))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		depth, err := store.QueueDepth(context.Background(), "/repo/test", "main")
+		if err != nil {
+			t.Fatalf("QueueDepth: %v", err)
+		}
+		if depth != 0 {
+			t.Fatal("expected zero queued questions (failed synthesis)")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Allow registry/first-seen rows (Save completed) but prove no question
+	// row and no provenance row exist.
+	db := openRawDB(t)
+	var questions, provenance int
+	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM questions`).Scan(&questions); err != nil {
+		t.Fatalf("count questions: %v", err)
+	}
+	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM question_concepts`).Scan(&provenance); err != nil {
+		t.Fatalf("count provenance: %v", err)
+	}
+	if questions != 0 || provenance != 0 {
+		t.Fatalf("expected no question/provenance rows after failed synthesis (questions=%d, provenance=%d)",
+			questions, provenance)
+	}
+}
+
 // Task 3.4: a daemon whose recall engine was built with difficulty "adaptive"
 // must inject a concrete difficulty directive into the synthesis prompt — the
 // literal "adaptive" never reaches the model.
 func TestPipelineAdaptiveConfigResolvesConcreteDifficulty(t *testing.T) {
 	provider := &scriptedProvider{responses: []string{
-		`[{"concept":"retry-pattern","source":"code","weight":0.9},{"concept":"jitter","source":"code","weight":0.8},{"concept":"circuit-breaker","source":"code","weight":0.7}]`,
+		`[{"concept":"retry-pattern","slug":"retry_pattern","source":"code","weight":0.9},{"concept":"jitter","slug":"jitter_backoff","source":"code","weight":0.8},{"concept":"circuit-breaker","slug":"circuit_breaker","source":"code","weight":0.7}]`,
 		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
 	}}
 	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
@@ -624,7 +826,7 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -665,7 +867,7 @@ func TestRecallNextBranchIsolation(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -695,7 +897,7 @@ func TestRecallNextBranchIsolation(t *testing.T) {
 // also assert that the branch column is populated by the pipeline.
 func TestPipelineSavesConceptsTaggedWithBranch(t *testing.T) {
 	provider := &scriptedProvider{responses: []string{
-		`[{"concept":"branch-isolation-concept","source":"code","weight":1.0}]`,
+		`[{"concept":"branch-isolation-concept","slug":"branch_isolation_concept","source":"code","weight":1.0}]`,
 	}}
 	_, store, baseURL := startTestDaemonWithPipeline(t, provider, nil)
 
@@ -775,19 +977,19 @@ func TestRecallStaleEndpoint(t *testing.T) {
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A1",
 		[]cache.Choice{
 		{Text: "x", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed A1: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A2",
 		[]cache.Choice{
 		{Text: "x", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed A2: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "bugfix-B", "stale B1",
 		[]cache.Choice{
 		{Text: "x", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed B1: %v", err)
 	}
 
@@ -873,7 +1075,7 @@ func seedAndClaim(t *testing.T, store *cache.Store, baseURL, question string, ch
 			Position:  i,
 		}
 	}
-	if err := store.SaveQuestion(ctx, "/repo/test", "main", question, cacheChoices, ""); err != nil {
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", question, cacheChoices, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
@@ -1001,7 +1203,7 @@ func TestMCPRecallNextWithholdsCorrectIndex(t *testing.T) {
 		{Text: "a", IsCorrect: false, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
 		{Text: "c", IsCorrect: true, Position: 2},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1046,7 +1248,7 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 		[]cache.Choice{
 		{Text: "right", IsCorrect: true, Position: 0},
 		{Text: "wrong", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1096,7 +1298,7 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1142,7 +1344,7 @@ func TestRecallRecentEnriched(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed q1: %v", err)
 	}
 	q1, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -1158,7 +1360,7 @@ func TestRecallRecentEnriched(t *testing.T) {
 		[]cache.Choice{
 		{Text: "x", IsCorrect: true, Position: 0},
 		{Text: "y", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed q2: %v", err)
 	}
 	q2, err := store.NextQuestion(ctx, "/repo/test", "main", "test")
@@ -1223,14 +1425,14 @@ func TestMCPRecallNextRepoScoped(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y's MCP question",
 		[]cache.Choice{
 		{Text: "c", IsCorrect: true, Position: 0},
 		{Text: "d", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
@@ -1268,19 +1470,19 @@ func TestMCPRecallStatusRepoScoped(t *testing.T) {
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X depth q",
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q",
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q2",
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed Y2: %v", err)
 	}
 
@@ -1311,7 +1513,7 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 		[]cache.Choice{
 		{Text: "right", IsCorrect: true, Position: 0},
 		{Text: "wrong", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1357,14 +1559,14 @@ func TestMCPQueueResourceRepoScoped(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y queue q",
 		[]cache.Choice{
 		{Text: "c", IsCorrect: true, Position: 0},
 		{Text: "d", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 
@@ -1402,7 +1604,7 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 		[]cache.Choice{
 		{Text: "a", IsCorrect: true, Position: 0},
 		{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	qX, err := store.NextQuestion(ctx, "/repo/x", "main", "test")
@@ -1418,7 +1620,7 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 		[]cache.Choice{
 		{Text: "c", IsCorrect: true, Position: 0},
 		{Text: "d", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 	qY, err := store.NextQuestion(ctx, "/repo/y", "main", "test")
@@ -1532,7 +1734,7 @@ func TestRecallNextDeliveryOmitsCorrectnessKey(t *testing.T) {
 		[]cache.Choice{
 			{Text: "wrong-a", IsCorrect: false, Position: 0},
 			{Text: "right", IsCorrect: true, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1564,7 +1766,7 @@ func TestSubmitSelectionAndSkipAtomicity(t *testing.T) {
 		[]cache.Choice{
 			{Text: "a", IsCorrect: true, Position: 0},
 			{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -1610,7 +1812,7 @@ func TestSkipTerminalGuardSimilarForSkipped(t *testing.T) {
 		[]cache.Choice{
 			{Text: "a", IsCorrect: true, Position: 0},
 			{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	q, err := s.NextQuestion(ctx, "/repo/test", "main", "test")

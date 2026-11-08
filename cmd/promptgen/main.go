@@ -30,6 +30,7 @@ import (
 // conceptIn mirrors the subset of cache.ConceptRow that fixtures supply.
 type conceptIn struct {
 	Concept string  `json:"concept"`
+	Slug    string  `json:"slug"`
 	Source  string  `json:"source"`
 	Weight  float64 `json:"weight"`
 }
@@ -59,7 +60,7 @@ func main() {
 	}
 	concepts := make([]cache.ConceptRow, len(in))
 	for i, c := range in {
-		concepts[i] = cache.ConceptRow{Concept: c.Concept, Source: c.Source, Weight: c.Weight}
+		concepts[i] = cache.ConceptRow{Concept: c.Concept, Slug: c.Slug, Source: c.Source, Weight: c.Weight}
 	}
 
 	policyBody := ""

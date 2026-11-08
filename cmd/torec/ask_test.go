@@ -284,7 +284,7 @@ func TestPostAnswerParsesResponse(t *testing.T) {
 		[]cache.Choice{
 			{Text: "correct-a", IsCorrect: true, Position: 0},
 			{Text: "wrong-b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -323,7 +323,7 @@ func TestPostSkipReturnsSkipMsg(t *testing.T) {
 		[]cache.Choice{
 			{Text: "a", IsCorrect: true, Position: 0},
 			{Text: "b", IsCorrect: false, Position: 1},
-		}, ""); err != nil {
+		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

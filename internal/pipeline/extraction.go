@@ -14,6 +14,12 @@ type ConceptFingerprint struct {
 	// Concept is the technical concept or skill identified (e.g., "Go interfaces", "SQL joins").
 	Concept string `json:"concept"`
 
+	// Slug is the machine-readable canonical identity the AI mints for this
+	// concept (e.g., "go_interfaces"). It identifies the concept across repos
+	// and branches; the prose stays the human-readable fingerprint. Missing
+	// or malformed slugs degrade the element, never the whole extraction.
+	Slug string `json:"slug"`
+
 	// Source identifies where the concept was extracted from: "user", "agent", or "code".
 	Source string `json:"source"`
 
@@ -56,6 +62,9 @@ func parseConceptResponse(raw string) []ConceptFingerprint {
 
 // ExtractConcepts derives concept fingerprints from a staged Git diff using the AI provider.
 // Pipeline logs error and continues gracefully on AI or parsing failure.
+// Elements without a slug are dropped with a logged warning (missing-slug
+// degradation per the extraction contract); malformed slugs fail later at the
+// store's write boundary.
 func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model string) ([]ConceptFingerprint, error) {
 	req := ExtractionRequest(diff, model)
 	raw, err := provider.Complete(ctx, req)
@@ -64,5 +73,17 @@ func ExtractConcepts(ctx context.Context, provider ai.Provider, diff, model stri
 		return []ConceptFingerprint{}, nil
 	}
 
-	return parseConceptResponse(raw), nil
+	concepts := parseConceptResponse(raw)
+	if len(concepts) == 0 {
+		return concepts, nil
+	}
+	kept := make([]ConceptFingerprint, 0, len(concepts))
+	for _, c := range concepts {
+		if c.Slug == "" {
+			log.Printf("[pipeline] dropping concept %q: no slug emitted", c.Concept)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	return kept, nil
 }
