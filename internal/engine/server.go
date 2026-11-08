@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -405,11 +406,25 @@ func (s *Server) handleAliasAdd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
+	// Validation failures are the caller's mistake (400); anything else from
+	// the store is a server problem (500).
 	if err := s.store.AddAlias(r.Context(), body.Alias, body.Target); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		if isAliasValidationError(err) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// isAliasValidationError reports whether the alias-add failure is a problem
+// with the requested mapping (shape, dangling target, alias-chained target)
+// rather than a store/storage failure.
+func isAliasValidationError(err error) bool {
+	var validation *cache.ErrAliasValidation
+	return errors.As(err, &validation)
 }
 
 func (s *Server) handleAliasRemove(w http.ResponseWriter, r *http.Request) {

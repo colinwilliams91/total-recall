@@ -45,12 +45,15 @@ func addAliasCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias, target := args[0], args[1]
-			body := fmt.Sprintf(`{"alias":%q,"target":%q}`, alias, target)
+			body, err := json.Marshal(map[string]string{"alias": alias, "target": target})
+			if err != nil {
+				return fmt.Errorf("serializing alias add: %w", err)
+			}
 			var out struct {
 				OK    bool   `json:"ok"`
 				Error string `json:"error"`
 			}
-			if err := aliasRequest(http.MethodPost, "/alias/add", body, &out); err != nil {
+			if err := aliasRequest(http.MethodPost, "/alias/add", string(body), &out); err != nil {
 				return err
 			}
 			if out.Error != "" {
@@ -68,12 +71,15 @@ func removeAliasCmd() *cobra.Command {
 		Short: "Delete an alias mapping",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body := fmt.Sprintf(`{"alias":%q}`, args[0])
+			body, err := json.Marshal(map[string]string{"alias": args[0]})
+			if err != nil {
+				return fmt.Errorf("serializing alias remove: %w", err)
+			}
 			var out struct {
 				OK      bool `json:"ok"`
 				Removed bool `json:"removed"`
 			}
-			if err := aliasRequest(http.MethodPost, "/alias/remove", body, &out); err != nil {
+			if err := aliasRequest(http.MethodPost, "/alias/remove", string(body), &out); err != nil {
 				return err
 			}
 			if !out.Removed {

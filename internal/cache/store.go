@@ -158,6 +158,15 @@ type Store struct {
 	db *sql.DB
 }
 
+// memoryDSN appends the per-connection pragmas the schema's declared
+// constraints rely on. SQLite defaults foreign_keys to OFF per connection, so
+// without this the REFERENCES clauses on concepts.slug, concept_aliases.target,
+// and question_concepts would be inert documentation; the DSN pragma turns
+// enforcement on at connect time, including inside pooled reconnects.
+func memoryDSN(path string) string {
+	return path + "?_pragma=foreign_keys(1)"
+}
+
 // Open opens (or creates) the memory store at $TR_HOME/memory.db, or
 // ~/.tr/memory.db when TR_HOME is unset. Returns a non-nil *Store on success.
 //
@@ -181,7 +190,7 @@ func Open() (*Store, error) {
 
 	memoryPath := filepath.Join(dir, defaultDBFilename)
 
-	db, err := sql.Open("sqlite", memoryPath)
+	db, err := sql.Open("sqlite", memoryDSN(memoryPath))
 	if err != nil {
 		return nil, fmt.Errorf("opening memory store at %s: %w", memoryPath, err)
 	}
@@ -325,13 +334,13 @@ func resolveIdentity(ctx context.Context, tx *sql.Tx, slug, prose string) (strin
 		return "", false
 	}
 
-	// Mint on first sighting; reuse (first_seen + first-seen prose untouched)
-	// on later ones.
+	// Mint on first sighting (first_seen/prose never touched on reuse — the
+	// ON CONFLICT DO NOTHING clause makes later sightings no-ops).
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO concept_registry (slug, prose, first_seen)
-VALUES (?, ?, COALESCE((SELECT first_seen FROM concept_registry WHERE slug = ?), ?))
+VALUES (?, ?, ?)
 ON CONFLICT(slug) DO NOTHING`,
-		slug, prose, slug, time.Now().UTC()); err != nil {
+		slug, prose, time.Now().UTC()); err != nil {
 		log.Printf("[store] registry mint for %q: %v", slug, err)
 		return "", false
 	}
@@ -356,12 +365,21 @@ type Alias struct {
 	Target string
 }
 
-// AddAlias maps alias onto target after validating both the alias shape and
-// that the target already exists in the registry. A dangling target is
-// rejected with an explicit error (never created as a silent dangling row).
+// ErrAliasValidation wraps every alias-authoring rejection that is a problem
+// with the requested mapping itself (malformed shape, nonexistent target, or
+// a target that is itself an alias). HTTP layers translate this to a
+// request-level error; anything else from AddAlias is a store failure.
+type ErrAliasValidation struct{ Reason string }
+
+func (e *ErrAliasValidation) Error() string { return e.Reason }
+
+// AddAlias maps alias onto target after validating the alias shape and that
+// the target is a real registry identity — never another alias (see the
+// flat-structure note below). A dangling target is rejected with an explicit
+// error (never created as a silent dangling row).
 func (s *Store) AddAlias(ctx context.Context, alias, target string) error {
 	if !IsValidSlug(alias) {
-		return fmt.Errorf("invalid alias %q: want [a-z0-9_]+", alias)
+		return &ErrAliasValidation{Reason: fmt.Sprintf("invalid alias %q: want [a-z0-9_]+", alias)}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -374,8 +392,26 @@ func (s *Store) AddAlias(ctx context.Context, alias, target string) error {
 		`SELECT COUNT(*) FROM concept_registry WHERE slug = ?`, target).Scan(&exists); err != nil {
 		return fmt.Errorf("reading registry for target %q: %w", target, err)
 	}
-	if exists == 0 {
-		return fmt.Errorf("cannot add alias %q: target %q has no registry identity", alias, target)
+	// Flat structure: aliases never chain. Resolution is exactly one hop by
+	// design, so adding an alias that points at another alias would leave the
+	// original alias resolving to a stale identity with no warning. Such a
+	// target must be repaired first — re-point every alias at the intended
+	// final canonical slug. Checked BEFORE the dangling-target case: an alias
+	// name is never a registry row, so the dangling check would otherwise
+	// shadow this with a less accurate message.
+	var aliased int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM concept_aliases WHERE alias = ?`, target).Scan(&aliased); err != nil {
+		return fmt.Errorf("reading aliases for target %q: %w", target, err)
+	}
+	if aliased > 0 {
+		return &ErrAliasValidation{Reason: fmt.Sprintf(
+			"cannot add alias %q: target %q is itself an alias — point %q at the registry slug behind %q instead",
+			alias, target, alias, target)}
+	}
+	if exists == 0 && aliased == 0 {
+		return &ErrAliasValidation{Reason: fmt.Sprintf(
+			"cannot add alias %q: target %q has no registry identity", alias, target)}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO concept_aliases (alias, target) VALUES (?, ?)`, alias, target); err != nil {

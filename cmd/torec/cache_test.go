@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1256,6 +1257,12 @@ func TestAddAliasValidation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected explicit error adding alias with nonexistent target")
 	}
+	// Authoring rejections are classifier-visible: HTTP layers need to tell
+	// "the mapping itself is wrong" (400) apart from store failures (500).
+	var validation *cache.ErrAliasValidation
+	if !errors.As(err, &validation) {
+		t.Fatalf("expected dangling-target rejection to be a validation error, got %T: %v", err, err)
+	}
 	if !strings.Contains(err.Error(), "no registry identity") {
 		t.Fatalf("expected dangling-target error, got %v", err)
 	}
@@ -1281,6 +1288,21 @@ func TestAddAliasValidation(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Alias != "real_concept_alias" || list[0].Target != "real_concept" {
 		t.Fatalf("unexpected alias listing: %+v", list)
+	}
+
+	// Flat structure: a target that is itself an alias is rejected —
+	// resolution never chains, so this target must be repaired first.
+	if err := s.AddAlias(ctx, "second_level_alias", "real_concept_alias"); err == nil {
+		t.Fatal("expected rejection adding an alias whose target is another alias")
+	} else if !strings.Contains(err.Error(), "is itself an alias") {
+		t.Fatalf("expected flat-structure guidance, got %v", err)
+	}
+	chained, err := s.Aliases(ctx)
+	if err != nil {
+		t.Fatalf("Aliases after rejection: %v", err)
+	}
+	if len(chained) != 1 {
+		t.Fatalf("expected rejected chain-add to leave aliases untouched, got %+v", chained)
 	}
 	removed, err := s.RemoveAlias(ctx, "real_concept_alias")
 	if err != nil || !removed {
@@ -1378,6 +1400,31 @@ func TestRecentCarriesResolvedSlug(t *testing.T) {
 	}
 	if !sawAliasTarget {
 		t.Fatalf("expected alias sighting to read back with target slug, got %+v", recent)
+	}
+}
+
+// TestForeignKeyEnforcementIsLive proves the declared FKs are enforced on the
+// store's own connection: provenance rows for slugs with no registry identity
+// fail loudly instead of persisting orphans.
+func TestForeignKeyEnforcementIsLive(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "dangling provenance question",
+		buildChoices([]string{"a", "b"}, 0), "", []cache.ConceptRef{
+			{Slug: "never_minted", Weight: 0.9},
+		}); err == nil {
+		t.Fatal("expected dangling provenance slug to be rejected by FK enforcement")
+	}
+
+	// Nothing was written by the rejected save.
+	db := openRawDB(t)
+	var questionRows int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM questions`).Scan(&questionRows); err != nil {
+		t.Fatalf("count questions: %v", err)
+	}
+	if questionRows != 0 {
+		t.Fatalf("expected rejected save to write nothing, got %d question rows", questionRows)
 	}
 }
 

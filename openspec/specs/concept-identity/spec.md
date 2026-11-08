@@ -49,7 +49,7 @@ The system SHALL validate at the write boundary that every persisted slug matche
 ---
 
 ### Requirement: Aliases are an explicit pressure valve, not a matching system
-An alias table SHALL map an explicit alternate slug onto an existing registry slug. Alias resolution SHALL occur during identity resolution at write time (a sighting whose slug is an alias lands on the target identity). Aliases SHALL be exact-match lookups — adding an alias never introduces fuzziness. The alias source SHALL be validated at write time: an alias target MUST already exist in the registry for its repo scope. The authoring surface for aliases MAY begin as a manual/user-command flow; automated alias generation is out of scope for this change (see design open item — the alias *writer* experience needs dedicated planning).
+An alias table SHALL map an explicit alternate slug onto an existing registry slug. Alias resolution SHALL occur during identity resolution at write time (a sighting whose slug is an alias lands on the target identity). Aliases SHALL be exact-match lookups — adding an alias never introduces fuzziness — and the structure SHALL stay flat: aliases never chain to other aliases (resolution is exactly one hop by design; an alias-chained target leaves the original alias resolving to a stale identity). Alias authoring SHALL be validated at write time: the alias source MUST be slug-shaped, and the target MUST be a registry identity that is not itself an alias name. The authoring surface MAY begin as a manual/user-command flow; automated alias generation is out of scope for this change.
 
 #### Scenario: Alias resolution at write time
 - **WHEN** alias `joining_tables_in_sql` → `sql_joins` exists and a sighting arrives with slug `joining_tables_in_sql`
@@ -58,6 +58,10 @@ An alias table SHALL map an explicit alternate slug onto an existing registry sl
 #### Scenario: Alias targeting a nonexistent identity is rejected
 - **WHEN** an alias row is created targeting a slug absent from the registry
 - **THEN** the alias creation is rejected with an explicit error; no dangling alias rows exist
+
+#### Scenario: Alias targeting another alias is rejected
+- **WHEN** an alias row is created whose target is itself an existing alias name
+- **THEN** the alias creation is rejected with an explicit error that names the existing alias; the alias table is left unchanged and the user must re-point at the registry slug behind the target
 
 ---
 
