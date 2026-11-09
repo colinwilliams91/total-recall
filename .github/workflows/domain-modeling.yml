@@ -34,11 +34,11 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: opencode-go/kimi-k2.6
+          model: opencode-go/glm-5.3-flash
           use_github_token: true
           prompt: |
-            Load the domain-modeling skill (the repo-local copy at
-            .opencode/skills/domain-modeling) via the skill tool, then audit this
+            Load the total-recall-domain-modeling skill (the repo-local copy at
+            .opencode/skills/total-recall-domain-modeling) via the skill tool, then audit this
             pull request's diff against base branch origin/main:
 
               git fetch origin main --quiet
