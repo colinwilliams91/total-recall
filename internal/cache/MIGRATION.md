@@ -38,3 +38,15 @@ On an existing `memory.db` with the prior schema, the `CREATE TABLE IF NOT
 EXISTS concepts` is a no-op (the prior table already exists), the new
 tables are created but unlinkable, and the application will misbehave.
 Hence the teardown requirement.
+
+## Non-teardown: AUTOINCREMENT dropped from integer keys
+
+Every `INTEGER PRIMARY KEY AUTOINCREMENT` lost its keyword (rowid allocation
+is already unique and self-assigning; the keyword only costs a
+`sqlite_sequence` write per insert). This is the one schema edit that is NOT
+a teardown: `CREATE TABLE IF NOT EXISTS` leaves an existing table's
+declaration untouched, so an older database keeps its sequence-backed ids and
+behaves exactly as before, while a freshly created one skips the bookkeeping.
+Nothing in the store depends on the difference — no row of these tables is
+ever deleted, and id-based ordering (`selections` hydration) only needs
+insert order, which plain rowid allocation still provides.

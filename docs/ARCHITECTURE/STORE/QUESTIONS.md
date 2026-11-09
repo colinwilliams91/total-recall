@@ -2,7 +2,7 @@
 
 ```sql
 CREATE TABLE IF NOT EXISTS questions (
-    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    id              INTEGER  PRIMARY KEY,
     question_type   TEXT     NOT NULL DEFAULT 'multiple_choice',
                     -- CHECK ('multiple_choice','multi_select')
     status          TEXT     NOT NULL DEFAULT 'queued',
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS questions (
 );
 
 CREATE TABLE IF NOT EXISTS choices (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     position    INTEGER NOT NULL,           -- display order (recall shuffle)
     text        TEXT    NOT NULL,
@@ -22,14 +22,14 @@ CREATE TABLE IF NOT EXISTS choices (
 );
 
 CREATE TABLE IF NOT EXISTS selections (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     choice_id   INTEGER NOT NULL REFERENCES choices(id)   ON DELETE CASCADE,
     UNIQUE (question_id, choice_id)         -- one row per user pick
 );
 
 CREATE TABLE IF NOT EXISTS question_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     event_type  TEXT    NOT NULL,
                 -- CHECK ('queued','delivered','answered','skipped')
@@ -51,5 +51,10 @@ CREATE TABLE IF NOT EXISTS question_events (
   datetime columns.
 - `repo` and `branch` are NOT NULL on every question row; no cross-repo or
   cross-branch pooling.
+- `id` is a plain rowid alias — `INTEGER PRIMARY KEY` without `AUTOINCREMENT`.
+  The type already guarantees uniqueness and auto-assignment; the keyword only
+  adds a `sqlite_sequence` write to keep deleted ids from being reused, and
+  nothing here deletes rows. It lands on fresh databases only: an existing
+  `memory.db` keeps its old declaration and behaves the same either way.
 - Schema changes are manual teardowns: `CREATE TABLE IF NOT EXISTS` cannot
   reshape an existing table. See `internal/cache/MIGRATION.md`.

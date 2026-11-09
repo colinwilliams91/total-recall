@@ -19,6 +19,23 @@ The cache SHALL be stored in a single SQLite file at `~/.tr/memory.db`. `cache.O
 
 ---
 
+### Requirement: Integer primary keys are plain rowid aliases, not AUTOINCREMENT sequences
+Every integer surrogate key in the `memory.db` schema (`concepts`, `questions`, `choices`, `selections`, `question_events`, `question_concepts`) SHALL be declared `INTEGER PRIMARY KEY` with no `AUTOINCREMENT` keyword. `INTEGER PRIMARY KEY` is already the rowid alias — unique and auto-assigned by SQLite's type rule — while `AUTOINCREMENT` only adds a `sqlite_sequence` read/write per insert to protect ids from reuse after a delete. The store never deletes rows — the declared `ON DELETE CASCADE` edges have no delete path to fire them — so plain rowid allocation still hands out ids in insert order, which is all `selections` hydration (`ORDER BY id`) needs; queue order rides the `queued` event's `occurred_at` and choice order rides `position`. Any future integer surrogate key SHALL follow the same rule.
+
+#### Scenario: Fresh store carries no sequence bookkeeping
+- **WHEN** `cache.Open()` creates a new `memory.db`
+- **THEN** `sqlite_master` has no `sqlite_sequence` table and no stored `CREATE TABLE` statement for a user table mentions `AUTOINCREMENT`
+
+#### Scenario: Keys are still minted without caller-supplied ids
+- **WHEN** concepts, questions, choices, selections, events, and provenance rows are inserted with no `id` value
+- **THEN** every row lands with a positive unique id, and `SaveQuestion` reads the new question's id back from the insert to key its child rows
+
+#### Scenario: A stale AUTOINCREMENT database keeps working
+- **WHEN** a `memory.db` created by a pre-removal build (tables declared with `AUTOINCREMENT`) is opened by the new build
+- **THEN** `CREATE TABLE IF NOT EXISTS` is a no-op against those tables, rows keep their sequence-backed ids, and every store operation behaves identically — the removal is a fresh-database effect, not a data break
+
+---
+
 ### Requirement: Concepts are saved per-repo and per-branch
 `Store.Save(ctx, repo, branch, concepts)` SHALL insert concept fingerprints with both the `repo` column and the `branch` column set to the values supplied by the hook envelope (the absolute repo path from `git rev-parse --show-toplevel` and the branch name from `git rev-parse --abbrev-ref HEAD`). Both `repo` and `branch` MUST be non-empty. If either is empty, `Save` SHALL return early (no-op) without inserting and SHALL log `[store] skipping insert: empty repo or branch`. No "global pool" semantics exist — empty values are not stored.
 
