@@ -40,7 +40,7 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ## Conventions
 
-- **Domain model**: the ubiquitous-language glossary is `GLOSSARY.md` at the repo root — vocabulary only, no implementation details; maintained by the repo-local `/domain-modeling` skill (`.opencode/skills/domain-modeling/`, adapted from the upstream skill for this repo's conventions)
+- **Domain model**: the ubiquitous-language glossary is `GLOSSARY.md` at the repo root — vocabulary only, no implementation details; maintained by the repo-local `/total-recall-domain-modeling` skill (`.opencode/skills/total-recall-domain-modeling/`, adapted from the upstream `domain-modeling` skill for this repo's conventions; renamed to coexist with the global install)
 - **ADRs**: live in `docs/adr/` under `NNNN-slug.md`; the three qualification tests, house format, OpenSpec ownership split (specs = behavior, change design = full design, ADR = the decision/bet), and append-only rules are defined in [docs/adr/README.md](docs/adr/README.md). An advisory CI gate (`.github/workflows/domain-modeling.yml`) runs the skill over PR diffs and posts findings; acting on them is the developer's responsibility
 - **No CGo**: SQLite is `modernc.org/sqlite`. Do not introduce `mattn/go-sqlite3` or any CGo dependency
 - **Conventional commits**

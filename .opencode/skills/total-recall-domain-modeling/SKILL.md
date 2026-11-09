@@ -1,5 +1,5 @@
 ---
-name: domain-modeling
+name: total-recall-domain-modeling
 description: Build and sharpen this project's domain model. Use when discussing codebase terminology, writing or editing GLOSSARY.md, or recording or editing an ADR in this repo.
 ---
 
@@ -7,7 +7,7 @@ description: Build and sharpen this project's domain model. Use when discussing 
 
 Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
-This is the repo-local copy of the `domain-modeling` skill (from mattpocock/skills), adapted for this repo's house conventions — notably the ADR procedure, which is defined in-repo at [docs/adr/README.md](../../../docs/adr/README.md) rather than the upstream generic format.
+This is the repo-local copy of the `domain-modeling` skill (from mattpocock/skills), renamed to `total-recall-domain-modeling` so it can coexist with the unmodified global install, and adapted for this repo's house conventions — notably the ADR procedure, which is defined in-repo at [docs/adr/README.md](../../../docs/adr/README.md) rather than the upstream generic format.
 
 ## File structure
 
