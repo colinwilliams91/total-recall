@@ -40,6 +40,8 @@ Run order: `go build ./... && go vet ./... && go test ./...`
 
 ## Conventions
 
+- **Domain model**: the ubiquitous-language glossary is `GLOSSARY.md` at the repo root — vocabulary only, no implementation details; maintained by the repo-local `/domain-modeling` skill (`.opencode/skills/domain-modeling/`, adapted from the upstream skill for this repo's conventions)
+- **ADRs**: live in `docs/adr/` under `NNNN-slug.md`; the three qualification tests, house format, OpenSpec ownership split (specs = behavior, change design = full design, ADR = the decision/bet), and append-only rules are defined in [docs/adr/README.md](docs/adr/README.md). An advisory CI gate (`.github/workflows/domain-modeling.yml`) runs the skill over PR diffs and posts findings; acting on them is the developer's responsibility
 - **No CGo**: SQLite is `modernc.org/sqlite`. Do not introduce `mattn/go-sqlite3` or any CGo dependency
 - **Conventional commits**
 - **Prompt assets** live under `assets/prompts/` — loaded by the `assets` package at Engine init via `//go:embed` with a runtime override at `<data-dir>/prompts/<name>.md` (`$TR_HOME` when set, else `~/.tr`; edit markdown + restart daemon to tune; no recompile). The shipped asset is the question-generation policy; `torec asset show|reset|sync` (no-arg forms target that sole asset) and the `prompt assets:` section of `torec config show` make overrides observable; stale overrides warn at daemon startup (`prompt-asset.drift-warning-days`, default 90)

@@ -1,0 +1,67 @@
+# Advisory CI gate: runs the repo-local domain-modeling skill over the PR diff
+# and posts found violations as PR feedback. Non-blocking by design: the job
+# never fails the build; the developer stays responsible for acting on findings.
+#
+# Requires one secret: OPENCODE_API_KEY (Settings -> Secrets and variables ->
+# Actions). The model below uses the opencode-go subscription provider; change
+# `model:` if the provider/model routing changes.
+name: Domain model check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  domain-modeling:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run OpenCode domain-modeling audit
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode-go/kimi-k2.6
+          use_github_token: true
+          prompt: |
+            Load the domain-modeling skill (the repo-local copy at
+            .opencode/skills/domain-modeling) via the skill tool, then audit this
+            pull request's diff against base branch origin/main:
+
+              git fetch origin main --quiet
+              git diff origin/main...HEAD
+
+            Audit only for domain-modeling findings; do not review code quality
+            or mechanics. Report as a concise list:
+
+            1. Vocabulary conflicts: diffs whose language contradicts definitions
+               or _Avoid_ words in GLOSSARY.md, or that introduce a second name
+               for an existing term.
+            2. Fuzzy/overloaded terms: vague words the diff relies on that
+               GLOSSARY.md should pin, including brand-new terms crystallized
+               in this diff (types, tables, flag names, docs) that are missing
+               from GLOSSARY.md.
+            3. Contradiction with code: diff states how something works and the
+               surrounding code or specs disagree.
+            4. Missing ADR: a decision in the diff that passes all three house
+               tests (hard to reverse, surprising without context, real
+               trade-off) with no ADR in docs/adr/ recording it — or an added/
+               edited ADR that breaks the house procedure in docs/adr/README.md.
+
+            For each finding give file:line, the violating text, and the
+            one-line fix the developer should make. If there are no findings,
+            say so in one line. Do not modify any files; do not commit anything;
+            findings only — acting on them is the developer's responsibility.
