@@ -34,7 +34,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: glm-5.3-flash
+          model: opencode-go/glm-5.3-flash
           use_github_token: true
           prompt: |
             Load the total-recall-domain-modeling skill (the repo-local copy at
