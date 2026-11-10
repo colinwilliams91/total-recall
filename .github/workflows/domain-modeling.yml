@@ -1,6 +1,11 @@
-# Advisory CI gate: runs the repo-local domain-modeling skill over the PR diff
-# and posts found violations as PR feedback. Non-blocking by design: the job
-# never fails the build; the developer stays responsible for acting on findings.
+# Blocking CI gate: runs the repo-local domain-modeling skill over the PR diff,
+# posts found violations as PR feedback, and FAILS the job when there are
+# findings or when the audit cannot run. To enforce at the merge queue, require
+# the `domain-modeling` job under Settings → Branches → protection rules for
+# `main` → required status checks; the job handles its own failure signaling.
+#
+# Findings are not fixable by robotics: the developer must resolve them (fix the
+# glossary, code, or write the ADR, as the finding recommends) and re-run.
 #
 # Requires one secret: OPENCODE_API_KEY (Settings -> Secrets and variables ->
 # Actions). The model below uses the opencode-go subscription provider; change
@@ -20,7 +25,6 @@ permissions:
 jobs:
   domain-modeling:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,5 +67,45 @@ jobs:
 
             For each finding give file:line, the violating text, and the
             one-line fix the developer should make. If there are no findings,
-            say so in one line. Do not modify any files; do not commit anything;
-            findings only — acting on them is the developer's responsibility.
+            say so in one line and report finding category 1-4 as "none".
+
+            The developer is responsible for making the changes; you must not
+            modify any files or commit anything. Findings only.
+
+            The last line of your reply MUST be exactly one of:
+
+              DOMAIN-MODEL-VERDICT: PASS   (no findings at all)
+              DOMAIN-MODEL-VERDICT: FAIL   (one or more findings of any kind)
+
+            A downstream automation enforces this verdict; do not omit or
+            decorate the marker line.
+
+      - name: Enforce domain-modeling verdict
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          body="$(gh api "repos/${{ github.repository }}/issues/${{ github.event.number }}/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and .created_at > "${{ github.run_started_at }}")] | sort_by(.created_at) | last | .body' 2>/dev/null || true)"
+
+          if [ -z "${body:-}" ]; then
+            echo "No audit comment was posted after this run started; the audit itself likely failed." >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$body"
+
+          if grep -q 'DOMAIN-MODEL-VERDICT: FAIL' <<<"$body"; then
+            echo "::error::Domain-modeling audit found violations (see comment above); resolve them and re-run." >&2
+            exit 1
+          fi
+
+          if grep -q 'DOMAIN-MODEL-VERDICT: PASS' <<<"$body"; then
+            echo 'Audit passed.'
+            exit 0
+          fi
+
+          echo "Audit comment present but carries no PASS/FAIL verdict marker; treat as inconclusive and refetch or re-run." >&2
+          exit 1

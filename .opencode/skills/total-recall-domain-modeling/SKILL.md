@@ -18,9 +18,12 @@ This repo is single-context:
 ├── GLOSSARY.md
 ├── docs/
 │   └── adr/
+│       ├── README.md
 │       ├── 0001-question-storage-schema.md
 │       └── ...
-└── src/
+├── cmd/
+│   └── torec/
+└── internal/
 ```
 
 `GLOSSARY.md` is the one glossary at the repo root; the repo has deliberately opted out of the multi-contex GLOSSARY-MAP layering. If a genuine second bounded context ever shows up, raise it as a discussion before inventing the structure.

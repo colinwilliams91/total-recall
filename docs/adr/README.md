@@ -71,4 +71,4 @@ Specs describe how the loader works; they do not enshrine in prose that the capa
 
 ## Existing ADRs
 
-`0001`–`0003` predate this write-up but follow it exactly in form and spirit; they need no migration and serve as the canonical examples of house style.
+`0001`–`0003` predate this write-up and follow it in form and spirit. One known variance: `0002` predates the "Full design → openspec change" footer convention and hands its context entirely to prose. Treat them as canonical examples; do not retrofit the variance.
