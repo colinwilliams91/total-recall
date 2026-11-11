@@ -11,7 +11,7 @@
 
 ## 2. Mastery aggregation (`internal/cache`)
 
-- [ ] 2.1 Add read-only stats interface + store-backed query joining `'answered'` `question_events` → per-question correctness (selections vs `choices.is_correct`) → linked concept ids, scoped repo+branch, window = last N answered. Returns per-question outcome rows (question id, correct bool, targeted concept slugs). Skips excluded from ratios
+- [ ] 2.1 Add read-only stats interface + store-backed query joining `'answered'` `question_events` → per-question correctness (selections vs `choices.is_correct`) → linked concepts via `question_concepts` (canonical registry slugs). Tier window = last N answered, scoped repo+branch; per-concept tallies keyed by registry slug aggregate across repos/branches (read-time policy only — no write-side scoping change). Returns per-question outcome rows (question id, correct bool, targeted concept slugs). Skips excluded from ratios
 - [ ] 2.2 Windowed aggregate helper: correctness ratio + answered count over the window; per-concept miss/hit tallies (concept → misses, hits, last-answered-at) honoring the focus cap target granularity
 - [ ] 2.3 Persist resolution metadata at queue time: extend the engine's `SaveQuestion` path so the `'queued'` question_events row's `payload` JSON carries `{"resolved_difficulty": "<level>", "signals": [...]}` — the deferred task 6.3 of `adaptive-difficulty`; no CHECK/table changes required
 - [ ] 2.4 Tests `cache_test.go`: correctness join over seeded answered questions; skip exclusion; payload persistence on the queued event; empty-history returns zero stats without error

@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: `Resolver` interface exposes difficulty selection as a separable concern from synthesis prompt construction
-The `internal/recall/difficulty` package exposes a `Resolver` interface with a single method `Resolve(ctx context.Context, synth recall.SynthesisContext) Resolution`. The returned `Resolution` SHALL carry `Difficulty` — one of `"easy"`, `"intermediate"`, `"hard"`, or `""` (the empty string indicating the resolver elected no preference and the caller should substitute a default) — and `FocusConcepts`, an optional list of concept identifiers biased for synthesis content targeting (weak-concept repetition; empty when the resolver has no content steer). `Synthesize` and `SynthesisRequest` consume only the `Resolution` struct; they do not inspect the heuristics or signals that produced it.
+The `internal/recall/difficulty` package exposes a `Resolver` interface with a single method `Resolve(ctx context.Context, synth recall.SynthesisContext) Resolution`. The returned `Resolution` SHALL carry `Difficulty` — one of `"easy"`, `"intermediate"`, `"hard"`, or `""` (the empty string indicating the resolver elected no preference and the caller should substitute a default) — and `FocusConcepts`, an optional list of canonical registry slugs biased for synthesis content targeting (weak-concept repetition; empty when the resolver has no content steer). `Synthesize` and `SynthesisRequest` consume only the `Resolution` struct; they do not inspect the heuristics or signals that produced it.
 
 #### Scenario: Resolver returns a concrete difficulty
 - **WHEN** any `Resolver` implementation's `Resolve` is called with a valid `SynthesisContext`
@@ -12,6 +12,25 @@ The `internal/recall/difficulty` package exposes a `Resolver` interface with a s
 #### Scenario: Resolver is stateless across calls
 - **WHEN** the same `Resolver` instance is called twice in a row with the same `SynthesisContext`
 - **THEN** both calls return the same `Resolution` values; the resolver does not mutate per-call state
+
+---
+
+### Requirement: `Static` resolver returns the configured value verbatim, delegating to `Adaptive` only when the value is `"adaptive"`
+`Static{value string}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST return `Resolution{Difficulty: s.value, FocusConcepts: nil}` verbatim when `s.value != "adaptive"` and MUST return `Adaptive{}.Resolve(ctx, synth)` otherwise. Empty string SHALL be preserved as-is (the `Synthesize` caller substitutes `"intermediate"` as a safety net); unknown strings (`"foo"`, typos) MUST be returned verbatim and propagate to the prompt — this is a defense-in-depth concern, mitigated by config validation in the loader.
+
+#### Scenario: Static with concrete difficulty returns verbatim
+- **WHEN** `Static{value: "hard"}.Resolve(ctx, synth)` is called with any `synth`
+- **THEN** `Resolution.Difficulty` is `"hard"` and `Resolution.FocusConcepts` is empty, regardless of `synth` content
+
+#### Scenario: Static with adaptive delegates to Adaptive
+- **WHEN** `Static{value: "adaptive"}.Resolve(ctx, synth)` is called with `synth` carrying high-cluster signals (3 concepts w/ avg weight 0.9)
+- **THEN** the returned `Resolution` matches what `Adaptive{}.Resolve(ctx, synth)` would return for the same `synth` (`"hard"` difficulty, empty focus, per the high-cluster heuristic)
+
+#### Scenario: Static with empty string returns empty
+- **WHEN** `Static{value: ""}.Resolve(ctx, synth)` is called with any `synth`
+- **THEN** `Resolution.Difficulty` is `""` with empty focus; the caller (`Synthesize`) substitutes `"intermediate"` before invoking `SynthesisRequest`
+
+---
 
 ### Requirement: `Adaptive` resolver applies a first-match heuristic table over `SynthesisContext` signals
 `Adaptive{}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST evaluate the following heuristics in order; the first match wins and produces the returned difficulty:
