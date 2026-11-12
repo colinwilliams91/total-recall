@@ -156,7 +156,7 @@ run_arm "fallback" "tidy: minor comment touch-up" 1
 # The performance resolver reads windowed answered history. These companion
 # arms seed it through the same HTTP contract the ask TUI drives (claim via
 # GET /recall/next, answer via POST /recall/select), then fire a final
-# synthesis so the log shows the tier-shifted resolution.
+# synthesis so the log shows the level-shifted resolution.
 #
 # The delivery wire format deliberately withholds which choice is correct
 # (anti-leak contract), so the correct position is read from the scratch

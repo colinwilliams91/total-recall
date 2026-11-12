@@ -28,6 +28,12 @@ _Avoid_: "tier" as a synonym for the level itself
 **Tier**:
 A one-level movement of the Difficulty Level driven by learner evidence — escalate or de-escalate, never a fourth value. The `learner-tier` signal marks that the rule fired.
 
+**Baseline**:
+The commit-signal resolution (Difficulty Level plus fired signals) the Performance resolver starts from; learner evidence only modulates it. "Commit-signal baseline" anchors the resolver composition.
+
+**Focus Concept**:
+A demonstrated-weakness concept the resolver ranks to lead the synthesis feed for one synthesis call. Biasing reorders existing feed rows and never invents content; a Focus Concept absent from the current feed is dropped.
+
 **Working Surface**:
 The repo+branch pair a synthesis is scoped to. Sightings and Questions scope to it, and the difficulty tier window reads it; weakness tallies key on user-scoped concept identity and may span surfaces (ADR 0004).
 _Avoid_: "surface" without the working- qualifier when scoping matters
@@ -36,6 +42,12 @@ _Avoid_: "surface" without the working- qualifier when scoping matters
 
 **Learner**:
 The user as seen through recorded Question outcomes — the evidence base the performance resolver reads. Not a persona: the recorded answered history is the Learner.
+
+**Miss**:
+The incorrect outcome of an Answered Question, tallied per linked concept through the provenance join. Misses drive Focus Concept ranking.
+
+**Hit**:
+The correct outcome of an Answered Question, tallied per linked concept through the provenance join.
 
 **Selection**:
 One user pick: the (Question, Choice) pair recorded when a user answers. A multi-select Question yields multiple Selections; skipping yields none.

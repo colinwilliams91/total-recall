@@ -41,7 +41,7 @@
 
 ## 6. Observability + spikes
 
-- [x] 6.1 `scripts/e2e/adaptive-ab.sh`/`.ps1`: extend or add a companion harness arm that seeds answered history (correct-heavy and miss-heavy branches) via the daemon/HTTP capture flow and shows the tier-shifted log lines and focus-driven captures
+- [x] 6.1 `scripts/e2e/adaptive-ab.sh`/`.ps1`: extend or add a companion harness arm that seeds answered history (correct-heavy and miss-heavy branches) via the daemon/HTTP capture flow and shows the level-shifted log lines and focus-driven captures
 - [x] 6.2 `AGENTS.md` difficulty-resolution row: note the `Resolution` return type and the `Performance` wrapper over the heuristics table
 - [x] 6.3 `docs/CORE/DATA_ANALYSIS.md` §4 note: extend the implemented-mechanism paragraph to record the learner-driven composition and the demotion of commit-shape signals to second class
 - [x] 6.4 Log-line unit assertions exist covering: `cold-start`, `learner-tier` (escalate and de-escalate), and the baseline (no history) cases

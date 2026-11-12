@@ -48,7 +48,7 @@
 
 #### Scenario: Focus concepts bias the user turn ordering
 - **WHEN** the resolver's `Resolution` carries `FocusConcepts = ["circuit-breaker"]` and `synth.Concepts` contains `["retry", "circuit-breaker", "jitter"]`
-- **THEN** the user turn leads with a "Concepts the developer is currently working through" section listing `circuit-breaker`, and the working-with list orders `circuit-breaker` ahead of `retry` and `jitter` (biasing is reordering, not synthesis-input invention)
+- **THEN** the user turn leads with a "Concepts the developer is currently working through" section listing `circuit-breaker`, and the working-with list contains only `retry` and `jitter` — the focused row moves to the lead section rather than being duplicated (biasing is reordering, not synthesis-input invention)
 
 #### Scenario: Focus unknown to the current context is ignored
 - **WHEN** `FocusConcepts` names a concept absent from `synth.Concepts`

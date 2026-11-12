@@ -11,8 +11,9 @@ const (
 	// adaptiveDispersedWeight is re-anchored against the observed extraction
 	// distribution (weights ~0.5–0.9, per the 2026-09-28 spike): the prior
 	// 0.3 floor never fired in production traffic. 0.55 sits above the
-	// observed floor, so an all-low-confidence concept spray reaches the
-	// easy tier while the 0.6+ bulk still escalates via all-code/high-cluster.
+	// observed floor, so an all-low-confidence concept spray moves the
+	// level down to easy while the 0.6+ bulk still escalates via
+	// all-code/high-cluster.
 	adaptiveDispersedWeight           = 0.55
 	adaptiveMinHighClusterConcepts    = 3
 	adaptiveMinDispersedConcepts      = 5
