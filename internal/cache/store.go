@@ -19,9 +19,16 @@ const (
 	defaultDBFilename = "memory.db"
 	recentLimit       = 50
 
+	// INTEGER PRIMARY KEY is the rowid alias in SQLite: unique and
+	// auto-assigned by definition. AUTOINCREMENT is deliberately absent — it
+	// buys nothing but a per-insert sqlite_sequence write that guards ids
+	// against reuse after a delete, and these tables are append-only. The
+	// ordering that matters rides on real keys: queue order is the 'queued'
+	// event's occurred_at, choice order is position, selection order is id —
+	// which stays insert-ordered without deletes.
 	createConceptsTableSQL = `
 CREATE TABLE IF NOT EXISTS concepts (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id        INTEGER PRIMARY KEY,
   slug      TEXT    NOT NULL REFERENCES concept_registry(slug),
   concept   TEXT    NOT NULL,
   source    TEXT    NOT NULL DEFAULT 'code',
@@ -49,7 +56,7 @@ CREATE TABLE IF NOT EXISTS concept_aliases (
 
 	createQuestionConceptsTableSQL = `
 CREATE TABLE IF NOT EXISTS question_concepts (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          INTEGER PRIMARY KEY,
   question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   slug        TEXT NOT NULL REFERENCES concept_registry(slug),
   weight      REAL NOT NULL DEFAULT 1.0,
@@ -59,7 +66,7 @@ CREATE TABLE IF NOT EXISTS question_concepts (
 
 	createQuestionsTableSQL = `
 CREATE TABLE IF NOT EXISTS questions (
-    id              INTEGER  PRIMARY KEY AUTOINCREMENT,
+    id              INTEGER  PRIMARY KEY,
     question_type   TEXT     NOT NULL DEFAULT 'multiple_choice'
                     CHECK (question_type IN ('multiple_choice','multi_select')),
     status          TEXT     NOT NULL DEFAULT 'queued'
@@ -73,7 +80,7 @@ CREATE TABLE IF NOT EXISTS questions (
 
 	createChoicesTableSQL = `
 CREATE TABLE IF NOT EXISTS choices (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     position    INTEGER NOT NULL,
     text        TEXT    NOT NULL,
@@ -83,7 +90,7 @@ CREATE TABLE IF NOT EXISTS choices (
 
 	createSelectionsTableSQL = `
 CREATE TABLE IF NOT EXISTS selections (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     choice_id   INTEGER NOT NULL REFERENCES choices(id)   ON DELETE CASCADE,
     UNIQUE (question_id, choice_id)
@@ -92,7 +99,7 @@ CREATE TABLE IF NOT EXISTS selections (
 
 	createQuestionEventsTableSQL = `
 CREATE TABLE IF NOT EXISTS question_events (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER PRIMARY KEY,
     question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     event_type  TEXT    NOT NULL
                 CHECK (event_type IN ('queued','delivered','answered','skipped')),

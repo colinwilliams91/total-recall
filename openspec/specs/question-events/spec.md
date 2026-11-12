@@ -5,7 +5,7 @@ Provide a unified audit-event log backing the `questions` lifecycle. Every trans
 ## Requirements
 
 ### Requirement: question_events table records lifecycle transitions as rows
-`store.Open()` SHALL create a `question_events` table with columns: `id INTEGER PRIMARY KEY AUTOINCREMENT`, `question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE`, `event_type TEXT NOT NULL`, `occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`, `actor TEXT`, `payload TEXT` (nullable JSON for future extension). A covering partial index `idx_qe_qid_time ON question_events(question_id, occurred_at DESC)` SHALL be created idempotently. Every lifecycle transition on a question SHALL insert exactly one row into `question_events` in the same transaction that updates the question's `status` cache column.
+`store.Open()` SHALL create a `question_events` table with columns: `id INTEGER PRIMARY KEY`, `question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE`, `event_type TEXT NOT NULL`, `occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`, `actor TEXT`, `payload TEXT` (nullable JSON for future extension). A covering partial index `idx_qe_qid_time ON question_events(question_id, occurred_at DESC)` SHALL be created idempotently. Every lifecycle transition on a question SHALL insert exactly one row into `question_events` in the same transaction that updates the question's `status` cache column.
 
 #### Scenario: Fresh install creates question_events with the covering index
 - **WHEN** `Open()` is called against a fresh data directory

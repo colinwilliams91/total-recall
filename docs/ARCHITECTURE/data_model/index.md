@@ -9,7 +9,7 @@ erDiagram
     %% ══════════ Core persistence (SQLite, modernc.org/sqlite, no CGo) ══════════
 
     concepts {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         TEXT slug FK "> concept_registry.slug — resolved identity"
         TEXT concept "NOT NULL — prose fingerprint on the sighting"
         TEXT source "NOT NULL, default 'code'"
@@ -31,7 +31,7 @@ erDiagram
     }
 
     questions {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         TEXT question_type "enum: multiple_choice|max multi_select, default multiple_choice"
         TEXT status "enum: queued|delivered|answered|skipped, default queued"
         TEXT question "NOT NULL — question body"
@@ -41,14 +41,14 @@ erDiagram
     }
 
     question_concepts {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         INTEGER question_id FK "> questions.id, ON DELETE CASCADE"
         TEXT slug FK "> concept_registry.slug"
         REAL weight "NOT NULL — per-write snapshot at synthesis time"
     }
 
     choices {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         INTEGER question_id FK "> questions.id, ON DELETE CASCADE"
         INTEGER position "NOT NULL — display order"
         TEXT text "NOT NULL — option text"
@@ -56,13 +56,13 @@ erDiagram
     }
 
     selections {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         INTEGER question_id FK "> questions.id, ON DELETE CASCADE"
         INTEGER choice_id FK "> choices.id, ON DELETE CASCADE"
     }
 
     question_events {
-        INTEGER id PK "AUTOINCREMENT"
+        INTEGER id PK "rowid alias, auto-assigned, no AUTOINCREMENT"
         INTEGER question_id FK "> questions.id, ON DELETE CASCADE"
         TEXT event_type "enum: queued|delivered|answered|skipped"
         DATETIME occurred_at "NOT NULL, default CURRENT_TIMESTAMP"
@@ -254,6 +254,9 @@ classDiagram
 
 Key invariants:
 
+- `id` columns are plain rowid aliases (`INTEGER PRIMARY KEY`, no
+  `AUTOINCREMENT`): auto-assigned and unique by type, with no
+  `sqlite_sequence` maintenance write per insert.
 - `db.SetMaxOpenConns(1)` — single-connection pool serializes all access; `NextQuestion`'s SELECT-then-UPDATE exactly-once claim depends on it.
 - No `ALTER TABLE` migration path — schema changes are done by deleting `memory.db` (see `internal/cache/MIGRATION.md`).
 - Concepts and questions are always repo+branch-scoped; the store refuses empty scope keys.
