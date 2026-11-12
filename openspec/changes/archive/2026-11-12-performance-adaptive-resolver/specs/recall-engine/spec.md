@@ -5,7 +5,7 @@
 ### Requirement: `Engine.New` constructs the `Resolver` from the configured `RecallConfig.Difficulty`
 `recall.New(provider, store, cfg)` SHALL construct the `Resolver` field on the `Engine` struct once per process. When `cfg.Recall.Difficulty` is `"adaptive"` (or empty, preserving the prior default semantics), the resolver is a `Performance` resolver chaining over `Static{value: "adaptive"}` — the commit-signal baseline resolves first, and learner evidence (windowed answered history read through a stats provider backed by the store) modulates the tier and ranks the focus set. For a concrete configured value the chain remains `Static{value}` resolving verbatim, with no learner override of explicitly pinched difficulty. A nil store yields a Performance resolver whose stats reads behave as cold start (baseline only) — construction never fails for lack of a stats source.
 
-#### Scenario: Adaptive config constructs an adaptive-routed Static resolver
+#### Scenario: Adaptive config constructs the Performance chain over the Static baseline
 - **WHEN** `recall.New` is called with `cfg.Recall.Difficulty == "adaptive"`
 - **THEN** the `Engine` resolver is `Performance` chaining over `Static{value: "adaptive"}`; subsequent `Synthesize` calls resolve through the adaptive heuristics first, then the learner tier and focus ranking over windowed answered history
 
@@ -13,7 +13,7 @@
 - **WHEN** `recall.New` is called with `cfg.Recall.Difficulty == "hard"`
 - **THEN** the `Engine` has a `Static{value: "hard"}` resolver; subsequent `Synthesize` calls invoke `Static.Resolve` → `"hard"` (no `Adaptive` consultation, no learner override)
 
-#### Scenario: Empty config constructs an adaptive-routed Static resolver
+#### Scenario: Empty config constructs the Performance chain over the Static baseline
 - **WHEN** `recall.New` is called with `cfg.Recall.Difficulty == ""`
 - **THEN** the `Engine` chains `Performance` over `Static{value: "adaptive"}` (preserving the prior `defaultDifficulty = "intermediate"` fallback semantics via the resolver chain)
 
