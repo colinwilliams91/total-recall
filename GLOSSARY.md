@@ -25,6 +25,9 @@ _Avoid_: "answer" outside of "Answer Key" phrasing
 The concrete easy/intermediate/hard value a resolution produces for one synthesis call.
 _Avoid_: "tier" as a synonym for the level itself
 
+**Resolution**:
+One resolver call's outcome: the Difficulty Level, optional Focus Concepts, and the fired signals carried to the queued-event audit payload.
+
 **Tier**:
 A one-level movement of the Difficulty Level driven by learner evidence — escalate or de-escalate, never a fourth value. The `learner-tier` signal marks that the rule fired.
 

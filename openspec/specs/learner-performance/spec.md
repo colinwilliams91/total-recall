@@ -72,4 +72,4 @@ Whenever the minimum-history threshold is met, the resolution SHALL return focus
 
 #### Scenario: Focus respects the per-branch working surface
 - **WHEN** a weak concept was answered under a different repo/branch than the current synthesis
-- **THEN** that concept does not outrank the current repo/branch's weak concepts (it may be appended only if the focus cap is not already filled) — working-surface relevance stays first-class, tutor scheduling second-class
+- **THEN** that concept does not outrank the current repo/branch's weak concepts (it may be appended only if the focus cap is not already filled) — working-surface relevance stays first-class, spaced-repetition scheduling second-class

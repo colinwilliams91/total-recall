@@ -72,7 +72,7 @@ The thresholds are package-private constants in `internal/recall/difficulty/adap
 - **THEN** `Adaptive{}.Resolve` returns `"easy"`
 
 #### Scenario: All-code source signal escalates fallback
-- **WHEN** `synth.Concepts` has 5 entries all with `Source = "code"`, avg weight `0.5` (no high-cluster, no dispersed, no delegation)
+- **WHEN** `synth.Concepts` has 5 entries all with `Source = "code"`, avg weight `0.6` (above the dispersed floor, below high-cluster; no delegation)
 - **THEN** `Adaptive{}.Resolve` returns `"hard"` (fallback `"intermediate"` escalated one level)
 
 #### Scenario: AI-delegation still escalates when nothing else fires
