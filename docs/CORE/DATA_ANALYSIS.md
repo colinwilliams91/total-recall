@@ -165,12 +165,22 @@ That adaptive difficulty mechanism could become extremely valuable.
 
 > **Implemented:** The §4 recommendation now ships as the adaptive difficulty
 > resolver (`internal/recall/difficulty/adaptive.go`). It applies a first-match
-> heuristic map over per-commit signals — short commit message + large diff
-> (AI-delegation) escalates to `hard`, a tight cluster of high-weight concepts
-> escalates, many dispersed low-weight concepts de-escalate to `easy`, a
-> uniformly code-sourced concept mix escalates one level, and the no-signal
-> fallback stays `intermediate`. Selected via `recall.difficulty: adaptive`
-> (the default); each resolution logs its matched signal for debugging.
+> heuristic map over per-commit signals — a tight cluster of high-weight
+> concepts escalates to `hard`, many dispersed low-weight concepts
+> de-escalate to `easy`, a uniformly code-sourced concept mix escalates one
+> level, short commit message + large diff (AI-delegation) escalates as the
+> *final* commit-shape rule, and the no-signal fallback stays
+> `intermediate`. Selected via `recall.difficulty: adaptive` (the default);
+> each resolution logs its matched signal for debugging.
+>
+> The learner-driven layer (performance-adaptive-resolver) composes on top:
+> commit shape is second-class — a cold-start baseline only. Once ~20
+> answered questions exist, the windowed correctness ratio moves the tier
+> one level (≥92% escalates, <50% eases), and the missed concepts rank a
+> focus set that leads the synthesis feed, so question *contents* target
+> demonstrated weaknesses. Each resolution persists its difficulty and
+> fired signals on the queued question event's payload for level↔outcome
+> correlation.
 
 ---
 

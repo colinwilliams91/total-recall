@@ -104,7 +104,10 @@ ai:
   base-url: {{.AI.BaseURL}}
 
 recall:
-  # Difficulty level: easy | medium | hard | adaptive
+  # Difficulty level: easy | intermediate | hard | adaptive
+  # With adaptive (the default), commit-shape heuristics are the cold-start
+  # baseline; once enough answered history exists, learner performance moves
+  # the tier and missed concepts lead the question feed.
   difficulty: {{.Recall.Difficulty}}
 
   # Maximum number of recall questions per commit (default: 1).

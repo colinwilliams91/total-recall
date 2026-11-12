@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1501,5 +1502,198 @@ func TestRepoIndexesExist(t *testing.T) {
 		if name != idx {
 			t.Fatalf("expected index %s, got %s", idx, name)
 		}
+	}
+}
+
+// ── learner stats (performance-adaptive-resolver, section 2) ─────────────────
+
+// answerClaimed records an answer for a claimed question: the correct choice
+// when correct is true, the first incorrect choice otherwise.
+func answerClaimed(t *testing.T, s *cache.Store, ctx context.Context, claimed *cache.StoredQuestion, correct bool) {
+	t.Helper()
+	if correct {
+		if err := s.SubmitSelection(ctx, claimed.ID, []int64{claimed.Choices[claimed.CorrectIndex].ID}, ""); err != nil {
+			t.Fatalf("SubmitSelection (correct): %v", err)
+		}
+		return
+	}
+	for _, c := range claimed.Choices {
+		if !c.IsCorrect {
+			if err := s.SubmitSelection(ctx, claimed.ID, []int64{c.ID}, ""); err != nil {
+				t.Fatalf("SubmitSelection (incorrect): %v", err)
+			}
+			return
+		}
+	}
+	t.Fatal("no incorrect choice to select")
+}
+
+// saveAnsweredQuestion saves a provenance-backed question and immediately
+// claims+answers it in the given direction.
+func saveAnsweredQuestion(t *testing.T, s *cache.Store, ctx context.Context, repo, branch, question string, correct bool, fed []cache.ConceptRef) {
+	t.Helper()
+	if err := s.SaveQuestion(ctx, repo, branch, question, buildChoices([]string{"right", "wrong"}, 0), "", fed); err != nil {
+		t.Fatalf("SaveQuestion %q: %v", question, err)
+	}
+	claimed, err := s.NextQuestion(ctx, repo, branch, "test")
+	if err != nil {
+		t.Fatalf("NextQuestion %q: %v", question, err)
+	}
+	if claimed == nil {
+		t.Fatalf("question %q was not claimable", question)
+	}
+	answerClaimed(t, s, ctx, claimed, correct)
+}
+
+// TestLearnerStatsCorrectnessJoin verifies the answered-event → selections →
+// choices.is_correct join and that provenance slugs ride through: one hit and
+// one miss on the shared concept, with a skipped question contributing
+// nothing to either the ratio or the tallies.
+func TestLearnerStatsCorrectnessJoin(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+	if err := s.Save(ctx, "/repo/test", "main", []cache.Fingerprint{
+		{Concept: "circuit breaker", Slug: "circuit_breaker", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("seed registry: %v", err)
+	}
+	fed := []cache.ConceptRef{{Slug: "circuit_breaker", Weight: 0.9}}
+
+	saveAnsweredQuestion(t, s, ctx, "/repo/test", "main", "hit question", true, fed)
+	saveAnsweredQuestion(t, s, ctx, "/repo/test", "main", "miss question", false, fed)
+
+	// Skipped question: answered never fires, so it must count toward
+	// neither the ratio nor the tallies.
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "skipped question", buildChoices([]string{"a", "b"}, 0), "", fed); err != nil {
+		t.Fatalf("SaveQuestion skipped: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion skipped: %v", err)
+	}
+	if err := s.SkipQuestion(ctx, claimed.ID); err != nil {
+		t.Fatalf("SkipQuestion: %v", err)
+	}
+
+	stats, err := s.LearnerStats(ctx, "/repo/test", "main", 20)
+	if err != nil {
+		t.Fatalf("LearnerStats: %v", err)
+	}
+	if stats.Answered != 2 {
+		t.Fatalf("expected 2 answered in tier window (skip excluded), got %d", stats.Answered)
+	}
+	if stats.Correct != 1 {
+		t.Fatalf("expected 1 correct, got %d", stats.Correct)
+	}
+	if len(stats.Concepts) != 1 || stats.Concepts[0].Slug != "circuit_breaker" {
+		t.Fatalf("expected single circuit_breaker tally, got %+v", stats.Concepts)
+	}
+	if stats.Concepts[0].Hits != 1 || stats.Concepts[0].Misses != 1 {
+		t.Fatalf("expected hits=1 misses=1 (skip excluded), got %+v", stats.Concepts[0])
+	}
+}
+
+// TestLearnerStatsTierWindowScopedTalliesUserWide pins the read-time scoping
+// split: the correctness-ratio window is scoped to the current repo+branch,
+// while per-slug tallies aggregate across surfaces (registry identity is
+// user-scoped).
+func TestLearnerStatsTierWindowScopedTalliesUserWide(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+	if err := s.Save(ctx, "/repo/a", "main", []cache.Fingerprint{
+		{Concept: "shared concept", Slug: "shared_concept", Source: "code", Weight: 0.9},
+	}); err != nil {
+		t.Fatalf("seed registry: %v", err)
+	}
+
+	fed := []cache.ConceptRef{{Slug: "shared_concept", Weight: 0.9}}
+	// A miss on repo A (the current surface) and a hit on repo B (another
+	// surface), same slug.
+	saveAnsweredQuestion(t, s, ctx, "/repo/a", "main", "repo A miss", false, fed)
+	saveAnsweredQuestion(t, s, ctx, "/repo/b", "main", "repo B hit", true, fed)
+
+	stats, err := s.LearnerStats(ctx, "/repo/a", "main", 20)
+	if err != nil {
+		t.Fatalf("LearnerStats: %v", err)
+	}
+	if stats.Answered != 1 || stats.Correct != 0 {
+		t.Fatalf("expected tier window scoped to /repo/a (1 answered, 0 correct), got answered=%d correct=%d", stats.Answered, stats.Correct)
+	}
+	if len(stats.Concepts) != 1 {
+		t.Fatalf("expected one tally, got %+v", stats.Concepts)
+	}
+	if stats.Concepts[0].Misses != 1 || stats.Concepts[0].Hits != 1 {
+		t.Fatalf("expected user-wide tallies (1 miss + 1 hit across surfaces), got %+v", stats.Concepts[0])
+	}
+}
+
+// TestLearnerStatsEmptyHistoryReturnsZeroStats verifies the cold-start shape:
+// no answered history yields zero stats without error.
+func TestLearnerStatsEmptyHistoryReturnsZeroStats(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+	stats, err := s.LearnerStats(ctx, "/repo/test", "main", 20)
+	if err != nil {
+		t.Fatalf("LearnerStats on empty history: %v", err)
+	}
+	if stats.Answered != 0 || stats.Correct != 0 || stats.Concepts != nil {
+		t.Fatalf("expected zero stats, got %+v", stats)
+	}
+
+	// Empty repo/branch refuses to query.
+	if stats, err = s.LearnerStats(ctx, "", "main", 20); err != nil || stats.Answered != 0 {
+		t.Fatalf("expected zero stats without error for empty repo, got %+v err=%v", stats, err)
+	}
+}
+
+// TestSaveQuestionWithResolutionPersistsQueuedPayload verifies the audit
+// spine: the resolution meta lands as the 'queued' event row's payload JSON,
+// and the legacy SaveQuestion path leaves the payload NULL.
+func TestSaveQuestionWithResolutionPersistsQueuedPayload(t *testing.T) {
+	s := setupCache(t)
+	ctx := context.Background()
+
+	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "audited question",
+		buildChoices([]string{"a", "b"}, 0), "", nil,
+		cache.ResolutionMeta{Difficulty: "hard", Signals: []string{"high-cluster", "learner-tier"}}); err != nil {
+		t.Fatalf("SaveQuestionWithResolution: %v", err)
+	}
+	if err := s.SaveQuestion(ctx, "/repo/test", "main", "legacy question",
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
+		t.Fatalf("SaveQuestion: %v", err)
+	}
+
+	db := openRawDB(t)
+	var payload sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload FROM question_events e JOIN questions q ON q.id = e.question_id
+		 WHERE e.event_type = 'queued' AND q.question = 'audited question'`).Scan(&payload); err != nil {
+		t.Fatalf("raw query queued payload: %v", err)
+	}
+	if !payload.Valid {
+		t.Fatal("expected audited question's queued event to carry a payload")
+	}
+	var decoded struct {
+		ResolvedDifficulty string   `json:"resolved_difficulty"`
+		Signals            []string `json:"signals"`
+	}
+	if err := json.Unmarshal([]byte(payload.String), &decoded); err != nil {
+		t.Fatalf("payload is not the contracted JSON shape: %v (payload: %s)", err, payload.String)
+	}
+	if decoded.ResolvedDifficulty != "hard" {
+		t.Fatalf("expected resolved_difficulty hard, got %q", decoded.ResolvedDifficulty)
+	}
+	if len(decoded.Signals) != 2 || decoded.Signals[0] != "high-cluster" || decoded.Signals[1] != "learner-tier" {
+		t.Fatalf("expected signals [high-cluster learner-tier], got %v", decoded.Signals)
+	}
+
+	var legacyPayload sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload FROM question_events e JOIN questions q ON q.id = e.question_id
+		 WHERE e.event_type = 'queued' AND q.question = 'legacy question'`).Scan(&legacyPayload); err != nil {
+		t.Fatalf("raw query legacy payload: %v", err)
+	}
+	if legacyPayload.Valid {
+		t.Fatalf("expected NULL payload on the legacy SaveQuestion path, got %q", legacyPayload.String)
 	}
 }

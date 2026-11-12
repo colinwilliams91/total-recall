@@ -96,7 +96,7 @@ func TestSynthesizeEmptyConceptsReturnsNil(t *testing.T) {
 	engine := recall.New(provider, s, nil)
 
 	synth := recall.SynthesisContext{}
-	q, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
+	q, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -116,7 +116,7 @@ func TestSynthesizeEmptyRepoReturnsNil(t *testing.T) {
 	synth := recall.SynthesisContext{
 		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.9, Source: "code", SeenAt: time.Now()}},
 	}
-	q, err := engine.Synthesize(context.Background(), "", "main", "m", synth, engine.Resolver())
+	q, _, err := engine.Synthesize(context.Background(), "", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -138,7 +138,7 @@ func TestSynthesizePopulatesUserTurnWithWeights(t *testing.T) {
 		CommitMsg:   "fix: handle race in cache.Save",
 		DiffSnippet: "+ func retry() {}",
 	}
-	q, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
+	q, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestSynthesizeUserTurnOmitsCommitContextWhenEmpty(t *testing.T) {
 			{Concept: "caching", Weight: 0.5, Source: "code", SeenAt: time.Now()},
 		},
 	}
-	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
+	_, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestSynthesizeWithStaticResolverHard(t *testing.T) {
 		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()}},
 	}
 	resolver := difficulty.Static{Value: "hard"}
-	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	_, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,9 +205,84 @@ type countingResolver struct {
 	value string
 }
 
-func (c *countingResolver) Resolve(_ context.Context, _ difficulty.SynthesisContext) string {
+func (c *countingResolver) Resolve(_ context.Context, _ difficulty.SynthesisContext) difficulty.Resolution {
 	c.calls++
-	return c.value
+	return difficulty.Resolution{Difficulty: c.value}
+}
+
+// fixedResolver returns a canned Resolution verbatim — used to drive the
+// user-turn focus-biasing tests without wiring the full resolver chain.
+type fixedResolver struct{ resolution difficulty.Resolution }
+
+func (f fixedResolver) Resolve(_ context.Context, _ difficulty.SynthesisContext) difficulty.Resolution {
+	return f.resolution
+}
+
+// TestSynthesizeFocusConceptsLeadUserTurn verifies the user-turn biasing:
+// focus concepts surface first under their own lead section, the remaining
+// rows follow, and focus names unknown to the context are dropped (biasing
+// reorders, it never invents feed content).
+func TestSynthesizeFocusConceptsLeadUserTurn(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	synth := recall.SynthesisContext{
+		Repo: "/repo", Branch: "main",
+		Concepts: []cache.ConceptRow{
+			{Concept: "retry", Slug: "retry_backoff", Weight: 0.9, SeenAt: time.Now()},
+			{Concept: "circuit breaker", Slug: "circuit_breaker", Weight: 0.8, SeenAt: time.Now()},
+			{Concept: "jitter", Slug: "jitter", Weight: 0.7, SeenAt: time.Now()},
+		},
+	}
+	resolver := fixedResolver{difficulty.Resolution{
+		Difficulty:    "hard",
+		FocusConcepts: []string{"jitter", "not_in_the_feed_concept"},
+	}}
+	_, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	userTurn := provider.lastReq.UserTurn
+
+	if !strings.Contains(userTurn, "Concepts the developer is currently working through:\n- jitter (") {
+		t.Fatalf("expected focused lead section leading with jitter, got %q", userTurn)
+	}
+	if strings.Contains(userTurn, "not_in_the_feed_concept") {
+		t.Fatalf("expected unknown focus name to be ignored, got %q", userTurn)
+	}
+	leadIdx := strings.Index(userTurn, "currently working through")
+	jitterIdx := strings.Index(userTurn, "- jitter (")
+	retryIdx := strings.Index(userTurn, "- retry (")
+	if leadIdx == -1 || jitterIdx < leadIdx || retryIdx <= jitterIdx {
+		t.Fatalf("expected jitter surfaced ahead of retry, got %q", userTurn)
+	}
+}
+
+// TestSynthesizeUnknownOnlyFocusLeavesUserTurnUnchanged verifies that a focus
+// set matching no concept row produces no lead section at all.
+func TestSynthesizeUnknownOnlyFocusLeavesUserTurnUnchanged(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"q","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	synth := recall.SynthesisContext{
+		Repo: "/repo", Branch: "main",
+		Concepts: []cache.ConceptRow{
+			{Concept: "retry", Slug: "retry_backoff", Weight: 0.9, SeenAt: time.Now()},
+		},
+	}
+	resolver := fixedResolver{difficulty.Resolution{
+		Difficulty:    "hard",
+		FocusConcepts: []string{"not_in_the_feed_concept"},
+	}}
+	_, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(provider.lastReq.UserTurn, "currently working through") {
+		t.Fatalf("expected no focused lead section for an unmatched focus set, got %q", provider.lastReq.UserTurn)
+	}
 }
 
 // TestSynthesizeResolverNotCalledForEmptyRepo asserts the empty-repo
@@ -218,7 +293,7 @@ func TestSynthesizeResolverNotCalledForEmptyRepo(t *testing.T) {
 	engine := recall.New(provider, s, nil)
 
 	resolver := &countingResolver{value: "hard"}
-	q, err := engine.Synthesize(context.Background(), "", "main", "m", recall.SynthesisContext{}, resolver)
+	q, _, err := engine.Synthesize(context.Background(), "", "main", "m", recall.SynthesisContext{}, resolver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -241,7 +316,7 @@ func TestSynthesizeEmptyResolverResultFallsBackToIntermediate(t *testing.T) {
 		Concepts: []cache.ConceptRow{{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()}},
 	}
 	resolver := &countingResolver{value: ""}
-	_, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
+	_, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, resolver)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,7 +343,7 @@ func TestEngineNewAdaptiveConfigUsesAdaptiveResolver(t *testing.T) {
 			{Concept: "c", Weight: 0.7, Source: "code", SeenAt: time.Now()},
 		},
 	}
-	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+	if _, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.Contains(provider.lastReq.System, "adaptive") {
@@ -298,7 +373,7 @@ func TestEngineNewHardConfigUsesStaticResolver(t *testing.T) {
 			{Concept: "e", Weight: 0.2, Source: "code", SeenAt: time.Now()},
 		},
 	}
-	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+	if _, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(provider.lastReq.System, "hard") {
@@ -320,7 +395,7 @@ func TestEngineNewEmptyConfigDefaultsToAdaptive(t *testing.T) {
 			{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()},
 		},
 	}
-	if _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
+	if _, _, err := engine.Synthesize(context.Background(), "/repo", "main", "m", synth, engine.Resolver()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(provider.lastReq.System, "intermediate") {
@@ -333,7 +408,7 @@ func TestSynthesisRequestEmbedsPolicy(t *testing.T) {
 		{Concept: "caching", Weight: 0.9, Source: "code", SeenAt: time.Now()},
 	}
 	policyBody := "## Custom policy\n\nFocus on counterfactual debugging.\n"
-	req := recall.SynthesisRequest(concepts, "", "", policyBody, "hard", "m")
+	req := recall.SynthesisRequest(concepts, "", "", policyBody, "hard", nil, "m")
 
 	if !strings.Contains(req.System, "counterfactual debugging") {
 		t.Fatalf("expected system turn to contain policy body text, got %q", req.System)
@@ -353,7 +428,7 @@ func TestSynthesisRequestFallbackNoPolicy(t *testing.T) {
 	concepts := []cache.ConceptRow{
 		{Concept: "caching", Weight: 0.9, Source: "code", SeenAt: time.Now()},
 	}
-	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", "m")
+	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", nil, "m")
 
 	if !strings.Contains(req.System, "You are a software development quizzing assistant") {
 		t.Fatalf("expected fallback template in system turn, got %q", req.System)
@@ -372,7 +447,7 @@ func TestSynthesisRequestUserTurnEnriched(t *testing.T) {
 		{Concept: "jitter", Weight: 0.7, Source: "code", SeenAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)},
 		{Concept: "circuit breaker", Weight: 0.5, Source: "code", SeenAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)},
 	}
-	req := recall.SynthesisRequest(concepts, "fix: race condition", "+ func retry() {}", "policy body", "hard", "m")
+	req := recall.SynthesisRequest(concepts, "fix: race condition", "+ func retry() {}", "policy body", "hard", nil, "m")
 
 	for _, want := range []string{"backoff", "jitter", "circuit breaker", "weight=0.9", "weight=0.7", "weight=0.5", "Recent commit context", "fix: race condition", "+ func retry()"} {
 		if !strings.Contains(req.UserTurn, want) {
@@ -385,7 +460,7 @@ func TestSynthesisRequestUserTurnNoCommit(t *testing.T) {
 	concepts := []cache.ConceptRow{
 		{Concept: "caching", Weight: 0.5, Source: "code", SeenAt: time.Now()},
 	}
-	req := recall.SynthesisRequest(concepts, "", "", "policy", "intermediate", "m")
+	req := recall.SynthesisRequest(concepts, "", "", "policy", "intermediate", nil, "m")
 
 	if !strings.Contains(req.UserTurn, "caching") {
 		t.Fatalf("expected user turn to list concept, got %q", req.UserTurn)
@@ -399,7 +474,7 @@ func TestSynthesisRequestMaxTokensAndJSON(t *testing.T) {
 	concepts := []cache.ConceptRow{
 		{Concept: "c", Weight: 0.5, Source: "code", SeenAt: time.Now()},
 	}
-	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", "m")
+	req := recall.SynthesisRequest(concepts, "", "", "", "intermediate", nil, "m")
 
 	if req.MaxTokens != 1024 {
 		t.Fatalf("expected MaxTokens 1024, got %d", req.MaxTokens)

@@ -20,6 +20,16 @@ git commit -m "fix: handle retry jitter"   ──>   concept: exponential backof
 - **Terminal TUI** — `torec ask` renders the question and grades your answer with a short explanation.
 - **MCP** — your AI assistant can pull questions (`recall_next`) and record selections (`recall_select`) from the daemon's MCP endpoint on `localhost:7331`. Quizzes meet you wherever you're already working.
 
+### 🧠 Difficulty that learns you
+
+With the default `difficulty: adaptive`, quizzes start from a lightweight read of each commit's shape, then your answer history takes over:
+
+- **A strong record earns harder questions** — a high recent correctness ratio escalates the difficulty a level; a rough patch eases off before it demoralizes. In between, the level holds.
+- **Your misses lead the next quiz** — concepts you keep missing rank ahead of the rest of the feed, so the next question targets your demonstrated weaknesses, not just what you touched last. Weaknesses follow you across projects too: a concept you struggled with on one repo shapes the quiz on another whenever that concept is already on the table.
+- **Cold start is gentle** — until a handful of answered questions exist, the commit-shape baseline runs alone; your answers never move the level before there's real evidence.
+
+Every resolution is auditable: the chosen level and its reasons ride the question's event record, and the daemon log names them (`learner-tier`, `cold-start`, `performance focus concepts: …`). Want a fixed level instead? `recall.difficulty: easy | intermediate | hard` pins it — learner adaptation only applies to `adaptive`.
+
 ### ✍️ Drop-in prompt customization
 
 Every quiz is shaped by a markdown **policy doc** shipped inside the binary — it's the pedagogy: how questions are framed, what makes a good distractor, what counts as exercising a concept. You can replace it with your own, without recompiling — and you never type an asset name. The four steps:
@@ -41,6 +51,6 @@ Total Recall watches for drift: a startup `OVERRIDE WARNING` fires when your ove
 
 ## Coming soon
 
-### 📈 Adaptive difficulty
+### ⏱️ Spaced repetition resurfacing
 
-Question difficulty that adapts to you — calibrating from your answer history per concept, so quizzes stay in the zone between trivial and demoralizing. In active development.
+Concepts you mastered a while ago will come back right when you're about to forget them — *when* to re-ask is the next axis after *what* to emphasize and *how hard*. In active planning.

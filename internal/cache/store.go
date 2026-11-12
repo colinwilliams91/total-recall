@@ -3,11 +3,13 @@ package cache
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -490,6 +492,15 @@ type ConceptRef struct {
 	Weight float64
 }
 
+// ResolutionMeta is the resolver audit snapshot persisted on the 'queued'
+// question_events row's payload: the resolved difficulty and the fired
+// resolver signals. It is the spine operator debugging and future resolvers
+// correlate level↔outcome through.
+type ResolutionMeta struct {
+	Difficulty string
+	Signals    []string
+}
+
 // SaveQuestion persists a synthesized question and its choices in one
 // transaction, plus a 'queued' question_events row marking the question's
 // creation, plus one question_concepts provenance row per fed concept
@@ -497,6 +508,14 @@ type ConceptRef struct {
 // questionType defaults to 'multiple_choice' when empty. An empty concept
 // batch persists the question with zero provenance rows rather than erroring.
 func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef) error {
+	return s.SaveQuestionWithResolution(ctx, repo, branch, question, choices, questionType, fed, ResolutionMeta{})
+}
+
+// SaveQuestionWithResolution is SaveQuestion with a ResolutionMeta snapshot
+// persisted as the 'queued' event row's payload JSON. An empty meta (zero
+// value) writes a NULL payload — the audit column stays empty for callers
+// that have no resolution to report.
+func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef, meta ResolutionMeta) error {
 	if repo == "" || branch == "" {
 		log.Printf("[store] skipping savequestion: empty repo or branch")
 		return nil
@@ -506,6 +525,19 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 	}
 	if questionType == "" {
 		questionType = "multiple_choice"
+	}
+
+	var queuedPayload any
+	if meta.Difficulty != "" || len(meta.Signals) > 0 {
+		signals := meta.Signals
+		if signals == nil {
+			signals = []string{}
+		}
+		b, err := json.Marshal(map[string]any{"resolved_difficulty": meta.Difficulty, "signals": signals})
+		if err != nil {
+			return fmt.Errorf("marshaling queued payload: %w", err)
+		}
+		queuedPayload = string(b)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -541,8 +573,8 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO question_events (question_id, event_type, actor) VALUES (?, 'queued', 'system')`,
-		questionID); err != nil {
+		`INSERT INTO question_events (question_id, event_type, actor, payload) VALUES (?, 'queued', 'system', ?)`,
+		questionID, queuedPayload); err != nil {
 		return fmt.Errorf("inserting queued event: %w", err)
 	}
 
@@ -570,6 +602,149 @@ func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string,
 	}
 
 	return tx.Commit()
+}
+
+// ConceptOutcome is one concept's outcome tallies over the answered window,
+// keyed by canonical registry slug. Because identity is user-scoped, a
+// concept's tallies aggregate answered questions across repos and branches —
+// the read-time policy the learner-performance capability defines.
+type ConceptOutcome struct {
+	Slug           string
+	Misses         int
+	Hits           int
+	LastAnsweredAt time.Time
+}
+
+// LearnerStats is the windowed learner outcome evidence one synthesis
+// resolution reads. Answered/Correct come from the tier window (the last
+// `window` answered questions scoped to one repo+branch); Concepts tallies
+// come from a same-sized user-wide window (any repo/branch) joined through
+// the question_concepts provenance join.
+type LearnerStats struct {
+	Answered int
+	Correct  int
+	Concepts []ConceptOutcome
+}
+
+// questionCorrectnessSQL projects per-question correctness: the user made at
+// least one selection and none of the selected choices is incorrect (all
+// selected choices correct).
+const questionCorrectnessSQL = `
+  CASE WHEN EXISTS (SELECT 1 FROM selections s WHERE s.question_id = q.id)
+        AND NOT EXISTS (
+              SELECT 1 FROM selections s
+              JOIN choices c ON c.id = s.choice_id
+              WHERE s.question_id = q.id AND c.is_correct = 0)
+       THEN 1 ELSE 0 END`
+
+// LearnerStats aggregates windowed answer outcomes for learner-driven
+// difficulty resolution. The tier window is scoped to the current repo and
+// branch; the per-slug tallies key on registry identity and aggregate across
+// surfaces (user-wide), keeping the difficulty ratio working-surface-local
+// while weakness evidence stays user-grained. Skipped questions never enter
+// either window (only 'answered' rows qualify). Read-only: no writes, no
+// scoping change to the tables it reads. Empty repo/branch or a non-positive
+// window yields zero stats without touching the store.
+func (s *Store) LearnerStats(ctx context.Context, repo, branch string, window int) (LearnerStats, error) {
+	var out LearnerStats
+	if repo == "" || branch == "" || window <= 0 {
+		return out, nil
+	}
+
+	tierRows, err := s.db.QueryContext(ctx, `
+SELECT `+questionCorrectnessSQL+`
+FROM questions q
+JOIN question_events e ON e.question_id = q.id AND e.event_type = q.status
+WHERE q.status = 'answered' AND q.repo = ? AND q.branch = ?
+ORDER BY e.occurred_at DESC
+LIMIT ?`, repo, branch, window)
+	if err != nil {
+		return out, fmt.Errorf("querying learner tier window: %w", err)
+	}
+	defer tierRows.Close()
+	for tierRows.Next() {
+		var correct int
+		if err := tierRows.Scan(&correct); err != nil {
+			return out, fmt.Errorf("scanning tier window row: %w", err)
+		}
+		out.Answered++
+		if correct != 0 {
+			out.Correct++
+		}
+	}
+	if err := tierRows.Err(); err != nil {
+		return out, err
+	}
+
+	// The user-wide tally window: the last `window` answered questions
+	// regardless of repo/branch, each joined to its provenance slugs. Rows
+	// arrive most-recent-first, so the first occurrence of a slug carries its
+	// last-answered timestamp.
+	tallyRows, err := s.db.QueryContext(ctx, `
+SELECT qc.slug, w.correct, w.occurred_at
+FROM question_concepts qc
+JOIN (
+  SELECT q.id AS id, e.occurred_at AS occurred_at, `+questionCorrectnessSQL+` AS correct
+  FROM questions q
+  JOIN question_events e ON e.question_id = q.id AND e.event_type = q.status
+  WHERE q.status = 'answered'
+  ORDER BY e.occurred_at DESC
+  LIMIT ?
+) w ON w.id = qc.question_id`, window)
+	if err != nil {
+		return out, fmt.Errorf("querying learner tally window: %w", err)
+	}
+	defer tallyRows.Close()
+
+	tallies := make(map[string]*ConceptOutcome)
+	for tallyRows.Next() {
+		var slug string
+		var correct int
+		var occurredAt string
+		if err := tallyRows.Scan(&slug, &correct, &occurredAt); err != nil {
+			return out, fmt.Errorf("scanning tally window row: %w", err)
+		}
+		t, ok := tallies[slug]
+		if !ok {
+			t = &ConceptOutcome{Slug: slug, LastAnsweredAt: parseOccurredAt(occurredAt)}
+			tallies[slug] = t
+		}
+		if correct != 0 {
+			t.Hits++
+		} else {
+			t.Misses++
+		}
+	}
+	if err := tallyRows.Err(); err != nil {
+		return out, err
+	}
+	if len(tallies) > 0 {
+		out.Concepts = make([]ConceptOutcome, 0, len(tallies))
+		for _, t := range tallies {
+			out.Concepts = append(out.Concepts, *t)
+		}
+		sort.Slice(out.Concepts, func(i, j int) bool { return out.Concepts[i].Slug < out.Concepts[j].Slug })
+	}
+	return out, nil
+}
+
+// parseOccurredAt parses a question_events.occurred_at value, which may be
+// written either by SQLite's CURRENT_TIMESTAMP default or by a bound
+// time.Time. Unparseable values degrade to the zero time (tiebreaks only).
+func parseOccurredAt(s string) time.Time {
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 // NextQuestion atomically claims the oldest queued question for the (repo,
