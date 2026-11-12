@@ -152,9 +152,95 @@ run_arm "all-code" "Refactor retry handling across several small helper modules 
 # 5. No-signal (fallback): tiny diff, medium message
 run_arm "fallback" "tidy: minor comment touch-up" 1
 
+# ── learner arms: answered-history seeding ──────────────────────────────────
+# The performance resolver reads windowed answered history. These companion
+# arms seed it through the same HTTP contract the ask TUI drives (claim via
+# GET /recall/next, answer via POST /recall/select), then fire a final
+# synthesis so the log shows the level-shifted resolution.
+#
+# The delivery wire format deliberately withholds which choice is correct
+# (anti-leak contract), so the correct position is read from the scratch
+# memory.db instead. Requires python3 for that lookup.
+
+# json_field extracts the first numeric value for a key from a JSON body.
+# First-match matters: the question's own id is the first field. Absent keys
+# yield an empty result without failing the caller under set -e.
+json_field() {
+  local v
+  v="$(printf '%s' "$1" | grep -oE "\"$2\":-?[0-9]+" | head -1 | grep -oE -- "-?[0-9]+" || true)"
+  printf '%s' "$v"
+}
+
+# db_field runs a scalar parameterized SQL query against the scratch
+# memory.db (read-only; python3 required).
+db_field() {
+  python3 -c "
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+row = db.execute(sys.argv[2], sys.argv[3:]).fetchone()
+print(row[0] if row is not None and row[0] is not None else '')
+" "$TR_HOME/memory.db" "$@"
+}
+
+# answer_capture answers one captured /recall/next question: the correct
+# choice when $2=1, an incorrect one otherwise.
+answer_capture() {
+  local json="$1" correct="$2" id cidx nchoices sidx
+  id="$(json_field "$json" id)"
+  [ -n "$id" ] || return 0
+  cidx="$(db_field "SELECT position FROM choices WHERE question_id = ? AND is_correct = 1" "$id")"
+  [ -n "$cidx" ] || { echo "  (no choices found for question $id — skipping)"; return 0; }
+  if [ "$correct" = "1" ]; then
+    sidx="$cidx"
+  else
+    nchoices="$(db_field "SELECT COUNT(*) FROM choices WHERE question_id = ?" "$id")"
+    [ -n "$nchoices" ] && [ "$nchoices" -gt 0 ] || return 0
+    sidx=$(( (cidx + 1) % nchoices ))
+  fi
+  curl -fsS --max-time 10 -X POST "$BASE/recall/select" \
+    -H 'Content-Type: application/json' \
+    -d "{\"id\":$id,\"selected_index\":$sidx}" >/dev/null \
+    || echo "  (select failed for question $id)"
+}
+
+# seed_history answers the captured questions on a branch: the first $2
+# correctly, the rest incorrectly.
+seed_history() {
+  local name="$1" correct_count="$2" answered=0 verdict
+  local file="$ARMS_DIR/$name.txt"
+  [ -f "$file" ] || { echo "  (no captures for $name — seeding skipped)"; return 0; }
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if [ "$answered" -lt "$correct_count" ]; then verdict=1; else verdict=0; fi
+    answer_capture "$line" "$verdict"
+    answered=$((answered + 1))
+  done <"$file"
+  echo "  seeded $answered answered on branch arm-$name ($correct_count correct)"
+}
+
+echo ""
+echo "=== learner arms (answered-history seeding via /recall/select) ==="
+# Correct-heavy: two capture rounds fill the 20-question window with 19
+# correct — the final synthesis should log learner-tier escalating to hard.
+run_arm "learner-correct" "tidy: minor comment touch-up" 1
+run_arm "learner-correct" "tidy: minor comment touch-up, second batch" 1
+seed_history "learner-correct" 19
+run_arm "learner-correct" "tidy: final touch-up after a strong record" 1
+echo "--- correct-heavy branch resolutions (expect learner-tier, escalated to hard) ---"
+grep "performance resolver selected" "$LOG" | tail -3 || true
+
+# Miss-heavy: 7/20 correct — the final synthesis should log learner-tier
+# de-escalating to easy, plus the focus concepts the misses rank.
+run_arm "learner-miss" "tidy: minor comment touch-up" 1
+run_arm "learner-miss" "tidy: minor comment touch-up, second batch" 1
+seed_history "learner-miss" 7
+run_arm "learner-miss" "tidy: final touch-up after a rough record" 1
+echo "--- miss-heavy branch resolutions (expect learner-tier, de-escalated to easy, plus focus concepts) ---"
+grep "performance resolver selected\|performance focus concepts" "$LOG" | tail -4 || true
+
 echo ""
 echo "Resolver selections (daemon log):"
-grep "adaptive resolver selected" "$LOG" | head -60 || echo "(none — was difficulty: adaptive configured?)"
+grep -E "adaptive resolver selected|performance resolver selected|performance focus concepts" "$LOG" | tail -80 || echo "(none — was difficulty: adaptive configured?)"
 echo ""
 echo "Per-arm question captures: $ARMS_DIR/<arm>.txt"
 echo "Compare question quality side-by-side, then record observations in"

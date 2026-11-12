@@ -10,17 +10,33 @@ import (
 	"github.com/colinwilliams91/total-recall/internal/cache"
 )
 
-// SynthesisContext carries the inputs a resolver may inspect: recent concept
-// rows (with weights and sources) plus the commit message and diff snippet
-// from the hook event. It mirrors the synthesis inputs so resolvers need no
-// dependency on the recall engine.
+// SynthesisContext carries the inputs a resolver may inspect: the repo and
+// branch the synthesis is scoped to (learner-stats reads are scoped per
+// surface), recent concept rows (with weights, sources, and slugs) plus the
+// commit message and diff snippet from the hook event. It mirrors the
+// synthesis inputs so resolvers need no dependency on the recall engine.
 type SynthesisContext struct {
+	Repo        string
+	Branch      string
 	Concepts    []cache.ConceptRow
 	CommitMsg   string
 	DiffSnippet string
 }
 
-// Resolver selects a difficulty level for one synthesis call.
+// Resolution carries one resolver's outcome for a synthesis call: the
+// difficulty level ("" = no preference, which the caller substitutes a
+// default for), the focus concepts to bias the synthesis feed toward
+// demonstrated weaknesses (empty when the resolver has no content steer),
+// and the fired signal names for the queued-event audit payload (empty when
+// the resolver reports none).
+type Resolution struct {
+	Difficulty    string
+	FocusConcepts []string
+	Signals       []string
+}
+
+// Resolver selects the resolution for one synthesis call: a difficulty level
+// plus, optionally, focus concepts for content targeting.
 type Resolver interface {
-	Resolve(ctx context.Context, synth SynthesisContext) string
+	Resolve(ctx context.Context, synth SynthesisContext) Resolution
 }

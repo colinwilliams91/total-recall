@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1837,5 +1838,129 @@ func TestSkipTerminalGuardSimilarForSkipped(t *testing.T) {
 	}
 	if len(skipped[0].Selections) != 0 {
 		t.Fatalf("expected zero selections on skipped question, got %d", len(skipped[0].Selections))
+	}
+}
+
+// ── performance-adaptive-resolver: learner-driven difficulty ─────────────────
+
+// seedAnsweredHistory seeds total answered questions for (repo, branch) with
+// `correct` of them answered correctly — the learner history the Performance
+// resolver reads at synthesis time. Uses the store API directly (save →
+// claim → submit), the same lifecycle the daemon records.
+func seedAnsweredHistory(t *testing.T, store *cache.Store, repo, branch string, total, correct int) {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < total; i++ {
+		question := fmt.Sprintf("history question %d", i)
+		if err := store.SaveQuestion(ctx, repo, branch, question, buildChoices([]string{"right", "wrong"}, 0), "", nil); err != nil {
+			t.Fatalf("seed SaveQuestion %q: %v", question, err)
+		}
+		claimed, err := store.NextQuestion(ctx, repo, branch, "test")
+		if err != nil {
+			t.Fatalf("seed NextQuestion: %v", err)
+		}
+		if claimed == nil {
+			t.Fatalf("seeded question %q was not claimable", question)
+		}
+		answerClaimed(t, store, ctx, claimed, i < correct)
+	}
+}
+
+// postSynthesisHook fires one pre-commit hook through the pipeline with a
+// single-concept extraction (baseline falls through to intermediate) and
+// returns once the synthesized question is persisted.
+func postSynthesisHook(t *testing.T, provider *scriptedProvider, store *cache.Store, baseURL string) *cache.StoredQuestion {
+	t.Helper()
+	provider.responses = []string{
+		`[{"concept":"retry-pattern","slug":"retry_pattern","source":"code","weight":0.9}]`,
+		`{"question":"What is a retry pattern?","choices":["Option A","Option B"],"correct_index":0}`,
+	}
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func retry() {}")))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	return waitForUndeliveredQuestion(t, store, "/repo/test")
+}
+
+// TestPipelineHighPerformerEscalatesDifficulty verifies the learner tier: a
+// ≥92% recent correctness ratio escalates the (intermediate) commit-signal
+// baseline to hard in the captured synthesis prompt, and the 'queued' event
+// payload carries the resolved difficulty + fired signals.
+func TestPipelineHighPerformerEscalatesDifficulty(t *testing.T) {
+	provider := &scriptedProvider{}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	seedAnsweredHistory(t, store, "/repo/test", "main", 20, 19) // ratio 0.95
+	q := postSynthesisHook(t, provider, store, baseURL)
+
+	if !strings.Contains(provider.lastReq.System, "Difficulty level: hard") {
+		t.Fatalf("expected escalated hard directive in the synthesis prompt, got %q", provider.lastReq.System)
+	}
+
+	db := openRawDB(t)
+	var payload sql.NullString
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT payload FROM question_events WHERE question_id = ? AND event_type = 'queued'`, q.ID).Scan(&payload); err != nil {
+		t.Fatalf("queued payload query: %v", err)
+	}
+	if !payload.Valid {
+		t.Fatal("expected the queued event to carry the resolution payload")
+	}
+	var decoded struct {
+		ResolvedDifficulty string   `json:"resolved_difficulty"`
+		Signals            []string `json:"signals"`
+	}
+	if err := json.Unmarshal([]byte(payload.String), &decoded); err != nil {
+		t.Fatalf("payload JSON: %v (payload: %s)", err, payload.String)
+	}
+	if decoded.ResolvedDifficulty != "hard" {
+		t.Fatalf("expected resolved_difficulty hard, got %q", decoded.ResolvedDifficulty)
+	}
+	found := false
+	for _, s := range decoded.Signals {
+		if s == "learner-tier" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected learner-tier among fired signals, got %v", decoded.Signals)
+	}
+}
+
+// TestPipelineStrugglingLearnerDeEscalatesDifficulty verifies a <50% ratio
+// eases the baseline one level (intermediate → easy).
+func TestPipelineStrugglingLearnerDeEscalatesDifficulty(t *testing.T) {
+	provider := &scriptedProvider{}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	seedAnsweredHistory(t, store, "/repo/test", "main", 20, 7) // ratio 0.35
+	postSynthesisHook(t, provider, store, baseURL)
+
+	if !strings.Contains(provider.lastReq.System, "Difficulty level: easy") {
+		t.Fatalf("expected de-escalated easy directive in the synthesis prompt, got %q", provider.lastReq.System)
+	}
+}
+
+// TestPipelineFreshInstallResolvesToCommitSignalBaseline verifies the cold
+// start: with no answered history the resolution is the commit-signal
+// baseline (intermediate fallback) — no learner tier applied.
+func TestPipelineFreshInstallResolvesToCommitSignalBaseline(t *testing.T) {
+	provider := &scriptedProvider{}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	postSynthesisHook(t, provider, store, baseURL)
+
+	if !strings.Contains(provider.lastReq.System, "Difficulty level: intermediate") {
+		t.Fatalf("expected baseline intermediate directive on fresh install, got %q", provider.lastReq.System)
 	}
 }

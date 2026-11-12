@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: `Resolver` interface exposes difficulty selection as a separable concern from synthesis prompt construction
-The `internal/recall/difficulty` package exposes a `Resolver` interface with a single method `Resolve(ctx context.Context, synth recall.SynthesisContext) Resolution`. The returned `Resolution` SHALL carry `Difficulty` — one of `"easy"`, `"intermediate"`, `"hard"`, or `""` (the empty string indicating the resolver elected no preference and the caller should substitute a default) — and `FocusConcepts`, an optional list of concept identifiers biased for synthesis content targeting (weak-concept repetition; empty when the resolver has no content steer). `Synthesize` and `SynthesisRequest` consume only the `Resolution` struct; they do not inspect the heuristics or signals that produced it.
+The `internal/recall/difficulty` package exposes a `Resolver` interface with a single method `Resolve(ctx context.Context, synth recall.SynthesisContext) Resolution`. The returned `Resolution` SHALL carry `Difficulty` — one of `"easy"`, `"intermediate"`, `"hard"`, or `""` (the empty string indicating the resolver elected no preference and the caller should substitute a default) — `FocusConcepts`, an optional list of canonical registry slugs biased for synthesis content targeting (weak-concept repetition; empty when the resolver has no content steer), and `Signals`, the fired signal names carried to the queued-event audit payload (empty when the resolver reports none). `Synthesize` and `SynthesisRequest` consume only the `Resolution` struct; they do not inspect the heuristics or signals that produced it.
 
 #### Scenario: Resolver returns a concrete difficulty
 - **WHEN** any `Resolver` implementation's `Resolve` is called with a valid `SynthesisContext`
@@ -13,16 +13,35 @@ The `internal/recall/difficulty` package exposes a `Resolver` interface with a s
 - **WHEN** the same `Resolver` instance is called twice in a row with the same `SynthesisContext`
 - **THEN** both calls return the same `Resolution` values; the resolver does not mutate per-call state
 
+---
+
+### Requirement: `Static` resolver returns the configured value verbatim, delegating to `Adaptive` only when the value is `"adaptive"`
+`Static{value string}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST return `Resolution{Difficulty: s.value, FocusConcepts: nil}` verbatim when `s.value != "adaptive"` and MUST return `Adaptive{}.Resolve(ctx, synth)` otherwise. Empty string SHALL be preserved as-is (the `Synthesize` caller substitutes `"intermediate"` as a safety net); unknown strings (`"foo"`, typos) MUST be returned verbatim and propagate to the prompt — this is a defense-in-depth concern, mitigated by config validation in the loader.
+
+#### Scenario: Static with concrete difficulty returns verbatim
+- **WHEN** `Static{value: "hard"}.Resolve(ctx, synth)` is called with any `synth`
+- **THEN** `Resolution.Difficulty` is `"hard"` and `Resolution.FocusConcepts` is empty, regardless of `synth` content
+
+#### Scenario: Static with adaptive delegates to Adaptive
+- **WHEN** `Static{value: "adaptive"}.Resolve(ctx, synth)` is called with `synth` carrying high-cluster signals (3 concepts w/ avg weight 0.9)
+- **THEN** the returned `Resolution` matches what `Adaptive{}.Resolve(ctx, synth)` would return for the same `synth` (`"hard"` difficulty, empty focus, per the high-cluster heuristic)
+
+#### Scenario: Static with empty string returns empty
+- **WHEN** `Static{value: ""}.Resolve(ctx, synth)` is called with any `synth`
+- **THEN** `Resolution.Difficulty` is `""` with empty focus; the caller (`Synthesize`) substitutes `"intermediate"` before invoking `SynthesisRequest`
+
+---
+
 ### Requirement: `Adaptive` resolver applies a first-match heuristic table over `SynthesisContext` signals
 `Adaptive{}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST evaluate the following heuristics in order; the first match wins and produces the returned difficulty:
 
 1. **High-cluster signal** — `avg(synth.Concepts[*].Weight) > 0.7 AND len(synth.Concepts) >= 3` → returns `"hard"`
-2. **Dispersed signal** — `avg(synth.Concepts[*].Weight) < 0.3 AND len(synth.Concepts) >= 5` → returns `"easy"`
+2. **Dispersed signal** — `avg(synth.Concepts[*].Weight) < 0.55 AND len(synth.Concepts) >= 5` → returns `"easy"`
 3. **All-code source signal** — `len(synth.Concepts) >= 5 AND all(synth.Concepts[*].Source == "code")` → escalates the fallback by one level; returns `"hard"` (the fallback `"intermediate"` escalated one level)
 4. **AI-delegation signal** — `len(synth.CommitMsg) < 50 AND len(synth.DiffSnippet) > 400` → returns `"hard"` (last commit-shape rule; agent-heavy workflows — the product's primary user class — trip this constantly, so it terminates rather than leads the table)
 5. **Fallback** — no heuristic matched → returns `"intermediate"`
 
-The thresholds are package-private constants in `internal/recall/difficulty/adaptive.go`: `adaptiveHighClusterWeight = 0.7`, `adaptiveDispersedWeight = 0.3`, `adaptiveMinHighClusterConcepts = 3`, `adaptiveMinDispersedConcepts = 5`, `adaptiveDelegationMsgMaxChars = 50`, `adaptiveDelegationSnippetMinChars = 400`, `adaptiveMinAllCodeSourceConcepts = 5`.
+The thresholds are package-private constants in `internal/recall/difficulty/adaptive.go`: `adaptiveHighClusterWeight = 0.7`, `adaptiveDispersedWeight = 0.55` (re-anchored against the observed extraction distribution — real weights are ~0.5–0.9 model confidence, so the prior 0.3 could never fire), `adaptiveMinHighClusterConcepts = 3`, `adaptiveMinDispersedConcepts = 5`, `adaptiveDelegationMsgMaxChars = 50`, `adaptiveDelegationSnippetMinChars = 400`, `adaptiveMinAllCodeSourceConcepts = 5`.
 
 #### Scenario: AI-delegation signal fires
 - **WHEN** `synth.CommitMsg = "fix:"` (5 chars) and `synth.DiffSnippet` is 500 chars, with no concept-structure signal present
@@ -32,7 +51,7 @@ The thresholds are package-private constants in `internal/recall/difficulty/adap
 - **WHEN** `synth.Concepts` has 2 entries with weights `[0.9, 0.9]` (avg = 0.9 but `len < 3`)
 - **THEN** the high-cluster heuristic does not match; evaluation continues and resolves `"intermediate"` (too few concepts for the dispersed and all-code rules as well)
 
-#### Scenario: AI-delegation wins over high-cluster when both fire
+#### Scenario: AI-delegation and high-cluster agree on hard when both fire
 - **WHEN** both AI-delegation (short msg, large snippet) and high-cluster signals are present
 - **THEN** `Adaptive{}.Resolve` returns `"hard"` (both produce `"hard"`; the reordered first-match does not conflict or double-escalate)
 
@@ -53,7 +72,7 @@ The thresholds are package-private constants in `internal/recall/difficulty/adap
 - **THEN** `Adaptive{}.Resolve` returns `"easy"`
 
 #### Scenario: All-code source signal escalates fallback
-- **WHEN** `synth.Concepts` has 5 entries all with `Source = "code"`, avg weight `0.5` (no high-cluster, no dispersed, no delegation)
+- **WHEN** `synth.Concepts` has 5 entries all with `Source = "code"`, avg weight `0.6` (above the dispersed floor, below high-cluster; no delegation)
 - **THEN** `Adaptive{}.Resolve` returns `"hard"` (fallback `"intermediate"` escalated one level)
 
 #### Scenario: AI-delegation still escalates when nothing else fires

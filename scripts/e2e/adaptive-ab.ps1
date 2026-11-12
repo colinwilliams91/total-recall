@@ -73,6 +73,85 @@ try {
         }
     }
 
+    # ── learner arms: answered-history seeding via the HTTP contract ────────
+    # The performance resolver reads windowed answered history. The ask TUI
+    # cannot be driven headless, so this phase claims (GET /recall/next) and
+    # answers (POST /recall/select) through the same endpoints the shell
+    # client uses, then fires a final synthesis to show the tier shift.
+    $Base = "http://localhost:7331"
+
+    function Post-Hook([string]$Msg, [string]$Branch) {
+        $body = @{ hook = "commit-msg"; repo = $Repo; branch = $Branch
+            timestamp = "2026-01-01T00:00:00Z"
+            payload = @{ diff = "// touch"; message = $Msg } } | ConvertTo-Json -Compress -Depth 4
+        Invoke-RestMethod -Uri "$Base/hooks/commit-msg" -Method Post -ContentType "application/json" -Body $body | Out-Null
+    }
+
+    function Get-NextQuestion([string]$Branch) {
+        $u = "$Base/recall/next?repo=" + [uri]::EscapeDataString($Repo) + "&branch=" + [uri]::EscapeDataString($Branch)
+        try { Invoke-RestMethod -Uri $u } catch { $null }
+    }
+
+    function Select-Answer($q, [bool]$Correct) {
+        # The delivery wire format deliberately withholds which choice is
+        # correct (anti-leak contract), so the correct position is read from
+        # the scratch memory.db. Requires python for that lookup.
+        $py = Get-Command python3 -ErrorAction SilentlyContinue
+        if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+        if (-not $py) { Write-Host "  (python not found — cannot read the scratch DB for correct positions)"; return }
+        $code = "import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);r=c.execute(sys.argv[2],(int(sys.argv[3]),)).fetchone();print(r[0] if r and r[0] is not None else '')"
+        $db = Join-Path $TrHome "memory.db"
+        $cidx = & $py.Source -NoProfile -c $code $db "SELECT position FROM choices WHERE question_id = ? AND is_correct = 1" $q.id
+        if ($null -eq $cidx -or "$cidx" -eq "") { Write-Host "  (no choices found for question $($q.id))"; return }
+        if ($Correct) {
+            $idx = [int]$cidx
+        } else {
+            $n = & $py.Source -NoProfile -c $code $db "SELECT COUNT(*) FROM choices WHERE question_id = ?" $q.id
+            if ($null -eq $n -or [int]$n -le 0) { return }
+            $idx = ([int]$cidx + 1) % [int]$n
+        }
+        $body = @{ id = $q.id; selected_index = $idx } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri "$Base/recall/select" -Method Post -ContentType "application/json" -Body $body | Out-Null
+    }
+
+    function Await-Question([string]$Branch) {
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline) {
+            $q = Get-NextQuestion $Branch
+            if ($null -ne $q) { return $q }
+            Start-Sleep -Milliseconds 500
+        }
+        return $null
+    }
+
+    function Seed-LearnerArm([string]$Name, [int]$CorrectCount) {
+        Write-Host "=== learner arm: $name ==="
+        $branch = "arm-$Name"
+        $captured = @()
+        for ($i = 1; $i -le 20; $i++) {
+            Post-Hook "tidy: learner seeding touch-up $i" $branch
+            $q = Await-Question $branch
+            if ($null -eq $q) { Write-Host "  (no question within 30s, round $i)"; continue }
+            $captured += $q
+        }
+        $answered = 0
+        foreach ($q in $captured) {
+            Select-Answer $q ($answered -lt $CorrectCount)
+            $answered++
+        }
+        Write-Host "  seeded $answered answered on branch $branch ($CorrectCount correct)"
+
+        # Final synthesis on the same branch: the tier rule engages here.
+        Post-Hook "tidy: final touch-up" $branch
+        $q = Await-Question $branch
+        if ($null -ne $q) {
+            $q | ConvertTo-Json -Compress | Add-Content (Join-Path $ArmsDir "$Name.txt")
+        }
+    }
+
+    Seed-LearnerArm "learner-correct" 19   # 19/20 → escalate to hard
+    Seed-LearnerArm "learner-miss" 7       # 7/20 → ease to easy + focus concepts
+
     Stop-Process -Id $Daemon.Id -Force -ErrorAction SilentlyContinue
 }
 finally {
@@ -81,7 +160,7 @@ finally {
 
 Write-Host ""
 Write-Host "Resolver selections (grep the daemon log):"
-Select-String -Path $Log -Pattern "adaptive resolver selected" | ForEach-Object { $_.Line }
+Select-String -Path $Log -Pattern "adaptive resolver selected|performance resolver selected|performance focus concepts" | ForEach-Object { $_.Line }
 Write-Host ""
 Write-Host "Per-arm question captures: $ArmsDir\<arm>.txt"
 Write-Host "Compare question quality side-by-side, then record observations in"

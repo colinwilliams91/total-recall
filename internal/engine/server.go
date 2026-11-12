@@ -200,11 +200,13 @@ func (s *Server) runPipeline(env HookEnvelope) {
 
 	snippet := truncateDiffSnippet(payload.Diff)
 	synth := recall.SynthesisContext{
+		Repo:        env.Repo,
+		Branch:      env.Branch,
 		Concepts:    recentRows,
 		CommitMsg:   payload.Message,
 		DiffSnippet: snippet,
 	}
-	q, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.AI.Model, synth, s.recallEngine.Resolver())
+	q, resolution, err := s.recallEngine.Synthesize(ctx, env.Repo, env.Branch, s.cfg.AI.Model, synth, s.recallEngine.Resolver())
 	if err != nil {
 		log.Printf("[recall] synthesize error: %v", err)
 		return
@@ -227,7 +229,12 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	for i, row := range recentRows {
 		fed[i] = cache.ConceptRef{Slug: row.Slug, Weight: row.Weight}
 	}
-	if err := s.store.SaveQuestion(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice", fed); err != nil {
+
+	// Resolution audit: the resolved difficulty and fired signals ride the
+	// 'queued' event payload (task 6.3 of adaptive-difficulty, deferred) so
+	// operator debugging and future resolvers can correlate level↔outcome.
+	meta := cache.ResolutionMeta{Difficulty: resolution.Difficulty, Signals: resolution.Signals}
+	if err := s.store.SaveQuestionWithResolution(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice", fed, meta); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
