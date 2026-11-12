@@ -29,7 +29,7 @@ _Avoid_: "tier" as a synonym for the level itself
 A one-level movement of the Difficulty Level driven by learner evidence — escalate or de-escalate, never a fourth value. The `learner-tier` signal marks that the rule fired.
 
 **Baseline**:
-The commit-signal resolution (Difficulty Level plus fired signals) the Performance resolver starts from; learner evidence only modulates it. "Commit-signal baseline" anchors the resolver composition.
+The commit-signal resolution (Difficulty Level plus fired signals) the Performance resolver starts from; learner evidence only modulates it. The commit-shape heuristics produce the commit-signal baseline — "shape" names the per-commit input, "signal" names what fired on it.
 
 **Focus Concept**:
 A demonstrated-weakness concept the resolver ranks to lead the synthesis feed for one synthesis call. Biasing reorders existing feed rows and never invents content; a Focus Concept absent from the current feed is dropped.

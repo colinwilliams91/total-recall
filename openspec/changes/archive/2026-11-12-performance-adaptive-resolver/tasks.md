@@ -36,7 +36,7 @@
 
 ## 5. Config sentence + validation check
 
-- [x] 5.1 Verify `ValidDifficulties` unchanged, `adaptive` continues to default; update the loader template's difficulty comment to describe the learner-performance layering (commit shape = cold start baseline, learner history moves the tier)
+- [x] 5.1 Verify `ValidDifficulties` unchanged, `adaptive` continues to default; update the loader template's difficulty comment to describe the learner-performance layering (commit shape = cold start baseline, learner history moves the level one tier)
 - [x] 5.2 Tests `cmd/torec/config_test.go`: difficulty `adaptive` still passes load and no new warning; `easy`/`intermediate`/`hard` untouched by the resolver-chain change
 
 ## 6. Observability + spikes

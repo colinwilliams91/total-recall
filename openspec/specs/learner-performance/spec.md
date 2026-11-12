@@ -60,7 +60,7 @@ When the number of answered questions in scope is below the minimum history thre
 ---
 
 ### Requirement: Weakness-driven focus concepts bias the synthesis feed toward demonstrated weaknesses
-Whenever learner history exists, the resolution SHALL return focus concepts selected from the user's demonstrated weaknesses (empty when no linked concept has a recent miss): concepts with recent answers rank by miss count (misses descending, then most-recent first), bounded to a package focus-cap constant (3). A focus concept is only ranked weak when the learner answered at least one question linked to it and the recent outcomes for it are not exclusively correct. Zero-outcome concepts never enter the focus set.
+Whenever the minimum-history threshold is met, the resolution SHALL return focus concepts (possibly empty) selected from the user's demonstrated weaknesses (empty when no linked concept has a recent miss): concepts with recent answers rank by miss count (misses descending, then most-recent first), bounded to a package focus-cap constant (3). A focus concept is only ranked weak when the learner answered at least one question linked to it and the recent outcomes for it are not exclusively correct. Zero-outcome concepts never enter the focus set.
 
 #### Scenario: Repeatedly-missed concept becomes the focus
 - **WHEN** `circuit-breaker` has 2 misses and 1 recent hit, and other linked concepts are all recently correct
