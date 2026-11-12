@@ -54,7 +54,7 @@ The thresholds are package-private constants in `internal/recall/difficulty/adap
 - **WHEN** `synth.Concepts` has 2 entries with weights `[0.9, 0.9]` (avg = 0.9 but `len < 3`)
 - **THEN** the high-cluster heuristic does not match; evaluation continues and resolves `"intermediate"` (too few concepts for the dispersed and all-code rules as well)
 
-#### Scenario: AI-delegation wins over high-cluster when both fire
+#### Scenario: AI-delegation and high-cluster agree on hard when both fire
 - **WHEN** both AI-delegation (short msg, large snippet) and high-cluster signals are present
 - **THEN** `Adaptive{}.Resolve` returns `"hard"` (both produce `"hard"`; the reordered first-match does not conflict or double-escalate)
 

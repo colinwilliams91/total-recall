@@ -22,11 +22,11 @@ git commit -m "fix: handle retry jitter"   ──>   concept: exponential backof
 
 ### 🧠 Difficulty that learns you
 
-With the default `difficulty: adaptive`, quizzes start from a lightweight read of each commit's shape, then your answer history takes over:
+With the default `difficulty: adaptive`, quizzes start from a lightweight read of each commit's shape, then your answered-question history takes over:
 
 - **A strong record earns harder questions** — a high recent correctness ratio escalates the difficulty a level; a rough patch eases off before it demoralizes. In between, the level holds.
 - **Your misses lead the next quiz** — concepts you keep missing rank ahead of the rest of the feed, so the next question targets your demonstrated weaknesses, not just what you touched last. Weaknesses follow you across projects too: a concept you struggled with on one repo shapes the quiz on another whenever that concept is already on the table.
-- **Cold start is gentle** — until a handful of answered questions exist, the commit-shape baseline runs alone; your answers never move the level before there's real evidence.
+- **Cold start is gentle** — until a handful of answered questions exist, the commit-shape baseline runs alone; your selections never move the level before there's real evidence.
 
 Every resolution is auditable: the chosen level and its reasons ride the question's event record, and the daemon log names them (`learner-tier`, `cold-start`, `performance focus concepts: …`). Want a fixed level instead? `recall.difficulty: easy | intermediate | hard` pins it — learner adaptation only applies to `adaptive`.
 

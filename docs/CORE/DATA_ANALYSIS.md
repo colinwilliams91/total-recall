@@ -174,13 +174,13 @@ That adaptive difficulty mechanism could become extremely valuable.
 > each resolution logs its matched signal for debugging.
 >
 > The learner-driven layer (performance-adaptive-resolver) composes on top:
-> commit shape is second-class — a cold-start baseline only. Once ~20
-> answered questions exist, the windowed correctness ratio moves the tier
-> one level (≥92% escalates, <50% eases), and the missed concepts rank a
-> focus set that leads the synthesis feed, so question *contents* target
-> demonstrated weaknesses. Each resolution persists its difficulty and
-> fired signals on the queued question event's payload for level↔outcome
-> correlation.
+> commit shape is second-class — a cold-start baseline only. Once at least 5
+> answered questions exist (the ratio window is the last 20), the windowed
+> correctness ratio moves the tier one level (≥92% escalates, <50% eases),
+> and the missed concepts rank a focus set that leads the synthesis feed, so
+> question *contents* target demonstrated weaknesses. Each resolution
+> persists its difficulty and fired signals on the queued question event's
+> payload for level↔outcome correlation.
 
 ---
 

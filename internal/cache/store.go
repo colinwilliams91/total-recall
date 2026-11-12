@@ -648,10 +648,11 @@ const questionCorrectnessSQL = `
 // difficulty resolution. The tier window is scoped to the current repo and
 // branch; the per-slug tallies key on registry identity and aggregate across
 // surfaces (user-wide), keeping the difficulty ratio working-surface-local
-// while weakness evidence stays user-grained. Skipped questions never enter
-// either window (only 'answered' rows qualify). Read-only: no writes, no
-// scoping change to the tables it reads. Empty repo/branch or a non-positive
-// window yields zero stats without touching the store.
+// while weakness evidence stays user-grained — the split is a deliberate
+// bet, recorded in docs/adr/0004-learner-scope-split.md. Skipped questions
+// never enter either window (only 'answered' rows qualify). Read-only: no
+// writes, no scoping change to the tables it reads. Empty repo/branch or a
+// non-positive window yields zero stats without touching the store.
 func (s *Store) LearnerStats(ctx context.Context, repo, branch string, window int) (LearnerStats, error) {
 	var out LearnerStats
 	if repo == "" || branch == "" || window <= 0 {
