@@ -7,6 +7,12 @@
 # Findings are not fixable by robotics: the developer must resolve them (fix the
 # glossary, code, or write the ADR, as the finding recommends) and re-run.
 #
+# One audit comment per PR, not one per run: every round re-audits the full diff,
+# so the newest comment is the complete current findings list. The collapse step
+# deletes older audit comments (and stale APIError notices) after a successful
+# run, keeping the thread readable. `concurrency` serializes runs per PR so a
+# push cancels a stale in-flight audit instead of racing it into the thread.
+#
 # Requires one secret: OPENCODE_API_KEY (Settings -> Secrets and variables ->
 # Actions). The model below uses the opencode-go subscription provider; change
 # `model:` if the provider/model routing changes.
@@ -21,6 +27,10 @@ permissions:
   pull-requests: write
   issues: write
   id-token: write
+
+concurrency:
+  group: domain-modeling-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   domain-modeling:
@@ -79,6 +89,56 @@ jobs:
 
             A downstream automation enforces this verdict; do not omit or
             decorate the marker line.
+
+      - name: Collapse duplicate audit comments
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}
+          RUN_STARTED: ${{ github.run_started_at }}
+        run: |
+          set -euo pipefail
+
+          # The opencode action posts a fresh comment every run. Each run
+          # re-audits the full diff, so the newest comment is the complete
+          # current state and the older ones are pure noise. Keep this run's
+          # audit comment, delete all other audit comments and stale
+          # APIError notices. If this run posted no audit comment (action
+          # crashed), leave the thread untouched so the last findings survive.
+          rows="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate \
+            --jq '.[]
+              | select(.user.login == "github-actions[bot]")
+              | select((.body | contains("DOMAIN-MODEL-VERDICT:")) or (.body | startswith("APIError:")))
+              | [(.id | tostring), .created_at,
+                 (if (.body | contains("DOMAIN-MODEL-VERDICT:")) then "audit" else "error" end)]
+              | @tsv')"
+
+          new_id=""
+          ids=()
+          while IFS=$'\t' read -r id created kind; do
+            [ -z "$id" ] && continue
+            ids+=("$id")
+            if [ "$kind" = audit ] && [[ "$created" > "$RUN_STARTED" ]]; then
+              new_id="$id"
+            fi
+          done <<<"$rows"
+
+          if [ -z "$new_id" ]; then
+            echo "No audit comment posted by this run; leaving previous comments untouched."
+            exit 0
+          fi
+
+          deleted=0
+          for id in "${ids[@]}"; do
+            [ "$id" = "$new_id" ] && continue
+            if gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null; then
+              deleted=$((deleted + 1))
+            else
+              echo "::warning::could not delete superseded audit comment $id"
+            fi
+          done
+          echo "Collapsed $deleted superseded comment(s); PR now shows only comment $new_id."
 
       - name: Enforce domain-modeling verdict
         if: always()
