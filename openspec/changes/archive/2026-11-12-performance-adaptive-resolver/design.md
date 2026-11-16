@@ -18,12 +18,12 @@ Data foundations observed in the tree:
 **Goals:**
 - A `Performance` resolver that composes learner evidence over the commit-signal baseline: tier the difficulty from the windowed correctness ratio; return focus concepts for weakness-targeted content.
 - Demote commit-shape signals: reorder the `Adaptive` table so AI-delegation is the last rule; learner evidence (where present) is the only factor that can move past commit shape.
-- Widening the `Resolver` contract minimally: `Resolve` returns `Resolution{Difficulty, FocusConcepts}` — one struct, not a second method.
-- Persist the resolved difficulty at queue time (`'queued'` event payload), completing the prior change's deferred task 6.3 — the audit spine the next resolver iteration will need.
+- Widening the `Resolver` contract minimally: `Resolve` returns `Resolution{Difficulty, FocusConcepts, Signals}` — one struct, not a second method.
+- Persist the resolved difficulty and fired signals at queue time (`'queued'` event payload), completing the prior change's deferred task 6.3 — the audit spine the next resolver iteration will need.
 
 **Non-Goals:**
 - Spaced-repetition *scheduling* (when to re-ask) — this change implements *what* to emphasize; the resurfacing scheduler (a `SpacedRepetition` resolver with intervals/intervals-of-forgetting) remains future work.
-- New lifecycle event types — no CHECK-vocabulary changes needed; the difficulty rides the existing `'queued'` row's payload column.
+- New lifecycle event types — no CHECK-vocabulary changes needed; the difficulty and fired signals ride the existing `'queued'` row's payload column.
 - Separating the resolver from `Synthesize`'s call path or introducing async resolution.
 - A second AI call to grade concepts or judge learner ability — all learner stats are SQL aggregates over data already recorded.
 - Changing the three-level difficulty vocabulary or the config keys (`recall.difficulty` values remain `easy`|`intermediate`|`hard`|`adaptive`).
@@ -40,7 +40,7 @@ The new resolver wraps the existing `Adaptive` heuristics rather than replacing 
 
 ### Decision: one wide `Resolve` result, not a new interface method
 
-`Resolver.Resolve` returns `Resolution{Difficulty string, FocusConcepts []string}` instead of a bare string. One method, one widening; `Static` gains an empty-focus default, `Adaptive` wraps its level into the struct. Callers in `Synthesize` destructure once.
+`Resolver.Resolve` returns `Resolution{Difficulty string, FocusConcepts []string, Signals []string}` instead of a bare string. One method, one widening; `Static` gains empty focus and signal defaults, `Adaptive` wraps its level and fired signal names into the struct. Callers in `Synthesize` destructure once.
 
 **Alternatives considered:**
 - *A second interface method `FocusConcepts(ctx, synth)`.* Rejected: two methods invites per-call contract drift (a resolver implementing one but not the other) and two resolution costs where callers always need both.
@@ -90,7 +90,7 @@ The `Performance` resolver needs a stats provider; the composition root (engine 
 - **[Trade-off] Answer scarcity makes the tier rule conservative early.** The 20-question window means the tier rules engage only after a real answer habit forms; until then resolution is commit-shape-driven (cold start preserved). Accepted: thresholds before the window fills would chase noise.
 - **[Measured finding, 2026-09-28 spike] The `easy`/dispersed rule is currently dead code.** The adaptive-difficulty A/B spike (`docs/CORE/ADAPTIVE_SPIKE.md`, run 2) captured 49 questions with zero `dispersed` resolutions: the extraction prompt pins `source: always "code"` and treats weight as model confidence (~0.5–0.9 observed), so `avg weight < 0.3` never fires and `all-code` escalates every ≥5-concept commit unconditionally (34/49 selections). Resolution (chosen at apply time): option (c), threshold re-anchoring — `adaptiveDispersedWeight` 0.3 → 0.55, above the observed floor so all-low-confidence sprays move the level down to easy while the 0.6+ bulk stays with all-code/high-cluster. Option (a) (weight-semantics redefinition) rejected as a cross-capability extraction-contract change outside this change's declared scope; option (b) (source-mix-based `dispersed`) rejected as empirically dead (source is pinned to "code"). Both live in `adaptive.go` with the reordered table; the spike harness (task 6.1) validates reachability on real traffic.
 - **[Risk] Skipped questions skew the focus ranking.** A concept the user skips repeatedly accumulates no outcome; it will not rank as weak. Accepted for this change (skip ≠ known weakness); a future change can weight a forming skip-streak.
-- **[Risk] Concept linkage is owned by the landed provenance schemas.** Main specs `concept-cache`/`concept-identity` define `question_concepts` and `concept_registry`; if the join changes shape (e.g. gains columns), the mastery query follows. No fallback clause remains — the payload audit extension (task 2.3) records difficulty, not concepts.
+- **[Risk] Concept linkage is owned by the landed provenance schemas.** Main specs `concept-cache`/`concept-identity` define `question_concepts` and `concept_registry`; if the join changes shape (e.g. gains columns), the mastery query follows. No fallback clause remains — the payload audit extension (task 2.3) records difficulty and fired signals, not concepts.
 - **[Risk] Slug drift fragments per-concept tallies.** A pre-merge real-AI run showed the registry fragmenting into near-miss slugs (`go_function_declaration` / `go_function_declarations`, `helper_functions` / `go_helper_functions`, `diff_padding` / `diff_context_padding`, …). This change adds no fuzzy matching — fragmentation is repaired through the exact-pair `concept_aliases` pressure valve, and until then near-miss identities rank as separate weak concepts. Accepted: conservative degradation, no mismerge of evidence.
 - **[Risk] Focus re-ranking is subtle in the prompt.** The synthesis model may not honor ordering emphasis for a well-weighted context. Mitigation: the user-turn formatting gives focused concepts their own lead section ("Concepts the developer is currently working through") — observable in the synthesis capture tests.
 - **[Trade-off] Window/threshold constants are best-guesses** (20 / 0.92 / 0.50 / 5-history / 3-focus). Package-private in this change; the A/B spike harness from `adaptive-difficulty` (task 5.1) generalizes to capture per-tier outcome distributions before exposing any knob as config.
@@ -100,7 +100,7 @@ The `Performance` resolver needs a stats provider; the composition root (engine 
 1. Prerequisites done: `adaptive-difficulty` archived 2026-09-28 (its `difficulty-resolution`/`recall-engine` deltas are the main specs this change modifies); `concept-provenance` archived 2026-10-27 (`question_concepts` + `concept_registry` live in the store).
 2. Implement `Resolution` contract widening + `Adaptive` reorder in `internal/recall/difficulty` (mechanical, all in-tree callers update atomically).
 3. Implement mastery aggregation (store read query) and the `Performance` resolver.
-4. Wire composition at the engine (`Engine.New` wraps the configured chain with `Performance` on top), bias the synthesis user turn, persist resolved difficulty on the queued event payload.
+4. Wire composition at the engine (`Engine.New` wraps the configured chain with `Performance` on top), bias the synthesis user turn, persist resolved difficulty and fired signals on the queued event payload.
 5. Tests: resolver unit tests (tiers, cold start, focus ranking), engine integration (focus bias observable in the user turn), config sanity (static difficulty modes unchanged).
 6. No new schema of its own; no migration concerns — `question_concepts`/`concept_registry` are already live.
 

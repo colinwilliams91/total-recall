@@ -16,7 +16,7 @@ The `internal/recall/difficulty` package exposes a `Resolver` interface with a s
 ---
 
 ### Requirement: `Static` resolver returns the configured value verbatim, delegating to `Adaptive` only when the value is `"adaptive"`
-`Static{value string}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST return `Resolution{Difficulty: s.value, FocusConcepts: nil}` verbatim when `s.value != "adaptive"` and MUST return `Adaptive{}.Resolve(ctx, synth)` otherwise. Empty string SHALL be preserved as-is (the `Synthesize` caller substitutes `"intermediate"` as a safety net); unknown strings (`"foo"`, typos) MUST be returned verbatim and propagate to the prompt — this is a defense-in-depth concern, mitigated by config validation in the loader.
+`Static{value string}` SHALL implement `Resolver`. `Resolve(ctx, synth)` MUST return `Resolution{Difficulty: s.value, FocusConcepts: nil, Signals: nil}` verbatim when `s.value != "adaptive"` and MUST return `Adaptive{}.Resolve(ctx, synth)` otherwise. Empty string SHALL be preserved as-is (the `Synthesize` caller substitutes `"intermediate"` as a safety net); unknown strings (`"foo"`, typos) MUST be returned verbatim and propagate to the prompt — this is a defense-in-depth concern, mitigated by config validation in the loader.
 
 #### Scenario: Static with concrete difficulty returns verbatim
 - **WHEN** `Static{value: "hard"}.Resolve(ctx, synth)` is called with any `synth`

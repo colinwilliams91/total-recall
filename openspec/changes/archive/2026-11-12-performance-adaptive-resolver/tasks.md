@@ -1,8 +1,8 @@
 ## 1. `Resolution` contract widening + heuristic reorder (`internal/recall/difficulty`)
 
-- [x] 1.1 Introduce `Resolution` type in `resolver.go`: `Resolution{Difficulty string, FocusConcepts []string}`; widen `Resolver.Resolve` to return `Resolution`. `""` difficulty semantics unchanged (caller substitutes the safety-net default)
-- [x] 1.2 `Static.Resolve` returns `Resolution{Difficulty: s.value, FocusConcepts: nil}` verbatim when the value is not `"adaptive"`; delegation to `Adaptive` unchanged on `"adaptive"`; empty-string preservation semantics unchanged
-- [x] 1.3 `Adaptive.Resolve` returns `Resolution{Difficulty: level, FocusConcepts: nil}` with the heuristic table reordered: high-cluster → dispersed → all-code → AI-delegation (final commit-shape rule) → fallback. Threshold constants unchanged
+- [x] 1.1 Introduce `Resolution` type in `resolver.go`: `Resolution{Difficulty string, FocusConcepts []string, Signals []string}`; widen `Resolver.Resolve` to return `Resolution`. `""` difficulty semantics unchanged (caller substitutes the safety-net default)
+- [x] 1.2 `Static.Resolve` returns `Resolution{Difficulty: s.value, FocusConcepts: nil, Signals: nil}` verbatim when the value is not `"adaptive"`; delegation to `Adaptive` unchanged on `"adaptive"`; empty-string preservation semantics unchanged
+- [x] 1.3 `Adaptive.Resolve` returns `Resolution{Difficulty: level, FocusConcepts: nil, Signals: fired}` (the fired signal names from the matched heuristic) with the heuristic table reordered: high-cluster → dispersed → all-code → AI-delegation (final commit-shape rule) → fallback. Threshold constants unchanged
 - [x] 1.4 Update the per-call log line to include the demotion anchor — the same `[recall] adaptive resolver selected <level> (signals: <list>)` format; `ai-delegation` remains a signal name (no double-escalation path)
 - [x] 1.5 Tests `internal/recall/difficulty/static_test.go`: verbatim paths return `Resolution` with empty focus; adaptive delegation reaches heuristics; empty-string case preserved
 - [x] 1.6 Tests `internal/recall/difficulty/adaptive_test.go`: reordered first-match table — dispersed wins over delegation when both fire; delegation still escalates when alone; high-cluster/all-code/fallback scenarios re-asserted; empty-context no-panic preserved
@@ -32,7 +32,7 @@
 - [x] 4.3 Thread the lean stats provider through the composition root: `Engine.New` (or the engine package's constructor graph) gains the stats provider injection; server construction unchanged externally
 - [x] 4.4 Queued-event write: engine passes the resolved difficulty + fired signals into the `SaveQuestion` path (task 2.3's payload contract) atomically with question persistence
 - [x] 4.5 Tests `cmd/torec/recall_test.go`: user-turn reordering with focus set (focused concept leads; unknown focus name ignored); static-difficulty config unaffected by the widened contract
-- [x] 4.6 Integration tests `cmd/torec/integration_test.go`: daemon with seeded answered history — high performer (≥92% recent) escalates the difficulty directive in the captured synthesis prompt; struggling learner de-escalates; fresh install (no history) resolves identically to the commit-signal baseline; stored `'queued'` event payload carries the resolved difficulty JSON
+- [x] 4.6 Integration tests `cmd/torec/integration_test.go`: daemon with seeded answered history — high performer (≥92% recent) escalates the difficulty directive in the captured synthesis prompt; struggling learner de-escalates; fresh install (no history) resolves identically to the commit-signal baseline; stored `'queued'` event payload carries the resolved difficulty and fired signals JSON
 
 ## 5. Config sentence + validation check
 
