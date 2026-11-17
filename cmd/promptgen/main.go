@@ -83,7 +83,7 @@ func main() {
 		snippet = snippet[:synthesisDiffSnippetMaxChars] + "\n[… truncated …]"
 	}
 
-	req := recall.SynthesisRequest(concepts, *commitMsg, snippet, policyBody, *difficulty, "")
+	req := recall.SynthesisRequest(concepts, *commitMsg, snippet, policyBody, *difficulty, nil, "")
 	out := composedOut{System: req.System, User: req.UserTurn, MaxTokens: req.MaxTokens}
 	enc := json.NewEncoder(os.Stdout)
 	if err := enc.Encode(out); err != nil {

@@ -79,11 +79,14 @@ If the developer was incorrect: state the correct answer explicitly, explain why
 // The system turn is composed from the policy body + format contract when the
 // policy body is non-empty; otherwise the legacy synthesisSystemTmpl is used
 // verbatim (fallback path). The user turn lists each concept with its weight,
-// source, and seen-at timestamp, followed by a "Recent commit context" section
-// when both commitMsg and diffSnippet are non-empty.
-func SynthesisRequest(concepts []cache.ConceptRow, commitMsg, diffSnippet, policyBody, difficulty, model string) ai.CompletionRequest {
+// source, and seen-at timestamp, led by a focused-concepts section when the
+// resolver's focus set matches rows in the concepts list, followed by a
+// "Recent commit context" section when both commitMsg and diffSnippet are
+// non-empty. Focus names that match no concept row are ignored — biasing
+// reorders existing rows, it never invents feed content.
+func SynthesisRequest(concepts []cache.ConceptRow, commitMsg, diffSnippet, policyBody, difficulty string, focus []string, model string) ai.CompletionRequest {
 	system := composeSystemTurn(policyBody, difficulty)
-	userTurn := composeUserTurn(concepts, commitMsg, diffSnippet)
+	userTurn := composeUserTurn(concepts, focus, commitMsg, diffSnippet)
 	return ai.CompletionRequest{
 		Model:     model,
 		System:    system,
@@ -104,18 +107,55 @@ func composeSystemTurn(policyBody, difficulty string) string {
 }
 
 // composeUserTurn builds the user-turn message from enriched concept rows and
-// optional commit context. When commitMsg and diffSnippet are both empty, the
-// "Recent commit context" section is omitted entirely.
-func composeUserTurn(concepts []cache.ConceptRow, commitMsg, diffSnippet string) string {
+// optional commit context. When the focus set is non-empty and matches
+// concept rows, those rows surface first under their own lead section
+// ("Concepts the developer is currently working through") ahead of the
+// standard list — weak-concept repetition exploits the policy's
+// keep-the-question-on-a-provided-concept rule via ordering, not bespoke
+// directives. When commitMsg and diffSnippet are both empty, the "Recent
+// commit context" section is omitted entirely.
+func composeUserTurn(concepts []cache.ConceptRow, focus []string, commitMsg, diffSnippet string) string {
+	focused, rest := splitFocused(concepts, focus)
 	var b strings.Builder
+	if len(focused) > 0 {
+		b.WriteString("Concepts the developer is currently working through:\n")
+		for _, c := range focused {
+			fmt.Fprintf(&b, "- %s (weight=%.1f, source=%s, seen=%s)\n", c.Concept, c.Weight, c.Source, c.SeenAt.Format("2006-01-02T15:04:05Z07:00"))
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("Concepts the developer has been working with:\n")
-	for _, c := range concepts {
+	for _, c := range rest {
 		fmt.Fprintf(&b, "- %s (weight=%.1f, source=%s, seen=%s)\n", c.Concept, c.Weight, c.Source, c.SeenAt.Format("2006-01-02T15:04:05Z07:00"))
 	}
 	if commitMsg != "" && diffSnippet != "" {
 		fmt.Fprintf(&b, "\nRecent commit context:\n%s\n```\n%s\n```\n", commitMsg, diffSnippet)
 	}
 	return b.String()
+}
+
+// splitFocused partitions concept rows into the resolver's focus-matched rows
+// (in the focus list's ranking order) and the remainder (original order).
+// Focus names matching no row are dropped silently — the feed stays 100%
+// derivable from the user's own data.
+func splitFocused(concepts []cache.ConceptRow, focus []string) (focused, rest []cache.ConceptRow) {
+	bySlug := make(map[string]cache.ConceptRow, len(concepts))
+	for _, c := range concepts {
+		bySlug[c.Slug] = c
+	}
+	focusSet := make(map[string]bool, len(focus))
+	for _, f := range focus {
+		if c, ok := bySlug[f]; ok {
+			focused = append(focused, c)
+			focusSet[f] = true
+		}
+	}
+	for _, c := range concepts {
+		if !focusSet[c.Slug] {
+			rest = append(rest, c)
+		}
+	}
+	return focused, rest
 }
 
 // FeedbackRequest builds the CompletionRequest used to generate post-answer feedback.

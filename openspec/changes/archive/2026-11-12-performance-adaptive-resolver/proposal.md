@@ -16,15 +16,15 @@ This change makes the learner the primary factor, per the user's stated vision:
 
 - **Difficulty tier:** windowed correctness ratio over the user's recent answered questions. Ratio ≥ 0.92 → escalate one level above the baseline; ratio below a struggling floor (e.g. < 0.50) → de-escalate one level; in between → the commit-signal baseline unchanged. Insufficient history (fewer than N answered) → pure commit-signal baseline (today's behavior preserved as the cold start).
 - **Weakness targeting:** concepts with indications of weakness (recent misses, repeated misses on the same concept) drive part of the resolution output — the resolver returns a set of focus concepts that the engine feeds preferentially to synthesis, so the next question *targets* what the user is demonstrably weak on.
-- **Provenance prerequisite:** per-concept outcomes require a question→concept link and concept identity. This change *consumes* the `question_concepts` join and the `concept_registry` identity layer from the `concept-provenance` change — it does not invent its own schema. Sequenced after that change; see design for the fallback if it has not landed.
-- **Audit continuity:** the resolved difficulty now persists on the `'queued'` question event payload (the deferred follow-up captured as task 6.3 of `adaptive-difficulty`) so operator debugging and future resolvers can correlate level↔outcome.
+- **Provenance prerequisite:** per-concept outcomes require a question→concept link and concept identity. This change *consumes* the `question_concepts` join and the `concept_registry` identity layer from the landed `concept-provenance` change (archived 2026-10-27, now main specs `concept-identity`/`concept-cache`) — it does not invent its own schema.
+- **Audit continuity:** the resolved difficulty and fired signals now persist on the `'queued'` question event payload (the deferred follow-up captured as task 6.3 of `adaptive-difficulty`) so operator debugging and future resolvers can correlate level↔outcome.
 
 **Demoting the commit-shape signals:**
 
 - The first-match heuristic table is re-ordered: learner history > concept-structure signals (high-cluster, dispersed) > all-code escalation > AI-delegation. AI-delegation escalates to `hard` only as the *final* commit-shape rule, and never applies when learner history says otherwise.
 - The AI-delegation heuristic alone no longer resolves to `hard` before the concept-structure rules get their turn.
 
-**Resolution contract widens (breaking, internal):** the `Resolver` interface evolves from returning a bare difficulty `string` to a typed `Resolution{Difficulty string, FocusConcepts []string}`. `Static` and `Synthesize` adopt the new shape; every existing configured value (`easy`/`intermediate`/`hard`/`adaptive`) continues to resolve as it does today.
+**Resolution contract widens (breaking, internal):** the `Resolver` interface evolves from returning a bare difficulty `string` to a typed `Resolution{Difficulty string, FocusConcepts []string, Signals []string}`. `Static` and `Synthesize` adopt the new shape; every existing configured value (`easy`/`intermediate`/`hard`/`adaptive`) continues to resolve as it does today.
 
 ## Capabilities
 
@@ -32,12 +32,12 @@ This change makes the learner the primary factor, per the user's stated vision:
 - `learner-performance`: the `Performance` resolution — mastery aggregation over `question_events` + `question_concepts` provenance (per-concept results), the correctness-ratio tier rules (windows, thresholds 0.92/floor, escalation ladder), weakness-driven focus-concept selection for the synthesis feed, and the cold-start delegation to the commit-signal baseline.
 
 ### Modified Capabilities
-- `difficulty-resolution`: the `Resolver` contract widens to return `Resolution` (difficulty + focus concepts); the heuristic first-match table is reordered so AI-delegation is the last commit-shape rule rather than the first-match winner.
+- `difficulty-resolution`: the `Resolver` contract widens to return `Resolution` (difficulty + focus concepts + fired signals); the heuristic first-match table is reordered so AI-delegation is the last commit-shape rule rather than the first-match winner.
 - `recall-engine`: `Synthesize` consumes the `Resolution` — the difficulty lands in the system turn as today, and the focus concepts bias the synthesis user-turn feed (weak concepts surfacing first) so question *contents* target demonstrated weaknesses.
 
 ## Impact
 
-- **Code:** `internal/recall/difficulty` (new `performance.go` resolver + mastery/stats types; `.Resolve` return type widens; `adaptive.go` rule reordering + demotion of the AI-delegation rule). `internal/recall/engine.go` (`Synthesize` consumes `Resolution`; user-turn feed biasing hook). `internal/engine/server.go` (passes learner stats store handle or resolver context through — no engine surface change). `internal/cache/store.go` (read-only mastery aggregation queries joining `questions`/`question_events`/`question_concepts`; `'queued'` event payload now carries the resolved difficulty). Tests collocate: `internal/recall/difficulty/performance_test.go` plus engine/server integration tests in `cmd/torec/`.
-- **Dependencies:** consumes `concept-provenance` (the `question_concepts` join + `concept_registry` slugs). If that change has not landed when this one implements, a scoped provenance-along-the-way fallback applies (record the synthesis concept batch on the queued event payload instead — see design, Open Questions).
+- **Code:** `internal/recall/difficulty` (new `performance.go` resolver + mastery/stats types; `.Resolve` return type widens; `adaptive.go` rule reordering + demotion of the AI-delegation rule). `internal/recall/engine.go` (`Synthesize` consumes `Resolution`; user-turn feed biasing hook). `internal/engine/server.go` (passes learner stats store handle or resolver context through — no engine surface change). `internal/cache/store.go` (read-only mastery aggregation queries joining `questions`/`question_events`/`question_concepts`; `'queued'` event payload now carries the resolved difficulty and fired signals). Tests collocate: `internal/recall/difficulty/performance_test.go` plus engine/server integration tests in `cmd/torec/`.
+- **Dependencies:** consumes the landed `concept-provenance` join (`question_concepts` + `concept_registry` slugs). The former provenance-along-the-way batch-payload fallback is retired — the join exists in the store.
 - **APIs:** no external API change; `Resolver`'s method signature is an internal seam — sole in-tree callers (`Static`, engine, tests) update atomically.
 - **Specs:** adds `openspec/specs/learner-performance/spec.md`; updates `openspec/specs/difficulty-resolution/spec.md` and `openspec/specs/recall-engine/spec.md`.

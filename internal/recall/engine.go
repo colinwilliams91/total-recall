@@ -66,10 +66,12 @@ func warningQuestionPolicyFallback(err error) {
 // New creates an Engine. Both provider and store must be non-nil. The
 // difficulty resolver is constructed from the configured recall difficulty:
 // a concrete value resolves verbatim via Static; "adaptive" (or an unset
-// field, which preserves the prior default behavior) routes to the adaptive
-// heuristics. The question-generation-policy prompt asset is loaded once at
-// construction; a missing or corrupt asset falls back to SourceFallback and
-// Synthesize uses the legacy inline template.
+// field, which preserves the prior default behavior) chains the
+// learner-driven Performance resolver over the adaptive baseline, backed by
+// read-only learner stats from the store. The question-generation-policy
+// prompt asset is loaded once at construction; a missing or corrupt asset
+// falls back to SourceFallback and Synthesize uses the legacy inline
+// template.
 func New(provider ai.Provider, store *cache.Store, cfg *config.RecallConfig) *Engine {
 	policy, err := assets.Load("question-generation-policy")
 	if err != nil {
@@ -82,11 +84,23 @@ func New(provider ai.Provider, store *cache.Store, cfg *config.RecallConfig) *En
 	if value == "" {
 		value = "adaptive"
 	}
+	var resolver difficulty.Resolver = difficulty.Static{Value: value}
+	if value == "adaptive" {
+		// The learner-driven chain: Performance wraps the commit-signal
+		// baseline with windowed outcome evidence from the store. With no
+		// answered history (or an unavailable stats read) it behaves as the
+		// baseline — the cold start is today's behavior.
+		var stats difficulty.LearnerStatsProvider
+		if store != nil {
+			stats = store
+		}
+		resolver = &difficulty.Performance{Baseline: difficulty.Static{Value: "adaptive"}, Stats: stats}
+	}
 	return &Engine{
 		provider: provider,
 		store:    store,
 		policy:   policy,
-		resolver: difficulty.Static{Value: value},
+		resolver: resolver,
 	}
 }
 
@@ -100,25 +114,28 @@ func (e *Engine) Resolver() difficulty.Resolver {
 // Synthesize asks the AI to generate a recall question from the enriched
 // SynthesisContext. Both repo and branch are required. Difficulty selection
 // is delegated to the resolver — empty contexts (no repo/branch/concepts)
-// return before resolution so they never pay the resolver's cost.
-func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, synth SynthesisContext, resolver difficulty.Resolver) (*Question, error) {
+// return before resolution so they never pay the resolver's cost. The
+// returned Resolution is the resolved outcome (difficulty, focus concepts,
+// fired signals) for the pipeline's queued-event audit payload.
+func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, synth SynthesisContext, resolver difficulty.Resolver) (*Question, difficulty.Resolution, error) {
 	if repo == "" || branch == "" {
-		return nil, nil
+		return nil, difficulty.Resolution{}, nil
 	}
 	if len(synth.Concepts) == 0 {
-		return nil, nil
+		return nil, difficulty.Resolution{}, nil
 	}
 
-	difficulty := resolver.Resolve(ctx, synth)
-	if difficulty == "" {
-		difficulty = "intermediate"
+	resolution := resolver.Resolve(ctx, synth)
+	level := resolution.Difficulty
+	if level == "" {
+		level = "intermediate"
 	}
 
-	req := SynthesisRequest(synth.Concepts, synth.CommitMsg, synth.DiffSnippet, e.policy.Body, difficulty, model)
+	req := SynthesisRequest(synth.Concepts, synth.CommitMsg, synth.DiffSnippet, e.policy.Body, level, resolution.FocusConcepts, model)
 	raw, err := e.provider.Complete(ctx, req)
 	if err != nil {
 		log.Printf("[recall] synthesis AI call failed: %v", err)
-		return nil, nil
+		return nil, difficulty.Resolution{}, nil
 	}
 
 	// AI contract returns {"question": "...", "choices": ["...","..."]} with
@@ -130,13 +147,13 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, syn
 	}
 	if err := json.Unmarshal([]byte(raw), &rawQ); err != nil {
 		log.Printf("[recall] synthesis parse failed (response: %.200s): %v", raw, err)
-		return nil, nil
+		return nil, difficulty.Resolution{}, nil
 	}
 
 	q := &Question{Question: rawQ.Question}
 	if len(rawQ.Choices) < 2 {
 		log.Printf("[recall] synthesis returned %d choices (need >=2), skipping", len(rawQ.Choices))
-		return nil, nil
+		return nil, difficulty.Resolution{}, nil
 	}
 	q.Choices = make([]Choice, len(rawQ.Choices))
 	for i, text := range rawQ.Choices {
@@ -155,7 +172,7 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, syn
 		}
 	}
 
-	return q, nil
+	return q, resolution, nil
 }
 
 // GenerateFeedback calls the configured AI provider to produce a short prose
