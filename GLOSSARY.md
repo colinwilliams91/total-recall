@@ -29,7 +29,7 @@ _Avoid_: "tier" as a synonym for the level itself
 One resolver call's outcome: the Difficulty Level, optional Focus Concepts, and the fired signals carried to the queued-event audit payload.
 
 **Tier**:
-A one-level movement of the Difficulty Level driven by learner evidence — escalate or de-escalate, never a fourth value. The `learner-tier` signal marks that the rule fired.
+A one-level movement of the Difficulty Level driven by learner evidence — escalate or de-escalate, never a fourth value. The `learner-tier` signal marks that the level actually moved: a rule engagement held at a cap (`hard` escalated, `easy` de-escalated) is not a movement and does not signal.
 
 **Baseline**:
 The commit-signal resolution (Difficulty Level plus fired signals) the Performance resolver starts from; learner evidence only modulates it. The commit-shape heuristics produce the commit-signal baseline — "shape" names the per-commit input, "signal" names what fired on it.

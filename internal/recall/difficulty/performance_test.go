@@ -94,8 +94,10 @@ func TestPerformanceEscalationCapsAtHard(t *testing.T) {
 	if got.Difficulty != "hard" {
 		t.Fatalf("expected hard capped (no double escalation), got %q", got.Difficulty)
 	}
-	if !contains(got.Signals, learnerTierSignal) {
-		t.Fatalf("expected learner-tier signal on the capped escalation, got %v", got.Signals)
+	// Held at cap: the level did not move, so no tier signal may fire —
+	// audit-payload consumers would otherwise count the hold as an escalation.
+	if contains(got.Signals, learnerTierSignal) {
+		t.Fatalf("expected no learner-tier signal on the capped (unmoved) escalation, got %v", got.Signals)
 	}
 }
 

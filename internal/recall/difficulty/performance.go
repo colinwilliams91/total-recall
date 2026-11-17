@@ -85,9 +85,13 @@ func (p *Performance) Resolve(ctx context.Context, synth SynthesisContext) Resol
 	switch {
 	case ratio >= performanceEscalateRatio:
 		level = escalateTier(level)
-		signals = append(signals, learnerTierSignal)
 	case ratio < performanceDeEscalateRatio:
 		level = deEscalateTier(level)
+	}
+	// Signal only an actual tier move: at a cap (hard baseline, escalate
+	// requested) the level is unchanged, and the audit payload consumers
+	// mine must not count held-at-cap resolutions as escalations.
+	if level != baseline.Difficulty {
 		signals = append(signals, learnerTierSignal)
 	}
 

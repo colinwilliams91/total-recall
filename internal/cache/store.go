@@ -635,7 +635,11 @@ type LearnerStats struct {
 
 // questionCorrectnessSQL projects per-question correctness: the user made at
 // least one selection and none of the selected choices is incorrect (all
-// selected choices correct).
+// selected choices correct). This encodes the single-choice submit contract
+// (selected_index is singular): "at least one correct selection" is
+// indistinguishable from "all of them" today. If a multi-select question
+// type ever ships, this predicate needs rethinking — picking one of several
+// correct answers would currently count as fully correct.
 const questionCorrectnessSQL = `
   CASE WHEN EXISTS (SELECT 1 FROM selections s WHERE s.question_id = q.id)
         AND NOT EXISTS (

@@ -34,7 +34,7 @@ The returned difficulty is one of `easy`, `intermediate`, `hard` — always a co
 
 #### Scenario: High-performing learner at the ceiling is capped
 - **WHEN** the user's ratio ≥ 0.92 and the commit-signal baseline is already `hard`
-- **THEN** the resolved difficulty is `hard` (no double escalation)
+- **THEN** the resolved difficulty is `hard` (no double escalation, and `learner-tier` does not fire — the level did not move)
 
 #### Scenario: Struggling learner de-escalates
 - **WHEN** the last 20 answers include 7 correct (ratio 0.35) and the commit-signal baseline is `hard`
