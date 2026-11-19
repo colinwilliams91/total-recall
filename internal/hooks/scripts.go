@@ -66,7 +66,11 @@ exit 0
 // pipeline requires a `diff` payload, which commit-msg cannot supply, so the
 // hook is preserved only to keep the file present (chains any pre-existing
 // unmanaged commit-msg content) and exit cleanly.
-const commitMsgBody = `exit 0
+const commitMsgBody = `# No-op: pre-commit is the only dispatch point on a git commit. Commit-msg
+# previously dispatched too, so a single commit with the daemon down printed
+# the advisory twice. Kept as a clean exit so a chained pre-existing
+# unmanaged commit-msg hook can still be installed over.
+exit 0
 `
 
 // prePushBody is the sh hook body for the pre-push hook.
@@ -139,6 +143,10 @@ const commitMsgBat = `@echo off
 :: Managed by Total Recall — do not edit this block manually.
 :: Re-run 'torec init' to update.
 
+:: No-op: pre-commit is the only dispatch point on a git commit. Commit-msg
+:: previously dispatched too, so a single commit with the daemon down printed
+:: the advisory twice. Kept as a clean exit so a chained pre-existing
+:: unmanaged commit-msg hook can still be installed over.
 exit /b 0
 `
 

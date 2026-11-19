@@ -1,8 +1,11 @@
 package hooks
 
-import "strings"
-
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // TestCommitMsgBodyIsNoOp guards against the duplicate-advisory regression
 // fixed in #14: pre-commit and commit-msg both fired on `git commit`, and
@@ -17,6 +20,34 @@ func TestCommitMsgBodyIsNoOp(t *testing.T) {
 	}
 	if !strings.Contains(commitMsgBody, "exit 0") {
 		t.Fatalf("commitMsgBody should exit cleanly, got:\n%s", commitMsgBody)
+	}
+}
+
+// TestRepoHookDocCopiesMirrorGenerated guards the repo-root hooks/ script
+// pairs. They are documentation copies of the content `torec repo` installs
+// (internal/hooks/scripts.go consts) and must stay byte-identical; the #14
+// fix drifted them (the generated commit-msg hook became a no-op while the
+// doc copies still dispatched and printed the duplicate advisory).
+func TestRepoHookDocCopiesMirrorGenerated(t *testing.T) {
+	pairs := []struct {
+		repoCopy  string
+		generated string
+	}{
+		{"pre-commit.sh", buildShScript("pre-commit", "")},
+		{"pre-commit.bat", preCommitBat},
+		{"commit-msg.sh", buildShScript("commit-msg", "")},
+		{"commit-msg.bat", commitMsgBat},
+		{"pre-push.sh", buildShScript("pre-push", "")},
+		{"pre-push.bat", prePushBat},
+	}
+	for _, p := range pairs {
+		data, err := os.ReadFile(filepath.Join("..", "..", "hooks", p.repoCopy))
+		if err != nil {
+			t.Fatalf("reading hooks/%s: %v", p.repoCopy, err)
+		}
+		if string(data) != p.generated {
+			t.Errorf("hooks/%s drifted from generated content — regenerate the doc copy to mirror it", p.repoCopy)
+		}
 	}
 }
 
