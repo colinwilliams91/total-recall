@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/colinwilliams91/total-recall/assets"
+	"github.com/colinwilliams91/total-recall/internal/recall"
 	"github.com/spf13/cobra"
 )
 
@@ -548,5 +549,44 @@ func TestAssetSyncUnresolvableDataDirExits1(t *testing.T) {
 	_, err := runAssetCmd(t, syncAssetCmd(), []string{"question-generation-policy"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "could not resolve the Total Recall data dir") {
 		t.Fatalf("expected data-dir resolution error, got: %v", err)
+	}
+}
+
+// TestShippedPolicyCarriesResurfacedFraming verifies `torec asset show` loads
+// the shipped asset (embedded resolution line) and that the question-generation
+// policy body carries the resurfaced-concept framing section, which the
+// synthesis request then composes into its system turn.
+func TestShippedPolicyCarriesResurfacedFraming(t *testing.T) {
+	isolateHome(t)
+
+	showOut, err := runAssetCmd(t, showAssetCmd(), nil, nil)
+	if err != nil {
+		t.Fatalf("asset show error: %v", err)
+	}
+	if !strings.Contains(showOut, "question-generation-policy\tembedded\t<embedded>\tembedded") {
+		t.Fatalf("expected asset show to load the shipped asset, got:\n%s", showOut)
+	}
+
+	asset, err := assets.Load("question-generation-policy")
+	if err != nil {
+		t.Fatalf("Load shipped policy: %v", err)
+	}
+	if asset.Source != assets.SourceEmbedded {
+		t.Fatalf("expected the embedded default, got source %q", asset.Source)
+	}
+	for _, fragment := range []string{
+		"## Resurfaced Concepts",
+		"retention bonus",
+		"Never reference, imply, or invent a commit",
+		"durable understanding",
+	} {
+		if !strings.Contains(asset.Body, fragment) {
+			t.Fatalf("expected shipped policy to contain %q", fragment)
+		}
+	}
+
+	req := recall.SynthesisRequest(nil, "", "", asset.Body, "intermediate", nil, "m")
+	if !strings.Contains(req.System, "## Resurfaced Concepts") {
+		t.Fatalf("expected the composed system turn to carry the resurfaced framing, got %q", req.System)
 	}
 }
