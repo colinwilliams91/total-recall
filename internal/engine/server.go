@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,11 @@ func New(cfg *config.Config, provider ai.Provider, store *cache.Store, recallEng
 		mcpServer:    buildMCPServer(store, cfg),
 		mux:          http.NewServeMux(),
 	}
+	if store != nil {
+		// Answer-time seeding follows the kill-switch: with
+		// recall.resurfacing off, no scheduler rows are ever written.
+		store.SetResurfacingEnabled(cfg.Recall.ResurfacingEnabled())
+	}
 	if cfg.Presentation.Terminal {
 		s.dispatcher = terminal.New()
 	}
@@ -103,6 +109,9 @@ func (s *Server) RegisterRoutes() {
 	s.mux.HandleFunc("GET /recall/next", s.handleRecallNext)
 	s.mux.HandleFunc("POST /recall/select", s.handleRecallSelect)
 	s.mux.HandleFunc("GET /recall/stale", s.handleRecallStale)
+	s.mux.HandleFunc("GET /recall/bonus", s.handleRecallBonus)
+	s.mux.HandleFunc("POST /recall/bonus/decline", s.handleRecallBonusDecline)
+	s.mux.HandleFunc("POST /recall/bonus/accept", s.handleRecallBonusAccept)
 	s.mux.HandleFunc("GET /alias/list", s.handleAliasList)
 	s.mux.HandleFunc("POST /alias/add", s.handleAliasAdd)
 	s.mux.HandleFunc("POST /alias/remove", s.handleAliasRemove)
@@ -234,7 +243,7 @@ func (s *Server) runPipeline(env HookEnvelope) {
 	// 'queued' event payload (task 6.3 of adaptive-difficulty, deferred) so
 	// operator debugging and future resolvers can correlate level↔outcome.
 	meta := cache.ResolutionMeta{Difficulty: resolution.Difficulty, Signals: resolution.Signals}
-	if err := s.store.SaveQuestionWithResolution(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice", fed, meta); err != nil {
+	if _, err := s.store.SaveQuestionWithResolution(ctx, env.Repo, env.Branch, q.Question, cacheChoices, "multiple_choice", fed, meta); err != nil {
 		log.Printf("[pipeline] save question: %v", err)
 	}
 
@@ -493,6 +502,205 @@ func (s *Server) handleRecallStale(w http.ResponseWriter, r *http.Request) {
 		"repo":     repo,
 		"branches": branches,
 	})
+}
+
+// ── bonus offer routes (resurfacing) ─────────────────────────────────────────
+
+// The bonus surface is the ask session's opt-in retention offer. The offer is
+// shell-only by design — MCP surfaces keep their recall_next / recall_select
+// contract untouched. Serving an offer IS the defer: the concept's
+// next-eligible time moves one day out at serve time, so a session killed at
+// the offer is a silent defer with no decline.
+
+// handleRecallBonus serves the most-overdue due concept, applies the
+// serve-time defer, and returns the offer payload (slug + prose). 204 when
+// nothing is due, the kill-switch is off, or no store is running — every
+// no-offer outcome is one uniform 204 so the ask session ends exactly as it
+// does without resurfacing.
+func (s *Server) handleRecallBonus(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil || !s.cfg.Recall.ResurfacingEnabled() {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	offer, err := s.store.DueBonusOffer(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if offer == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// Defer first, serve second: a response that never reaches the client
+	// still counts as a silent defer, and a served offer can never be
+	// re-served before its deferred time.
+	if err := s.store.DeferBonusOffer(r.Context(), offer.Slug); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"slug":  offer.Slug,
+		"prose": offer.Prose,
+	})
+}
+
+// handleRecallBonusDecline records an explicit decline: count incremented
+// (third → declined-out), the one-day defer restated. The client's n keypress
+// lands here; the session kill path posts nothing at all.
+func (s *Server) handleRecallBonusDecline(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no store running — start the daemon with an AI provider configured"})
+		return
+	}
+	var body struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Slug == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug is required"})
+		return
+	}
+	exited, err := s.store.RecordBonusDecline(r.Context(), body.Slug)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "exited": exited})
+}
+
+// handleRecallBonusAccept synthesizes and stores the bonus question for the
+// accepted concept — a fresh question at the session's current adaptive level
+// (read from the last answered question's queued payload), no diff snippet, no
+// commit context — already delivered to this session (claimed_by shell), and
+// returns it in the response. No second dequeue happens. Synthesis failure is
+// a silent defer: 204, no decline, no exit; the serve-time defer stands.
+func (s *Server) handleRecallBonusAccept(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no store running — start the daemon with an AI provider configured"})
+		return
+	}
+	if !s.cfg.Recall.ResurfacingEnabled() {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	var body struct {
+		Slug   string `json:"slug"`
+		Repo   string `json:"repo"`
+		Branch string `json:"branch"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if body.Slug == "" || body.Repo == "" || body.Branch == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slug, repo and branch are required"})
+		return
+	}
+
+	prose, ok, err := s.store.BonusConcept(r.Context(), body.Slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !ok {
+		// The concept left the loop between serve and accept (or never had a
+		// row): not a resurrection. The client treats this as no question.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if s.recallEngine == nil {
+		// No synthesis machinery — same no-question outcome as a failed
+		// synthesis: silent defer, no decline.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	feed, err := s.store.Recent(r.Context(), body.Repo, body.Branch, 20)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// The due concept leads the feed even on a working surface that has never
+	// seen it — eligibility is user-scoped, the synthesis scope is local.
+	if !containsConcept(feed, body.Slug) {
+		feed = append(feed, cache.ConceptRow{
+			Slug:    body.Slug,
+			Concept: prose,
+			Source:  "registry",
+			Weight:  1.0,
+			SeenAt:  time.Now().UTC(),
+		})
+	}
+
+	level, ok, err := s.store.LastAnsweredDifficulty(r.Context(), body.Repo, body.Branch)
+	if err != nil {
+		log.Printf("[recall] last answered difficulty read error: %v", err)
+	}
+	if !ok {
+		level = "intermediate"
+	}
+	q := s.recallEngine.SynthesizeResurfaced(r.Context(), body.Repo, body.Branch, s.cfg.AI.Model, body.Slug, level, feed)
+	if q == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	cacheChoices := make([]cache.Choice, len(q.Choices))
+	for i, c := range q.Choices {
+		cacheChoices[i] = cache.Choice{Text: c.Text, IsCorrect: c.IsCorrect, Position: i}
+	}
+	// Provenance is the due concept only: the bonus answer's answered-out exit
+	// keys off this join, so feeding the whole feed here would exit unrelated
+	// concepts. The origin marker in the queued payload is the stats
+	// provenance (diff-question accuracy vs retention-question accuracy).
+	meta := cache.ResolutionMeta{Difficulty: level, Origin: cache.ResurfacedOrigin}
+	questionID, err := s.store.SaveQuestionWithResolution(r.Context(), body.Repo, body.Branch, q.Question, cacheChoices, "multiple_choice",
+		[]cache.ConceptRef{{Slug: body.Slug, Weight: 1.0}}, meta)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.mcpServer.ResourceUpdated(r.Context(), &mcp.ResourceUpdatedNotificationParams{URI: "recall://queue"}); err != nil {
+		log.Printf("[mcp] notify resource updated: %v", err)
+	}
+
+	if err := s.store.DeliverQuestion(r.Context(), questionID, "shell"); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	claimed, err := s.store.GetQuestion(r.Context(), questionID)
+	if err != nil || claimed == nil {
+		// The save reported success but the row cannot be read back: treat as
+		// synthesis failure — the defer stands, no decline.
+		log.Printf("[recall] bonus question saved but not readable (id %d): %v", questionID, err)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	choices := make([]string, len(claimed.Choices))
+	for i, c := range claimed.Choices {
+		choices[i] = c.Text
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":            claimed.ID,
+		"question_type": claimed.QuestionType,
+		"question":      claimed.Question,
+		"choices":       choices,
+	})
+}
+
+// containsConcept reports whether the slug is among the feed rows.
+func containsConcept(feed []cache.ConceptRow, slug string) bool {
+	for _, row := range feed {
+		if row.Slug == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // Shutdown gracefully shuts down the HTTP server, waiting for in-flight requests to complete

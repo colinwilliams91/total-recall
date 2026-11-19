@@ -1673,7 +1673,7 @@ func TestSaveQuestionWithResolutionPersistsQueuedPayload(t *testing.T) {
 	s := setupCache(t)
 	ctx := context.Background()
 
-	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "audited question",
+	if _, err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "audited question",
 		buildChoices([]string{"a", "b"}, 0), "", nil,
 		cache.ResolutionMeta{Difficulty: "hard", Signals: []string{"high-cluster", "learner-tier"}}); err != nil {
 		t.Fatalf("SaveQuestionWithResolution: %v", err)
@@ -1918,7 +1918,7 @@ func saveQuestionWithConcepts(t *testing.T, s *cache.Store, question string, slu
 	for i, slug := range slugs {
 		fed[i] = cache.ConceptRef{Slug: slug, Weight: 0.9}
 	}
-	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", question,
+	if _, err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", question,
 		buildChoices([]string{"right", "wrong"}, 0), "", fed, meta); err != nil {
 		t.Fatalf("SaveQuestionWithResolution: %v", err)
 	}
@@ -1988,7 +1988,7 @@ func TestResurfacingTableMigratesExistingDB(t *testing.T) {
 	// The new table is live: seeding a correct answer on the migrated db
 	// writes a scheduler row.
 	db := openRawDB(t)
-	if err := s.SaveQuestionWithResolution(ctx, "/repo/legacy", "main", "migrated q",
+	if _, err := s.SaveQuestionWithResolution(ctx, "/repo/legacy", "main", "migrated q",
 		buildChoices([]string{"right", "wrong"}, 0), "", []cache.ConceptRef{{Slug: "legacy_concept", Weight: 1.0}},
 		cache.ResolutionMeta{Difficulty: "hard"}); err != nil {
 		t.Fatalf("SaveQuestionWithResolution: %v", err)
@@ -2176,7 +2176,7 @@ func TestResurfacingBonusResolutionExits(t *testing.T) {
 		seedResurfacingRow(t, db, "bonus_concept", time.Now().UTC().AddDate(0, 0, -1), 7, 0, nil)
 
 		claimed := saveQuestionWithConcepts(t, s, "bonus question",
-			[]string{"bonus_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: "resurfaced"})
+			[]string{"bonus_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: cache.ResurfacedOrigin})
 		answerClaimed(t, s, context.Background(), claimed, false)
 
 		row := readResurfacingRow(t, db, "bonus_concept")
@@ -2192,7 +2192,7 @@ func TestResurfacingBonusResolutionExits(t *testing.T) {
 		seedResurfacingRow(t, db, "bonus_skip_concept", time.Now().UTC().AddDate(0, 0, -1), 7, 0, nil)
 
 		claimed := saveQuestionWithConcepts(t, s, "bonus skip question",
-			[]string{"bonus_skip_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: "resurfaced"})
+			[]string{"bonus_skip_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: cache.ResurfacedOrigin})
 		if err := s.SkipQuestion(context.Background(), claimed.ID); err != nil {
 			t.Fatalf("SkipQuestion: %v", err)
 		}
@@ -2376,7 +2376,7 @@ func TestDeliverQuestion(t *testing.T) {
 	ctx := context.Background()
 	db := openRawDB(t)
 	seedRegistryConcept(t, db, "concept_a", "prose")
-	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "deliver-me",
+	if _, err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "deliver-me",
 		buildChoices([]string{"right", "wrong"}, 0), "", []cache.ConceptRef{{Slug: "concept_a", Weight: 1.0}},
 		cache.ResolutionMeta{}); err != nil {
 		t.Fatalf("SaveQuestionWithResolution: %v", err)

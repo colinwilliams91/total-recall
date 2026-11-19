@@ -8,10 +8,10 @@
 
 ## 2. Daemon bonus contract
 
-- [ ] 2.1 Implement `GET /recall/bonus`: enabled + due concept → serve the most-overdue (largest overage, oldest-seeded tiebreak), apply the serve-time defer, return offer payload (concept slug + prose); none due or `recall.resurfacing: false` → 204; verify with headless integration tests in `integration_test.go` (startTestDaemon + seed via the store) covering due / none-due / disabled / second-request-already-deferred
-- [ ] 2.2 Implement decline recording and the accept flow on the same route family: decline increments the count (third → `declined-out`); accept synthesizes and stores the question (`claimed_by: shell`, queued event payload `origin: resurfaced`) and returns it in the response — no second dequeue; verify with integration tests for decline-1/decline-3 and accept-return
-- [ ] 2.3 Wire the resurfaced-concept synthesis path in `internal/recall`: no diff snippet, no commit context, concept passed the way `FocusConcepts` is, difficulty = the session's current adaptive resolution; synthesis failure returns a no-question outcome (serve-time defer stands, no decline); verify with engine-level tests asserting the composed synthesis request and the failure path
-- [ ] 2.4 Confirm the MCP surface is untouched: `recall_next` / `recall_answer` / resources produce identical contracts with resurfacing enabled and a concept due; verify with an integration test asserting unchanged responses
+- [x] 2.1 Implement `GET /recall/bonus`: enabled + due concept → serve the most-overdue (largest overage, oldest-seeded tiebreak), apply the serve-time defer, return offer payload (concept slug + prose); none due or `recall.resurfacing: false` → 204; verify with headless integration tests in `integration_test.go` (startTestDaemon + seed via the store) covering due / none-due / disabled / second-request-already-deferred
+- [x] 2.2 Implement decline recording and the accept flow on the same route family: decline increments the count (third → `declined-out`); accept synthesizes and stores the question (`claimed_by: shell`, queued event payload `origin: resurfaced`) and returns it in the response — no second dequeue; verify with integration tests for decline-1/decline-3 and accept-return
+- [x] 2.3 Wire the resurfaced-concept synthesis path in `internal/recall`: no diff snippet, no commit context, concept passed the way `FocusConcepts` is, difficulty = the session's current adaptive resolution; synthesis failure returns a no-question outcome (serve-time defer stands, no decline); verify with engine-level tests asserting the composed synthesis request and the failure path
+- [x] 2.4 Confirm the MCP surface is untouched: `recall_next` / `recall_answer` / resources produce identical contracts with resurfacing enabled and a concept due; verify with an integration test asserting unchanged responses
 
 ## 3. Config and policy
 

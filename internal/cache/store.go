@@ -145,11 +145,11 @@ const (
 	resurfacingServeDeferDays           = 1
 	resurfacingDeclineCap               = 3
 
-	// resurfacingOrigin is the queued-event payload origin value that marks a
+	// ResurfacedOrigin is the queued-event payload origin value that marks a
 	// question as a resurfaced bonus, letting the answer flow distinguish it
 	// from commit-diff questions (provenance for downstream statistics and
 	// the answered-out exit trigger).
-	resurfacingOrigin = "resurfaced"
+	ResurfacedOrigin = "resurfaced"
 )
 
 // ConceptRow is a persisted concept fingerprint from the cache. Slug is the
@@ -192,16 +192,16 @@ type Selection struct {
 // the IsCorrect boolean on the choice row — it is a presentation aid, not the
 // source of truth.
 type StoredQuestion struct {
-	ID            int64
-	QuestionType  string
-	Status        string
-	Question      string
-	Repo          string
-	Branch        string
-	Choices       []Choice
-	CorrectIndex  int
-	Feedback      *string
-	Selections    []Selection
+	ID           int64
+	QuestionType string
+	Status       string
+	Question     string
+	Repo         string
+	Branch       string
+	Choices      []Choice
+	CorrectIndex int
+	Feedback     *string
+	Selections   []Selection
 }
 
 // Store wraps the SQLite database used as the memory store.
@@ -583,20 +583,23 @@ type ResolutionMeta struct {
 // questionType defaults to 'multiple_choice' when empty. An empty concept
 // batch persists the question with zero provenance rows rather than erroring.
 func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef) error {
-	return s.SaveQuestionWithResolution(ctx, repo, branch, question, choices, questionType, fed, ResolutionMeta{})
+	_, err := s.SaveQuestionWithResolution(ctx, repo, branch, question, choices, questionType, fed, ResolutionMeta{})
+	return err
 }
 
 // SaveQuestionWithResolution is SaveQuestion with a ResolutionMeta snapshot
 // persisted as the 'queued' event row's payload JSON. An empty meta (zero
 // value) writes a NULL payload — the audit column stays empty for callers
-// that have no resolution to report.
-func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef, meta ResolutionMeta) error {
+// that have no resolution to report. Returns the minted question id so
+// callers that deliver immediately (the accept flow) can address the row
+// without re-deriving it from the queue.
+func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef, meta ResolutionMeta) (int64, error) {
 	if repo == "" || branch == "" {
 		log.Printf("[store] skipping savequestion: empty repo or branch")
-		return nil
+		return 0, nil
 	}
 	if question == "" {
-		return fmt.Errorf("refusing to save empty question text")
+		return 0, fmt.Errorf("refusing to save empty question text")
 	}
 	if questionType == "" {
 		questionType = "multiple_choice"
@@ -614,14 +617,14 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 		}
 		b, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("marshaling queued payload: %w", err)
+			return 0, fmt.Errorf("marshaling queued payload: %w", err)
 		}
 		queuedPayload = string(b)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
+		return 0, fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -629,16 +632,16 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 		`INSERT INTO questions (question_type, status, question, repo, branch) VALUES (?, 'queued', ?, ?, ?)`,
 		questionType, question, repo, branch)
 	if err != nil {
-		return fmt.Errorf("inserting question: %w", err)
+		return 0, fmt.Errorf("inserting question: %w", err)
 	}
 	questionID, err := res.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("reading last insert id: %w", err)
+		return 0, fmt.Errorf("reading last insert id: %w", err)
 	}
 
 	choiceStmt, err := tx.PrepareContext(ctx, `INSERT INTO choices (question_id, position, text, is_correct) VALUES (?, ?, ?, ?)`)
 	if err != nil {
-		return fmt.Errorf("preparing choice insert: %w", err)
+		return 0, fmt.Errorf("preparing choice insert: %w", err)
 	}
 	defer choiceStmt.Close()
 	for _, c := range choices {
@@ -647,14 +650,14 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 			isCorrect = 1
 		}
 		if _, err := choiceStmt.ExecContext(ctx, questionID, c.Position, c.Text, isCorrect); err != nil {
-			return fmt.Errorf("inserting choice: %w", err)
+			return 0, fmt.Errorf("inserting choice: %w", err)
 		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO question_events (question_id, event_type, actor, payload) VALUES (?, 'queued', 'system', ?)`,
 		questionID, queuedPayload); err != nil {
-		return fmt.Errorf("inserting queued event: %w", err)
+		return 0, fmt.Errorf("inserting queued event: %w", err)
 	}
 
 	// Provenance: one row per DISTINCT fed concept, same transaction. The
@@ -671,16 +674,16 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 	}
 	fedStmt, err := tx.PrepareContext(ctx, `INSERT INTO question_concepts (question_id, slug, weight) VALUES (?, ?, ?)`)
 	if err != nil {
-		return fmt.Errorf("preparing provenance insert: %w", err)
+		return 0, fmt.Errorf("preparing provenance insert: %w", err)
 	}
 	defer func() { _ = fedStmt.Close() }()
 	for slug, weight := range best {
 		if _, err := fedStmt.ExecContext(ctx, questionID, slug, weight); err != nil {
-			return fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, slug, err)
+			return 0, fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, slug, err)
 		}
 	}
 
-	return tx.Commit()
+	return questionID, tx.Commit()
 }
 
 // ConceptOutcome is one concept's outcome tallies over the answered window,
@@ -1169,7 +1172,7 @@ func resurfacingExitBonusInTx(ctx context.Context, tx *sql.Tx, questionID int64)
 		questionID).Scan(&payload); err != nil {
 		return false, fmt.Errorf("reading queued payload: %w", err)
 	}
-	if parseQueuedEventPayload(payload).Origin != resurfacingOrigin {
+	if parseQueuedEventPayload(payload).Origin != ResurfacedOrigin {
 		return false, nil
 	}
 	if _, err := tx.ExecContext(ctx, `

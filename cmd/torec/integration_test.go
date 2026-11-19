@@ -227,10 +227,10 @@ func TestRecallNextWithQuestion(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "What does DRY stand for?",
 		[]cache.Choice{
-		{Text: "Don't Repeat Yourself", IsCorrect: true, Position: 0},
-		{Text: "Don't Run Yaks", IsCorrect: false, Position: 1},
-		{Text: "Digital Repository YAML", IsCorrect: false, Position: 2},
-		{Text: "Deferred Runtime Yielding", IsCorrect: false, Position: 3},
+			{Text: "Don't Repeat Yourself", IsCorrect: true, Position: 0},
+			{Text: "Don't Run Yaks", IsCorrect: false, Position: 1},
+			{Text: "Digital Repository YAML", IsCorrect: false, Position: 2},
+			{Text: "Deferred Runtime Yielding", IsCorrect: false, Position: 3},
 		}, "", nil); err != nil {
 		t.Fatalf("seed question: %v", err)
 	}
@@ -266,8 +266,8 @@ func TestRecallNextIdempotent(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "single question",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -292,8 +292,8 @@ func TestRecallAnswer(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "answerable question",
 		[]cache.Choice{
-		{Text: "choice a", IsCorrect: true, Position: 0},
-		{Text: "choice b", IsCorrect: false, Position: 1},
+			{Text: "choice a", IsCorrect: true, Position: 0},
+			{Text: "choice b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -334,8 +334,8 @@ func TestRecallAnswerSkip(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "skippable question",
 		[]cache.Choice{
-		{Text: "x", IsCorrect: true, Position: 0},
-		{Text: "y", IsCorrect: false, Position: 1},
+			{Text: "x", IsCorrect: true, Position: 0},
+			{Text: "y", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -436,8 +436,8 @@ func TestRecallNextRepoScoped(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's question",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed for repo X: %v", err)
 	}
@@ -825,8 +825,8 @@ func TestRecallAnswerAcceptsRepoParam(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "repo-param-symmetry q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -866,8 +866,8 @@ func TestRecallNextBranchIsolation(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/x", "feature-A", "feature-A's q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -977,19 +977,19 @@ func TestRecallStaleEndpoint(t *testing.T) {
 	ctx := context.Background()
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A1",
 		[]cache.Choice{
-		{Text: "x", IsCorrect: true, Position: 0},
+			{Text: "x", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed A1: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "feature-A", "stale A2",
 		[]cache.Choice{
-		{Text: "x", IsCorrect: true, Position: 0},
+			{Text: "x", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed A2: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/stale-test", "bugfix-B", "stale B1",
 		[]cache.Choice{
-		{Text: "x", IsCorrect: true, Position: 0},
+			{Text: "x", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed B1: %v", err)
 	}
@@ -1201,20 +1201,20 @@ func TestMCPRecallNextWithholdsCorrectIndex(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp next q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: false, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
-		{Text: "c", IsCorrect: true, Position: 2},
+			{Text: "a", IsCorrect: false, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "c", IsCorrect: true, Position: 2},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	session := mcpSession(t, baseURL)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_next",
-        Arguments: map[string]any{
-            "repo":   "/repo/test",
-            "branch": "main",
-        },
+		Name: "recall_next",
+		Arguments: map[string]any{
+			"repo":   "/repo/test",
+			"branch": "main",
+		},
 	})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
@@ -1247,8 +1247,8 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp answer q",
 		[]cache.Choice{
-		{Text: "right", IsCorrect: true, Position: 0},
-		{Text: "wrong", IsCorrect: false, Position: 1},
+			{Text: "right", IsCorrect: true, Position: 0},
+			{Text: "wrong", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -1256,11 +1256,11 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	session := mcpSession(t, baseURL)
 
 	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_next",
-        Arguments: map[string]any{
-            "repo":   "/repo/test",
-            "branch": "main",
-        },
+		Name: "recall_next",
+		Arguments: map[string]any{
+			"repo":   "/repo/test",
+			"branch": "main",
+		},
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_next: %v", err)
@@ -1297,8 +1297,8 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp skip q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -1306,11 +1306,11 @@ func TestMCPRecallAnswerSkip(t *testing.T) {
 	session := mcpSession(t, baseURL)
 
 	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "recall_next",
-        Arguments: map[string]any{
-            "repo":   "/repo/test",
-            "branch": "main",
-        },
+		Name: "recall_next",
+		Arguments: map[string]any{
+			"repo":   "/repo/test",
+			"branch": "main",
+		},
 	})
 	if err != nil {
 		t.Fatalf("CallTool recall_next: %v", err)
@@ -1343,8 +1343,8 @@ func TestRecallRecentEnriched(t *testing.T) {
 	// Answer one question correctly (terminal-style with feedback).
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-correct",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed q1: %v", err)
 	}
@@ -1359,8 +1359,8 @@ func TestRecallRecentEnriched(t *testing.T) {
 	// Skip one question.
 	if err := store.SaveQuestion(ctx, "/repo/test", "main", "recent-skip",
 		[]cache.Choice{
-		{Text: "x", IsCorrect: true, Position: 0},
-		{Text: "y", IsCorrect: false, Position: 1},
+			{Text: "x", IsCorrect: true, Position: 0},
+			{Text: "y", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed q2: %v", err)
 	}
@@ -1424,15 +1424,15 @@ func TestMCPRecallNextRepoScoped(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X's MCP question",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y's MCP question",
 		[]cache.Choice{
-		{Text: "c", IsCorrect: true, Position: 0},
-		{Text: "d", IsCorrect: false, Position: 1},
+			{Text: "c", IsCorrect: true, Position: 0},
+			{Text: "d", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
@@ -1470,19 +1470,19 @@ func TestMCPRecallStatusRepoScoped(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X depth q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "a", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "a", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y depth q2",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "a", IsCorrect: true, Position: 0},
 		}, "", nil); err != nil {
 		t.Fatalf("seed Y2: %v", err)
 	}
@@ -1512,8 +1512,8 @@ func TestMCPRecallAnswerAcceptsRepoField(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "MCP repo answer q",
 		[]cache.Choice{
-		{Text: "right", IsCorrect: true, Position: 0},
-		{Text: "wrong", IsCorrect: false, Position: 1},
+			{Text: "right", IsCorrect: true, Position: 0},
+			{Text: "wrong", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -1558,15 +1558,15 @@ func TestMCPQueueResourceRepoScoped(t *testing.T) {
 
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X queue q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y queue q",
 		[]cache.Choice{
-		{Text: "c", IsCorrect: true, Position: 0},
-		{Text: "d", IsCorrect: false, Position: 1},
+			{Text: "c", IsCorrect: true, Position: 0},
+			{Text: "d", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
@@ -1603,8 +1603,8 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	// Answer one question for repo X.
 	if err := store.SaveQuestion(ctx, "/repo/x", "main", "X answered q",
 		[]cache.Choice{
-		{Text: "a", IsCorrect: true, Position: 0},
-		{Text: "b", IsCorrect: false, Position: 1},
+			{Text: "a", IsCorrect: true, Position: 0},
+			{Text: "b", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed X: %v", err)
 	}
@@ -1619,8 +1619,8 @@ func TestMCPRecentResourceRepoScoped(t *testing.T) {
 	// Answer one question for repo Y.
 	if err := store.SaveQuestion(ctx, "/repo/y", "main", "Y answered q",
 		[]cache.Choice{
-		{Text: "c", IsCorrect: true, Position: 0},
-		{Text: "d", IsCorrect: false, Position: 1},
+			{Text: "c", IsCorrect: true, Position: 0},
+			{Text: "d", IsCorrect: false, Position: 1},
 		}, "", nil); err != nil {
 		t.Fatalf("seed Y: %v", err)
 	}
@@ -1719,7 +1719,6 @@ func TestRepoInstallsIntoCommonGitdirInWorktree(t *testing.T) {
 		t.Fatalf("expected post-commit hook in main repo's .git/hooks/ (%s), not found", mainPostCommit)
 	}
 }
-
 
 // ── 11. Schema-refactor specific tests ─────────────────────────────────────────
 
@@ -1962,5 +1961,496 @@ func TestPipelineFreshInstallResolvesToCommitSignalBaseline(t *testing.T) {
 
 	if !strings.Contains(provider.lastReq.System, "Difficulty level: intermediate") {
 		t.Fatalf("expected baseline intermediate directive on fresh install, got %q", provider.lastReq.System)
+	}
+}
+
+// ── bonus offer routes (spaced-repetition-resurfacing, tasks 2.1/2.2/2.4) ────
+
+// startTestDaemonWithUserConfig is startTestDaemon with a config mutation hook,
+// for kill-switch and provider variations.
+func startTestDaemonWithUserConfig(t *testing.T, mutate func(*config.UserConfig)) (*engine.Server, *cache.Store, string) {
+	t.Helper()
+
+	t.Setenv("TR_HOME", t.TempDir())
+
+	store, err := cache.Open()
+	if err != nil {
+		t.Fatalf("cache.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	userCfg := config.DefaultUserConfig()
+	if mutate != nil {
+		mutate(&userCfg)
+	}
+	cfg := config.Merge(&userCfg, nil)
+
+	srv := engine.New(cfg, nil, store, nil)
+
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	baseURL := fmt.Sprintf("http://localhost:%d", port)
+
+	go srv.Serve(ln)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	})
+
+	waitForDaemon(t, baseURL)
+	return srv, store, baseURL
+}
+
+// seedDueConcept mints a registry identity through a real sighting and inserts
+// a resurfacing row due `overdueDays` days in the past, via the raw handle.
+func seedDueConcept(t *testing.T, store *cache.Store, slug, prose string, overdueDays int) {
+	t.Helper()
+	db := openRawDB(t)
+	ctx := context.Background()
+	if err := store.Save(ctx, "/repo/seed", "main", []cache.Fingerprint{
+		{Concept: prose, Slug: slug, Source: "code", Weight: 1.0},
+	}); err != nil {
+		t.Fatalf("mint registry identity for %q: %v", slug, err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO resurfacing (slug, seeded_at, next_eligible_after, interval_days)
+VALUES (?, ?, ?, 7)`,
+		slug, time.Now().UTC().AddDate(0, 0, -14), time.Now().UTC().AddDate(0, 0, -overdueDays)); err != nil {
+		t.Fatalf("seed resurfacing row for %q: %v", slug, err)
+	}
+}
+
+// resurfacingRowFromRawDB reads one scheduler row back for integration-level
+// assertions (exit reason, counters, next-eligible time).
+type resurfacingState struct {
+	NextEligible  time.Time
+	DeclinedCount int
+	ResurfacedCnt int
+	ExitReason    sql.NullString
+}
+
+func resurfacingRowFromRawDB(t *testing.T, slug string) resurfacingState {
+	t.Helper()
+	db := openRawDB(t)
+	var r resurfacingState
+	var nextRaw string
+	if err := db.QueryRowContext(context.Background(),
+		`SELECT next_eligible_after, declined_count, resurfaced_count, exit_reason FROM resurfacing WHERE slug = ?`, slug).
+		Scan(&nextRaw, &r.DeclinedCount, &r.ResurfacedCnt, &r.ExitReason); err != nil {
+		t.Fatalf("read resurfacing row %q: %v", slug, err)
+	}
+	layouts := []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05"}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, nextRaw); err == nil {
+			r.NextEligible = parsed
+			break
+		}
+	}
+	return r
+}
+
+// TestRecallBonusDueServesAndDefers verifies the offer contract: the most-
+// overdue due concept is served with its registry prose, the serve applies the
+// one-day defer and counts the resurface, and the second request finds nothing
+// due (the row is no longer eligible) → 204.
+func TestRecallBonusDueServesAndDefers(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	seedDueConcept(t, store, "bonus_due", "bonus concept prose", 2)
+
+	resp := mustGET(t, baseURL, "/recall/bonus")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with a due concept, got %d", resp.StatusCode)
+	}
+	var offer struct {
+		Slug  string `json:"slug"`
+		Prose string `json:"prose"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&offer); err != nil {
+		t.Fatalf("decode offer: %v", err)
+	}
+	if offer.Slug != "bonus_due" || offer.Prose != "bonus concept prose" {
+		t.Fatalf("unexpected offer payload: %+v", offer)
+	}
+
+	// Serve-time defer: one day out, resurfaced once.
+	row := resurfacingRowFromRawDB(t, "bonus_due")
+	if due := time.Until(row.NextEligible); due < 22*time.Hour || due > 26*time.Hour {
+		t.Fatalf("expected next_eligible ~1 day out after serve, got %v", due)
+	}
+	if row.ResurfacedCnt != 1 {
+		t.Fatalf("expected resurfaced_count 1, got %d", row.ResurfacedCnt)
+	}
+
+	// Already deferred: nothing due → 204.
+	r2 := mustGET(t, baseURL, "/recall/bonus")
+	defer r2.Body.Close()
+	if r2.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 on the second request (already deferred), got %d", r2.StatusCode)
+	}
+}
+
+// TestRecallBonusNoneDue returns 204 when no scheduler row exists.
+func TestRecallBonusNoneDue(t *testing.T) {
+	_, _, baseURL := startTestDaemon(t)
+	resp := mustGET(t, baseURL, "/recall/bonus")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 with an empty pool, got %d", resp.StatusCode)
+	}
+}
+
+// TestRecallBonusDisabled verifies the kill-switch: no offer is ever served
+// and the accept route answers 204 as well.
+func TestRecallBonusDisabled(t *testing.T) {
+	_, store, baseURL := startTestDaemonWithUserConfig(t, func(u *config.UserConfig) {
+		u.Recall.Resurfacing = boolPtr(false)
+	})
+	seedDueConcept(t, store, "disabled_due", "prose", 5)
+
+	resp := mustGET(t, baseURL, "/recall/bonus")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 with resurfacing disabled, got %d", resp.StatusCode)
+	}
+
+	accept := mustPOST(t, baseURL, "/recall/bonus/accept",
+		[]byte(`{"slug":"disabled_due","repo":"/repo/test","branch":"main"}`))
+	defer accept.Body.Close()
+	if accept.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 accept with resurfacing disabled, got %d", accept.StatusCode)
+	}
+}
+
+// TestRecallBonusDeclineRecordsAndExits verifies decline recording on the same
+// route family: count increments, the third decline exits declined-out, and an
+// unknown slug is a 404.
+func TestRecallBonusDeclineRecordsAndExits(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	seedDueConcept(t, store, "declining_due", "prose", 1)
+
+	for i := 1; i <= 2; i++ {
+		resp := mustPOST(t, baseURL, "/recall/bonus/decline", []byte(`{"slug":"declining_due"}`))
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("decline %d: expected 200, got %d", i, resp.StatusCode)
+		}
+		var body struct {
+			OK     bool `json:"ok"`
+			Exited bool `json:"exited"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decline %d decode: %v", i, err)
+		}
+		if !body.OK || body.Exited {
+			t.Fatalf("decline %d: expected ok=true exited=false, got %+v", i, body)
+		}
+		row := resurfacingRowFromRawDB(t, "declining_due")
+		if row.DeclinedCount != i {
+			t.Fatalf("decline %d: expected count %d, got %d", i, i, row.DeclinedCount)
+		}
+		if row.ExitReason.Valid {
+			t.Fatalf("decline %d must not exit, got %q", i, row.ExitReason.String)
+		}
+	}
+
+	third := mustPOST(t, baseURL, "/recall/bonus/decline", []byte(`{"slug":"declining_due"}`))
+	defer third.Body.Close()
+	var body struct {
+		OK     bool `json:"ok"`
+		Exited bool `json:"exited"`
+	}
+	if err := json.NewDecoder(third.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.Exited {
+		t.Fatal("expected the third decline to exit the concept")
+	}
+	row := resurfacingRowFromRawDB(t, "declining_due")
+	if row.ExitReason.String != "declined-out" {
+		t.Fatalf("expected declined-out, got %q", row.ExitReason.String)
+	}
+
+	// Exited: no further offers.
+	after := mustGET(t, baseURL, "/recall/bonus")
+	defer after.Body.Close()
+	if after.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 after declined-out, got %d", after.StatusCode)
+	}
+
+	unknown := mustPOST(t, baseURL, "/recall/bonus/decline", []byte(`{"slug":"never_minted"}`))
+	defer unknown.Body.Close()
+	if unknown.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown slug, got %d", unknown.StatusCode)
+	}
+}
+
+// TestRecallBonusAcceptSynthesizesAndDelivers verifies the accept flow end to
+// end: synthesis at the session's level, storage as a normal row already
+// delivered to the shell (no second dequeue — an unrelated queued question is
+// untouched), the origin marker in the queued payload, due-concept-only
+// provenance, and the answered-out exit once the bonus is resolved.
+func TestRecallBonusAcceptSynthesizesAndDelivers(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`{"question":"Why does a circuit breaker trip?","choices":["Because it is right","Because it is wrong"]}`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+	seedDueConcept(t, store, "bonus_due", "bonus concept prose", 3)
+
+	// An unrelated queued question proves the accept path performs no dequeue.
+	ctx := context.Background()
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "unrelated commit question",
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
+		t.Fatalf("seed unrelated: %v", err)
+	}
+
+	serve := mustGET(t, baseURL, "/recall/bonus")
+	defer serve.Body.Close()
+	if serve.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 serve, got %d", serve.StatusCode)
+	}
+
+	accept := mustPOST(t, baseURL, "/recall/bonus/accept",
+		[]byte(`{"slug":"bonus_due","repo":"/repo/test","branch":"main"}`))
+	defer accept.Body.Close()
+	if accept.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 accept, got %d", accept.StatusCode)
+	}
+	var q struct {
+		ID           int64    `json:"id"`
+		QuestionType string   `json:"question_type"`
+		Question     string   `json:"question"`
+		Choices      []string `json:"choices"`
+	}
+	if err := json.NewDecoder(accept.Body).Decode(&q); err != nil {
+		t.Fatalf("decode accept: %v", err)
+	}
+	if q.ID == 0 || q.QuestionType != "multiple_choice" || len(q.Choices) != 2 {
+		t.Fatalf("unexpected accept payload: %+v", q)
+	}
+
+	// The delivered row: status delivered, claimed by the shell, queued event
+	// carries the resurfaced origin and the session's resolved level, and
+	// provenance is the due concept only.
+	db := openRawDB(t)
+	var status string
+	if err := db.QueryRowContext(ctx, `SELECT status FROM questions WHERE id = ?`, q.ID).Scan(&status); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "delivered" {
+		t.Fatalf("expected the bonus question already delivered, got %q", status)
+	}
+	var actor string
+	if err := db.QueryRowContext(ctx,
+		`SELECT actor FROM question_events WHERE question_id = ? AND event_type = 'delivered'`, q.ID).Scan(&actor); err != nil {
+		t.Fatalf("read delivered event: %v", err)
+	}
+	if actor != "shell" {
+		t.Fatalf("expected claimed_by shell, got %q", actor)
+	}
+	var payload sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload FROM question_events WHERE question_id = ? AND event_type = 'queued'`, q.ID).Scan(&payload); err != nil {
+		t.Fatalf("read queued payload: %v", err)
+	}
+	var decoded struct {
+		ResolvedDifficulty string   `json:"resolved_difficulty"`
+		Origin             string   `json:"origin"`
+		Signals            []string `json:"signals"`
+	}
+	if err := json.Unmarshal([]byte(payload.String), &decoded); err != nil {
+		t.Fatalf("payload JSON: %v", err)
+	}
+	if decoded.Origin != "resurfaced" {
+		t.Fatalf("expected origin resurfaced in the queued payload, got %+v", decoded)
+	}
+	if decoded.ResolvedDifficulty != "intermediate" {
+		t.Fatalf("expected the session's resolved level (intermediate with no history), got %q", decoded.ResolvedDifficulty)
+	}
+	var provSlugs []string
+	rows, err := db.QueryContext(ctx, `SELECT slug FROM question_concepts WHERE question_id = ?`, q.ID)
+	if err != nil {
+		t.Fatalf("provenance query: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		provSlugs = append(provSlugs, slug)
+	}
+	if len(provSlugs) != 1 || provSlugs[0] != "bonus_due" {
+		t.Fatalf("expected provenance for the due concept only, got %v", provSlugs)
+	}
+
+	// No second dequeue: the unrelated question is still queued and untouched.
+	depth, err := store.QueueDepth(ctx, "/repo/test", "main")
+	if err != nil {
+		t.Fatalf("QueueDepth: %v", err)
+	}
+	if depth != 1 {
+		t.Fatalf("expected the unrelated question still queued (depth 1), got %d", depth)
+	}
+
+	// Resolving the bonus question exits the concept answered-out.
+	body := fmt.Sprintf(`{"id":%d,"selected_index":1}`, q.ID) // an incorrect answer still exits
+	answer := mustPOST(t, baseURL, "/recall/select", []byte(body))
+	defer answer.Body.Close()
+	if answer.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on the bonus answer, got %d", answer.StatusCode)
+	}
+	row := resurfacingRowFromRawDB(t, "bonus_due")
+	if row.ExitReason.String != "answered-out" {
+		t.Fatalf("expected answered-out after the bonus resolution, got %q", row.ExitReason.String)
+	}
+}
+
+// TestRecallBonusAcceptSynthesisFailure verifies the failure path: a 204 with
+// no decline and no exit — the serve-time defer stands for the concept.
+func TestRecallBonusAcceptSynthesisFailure(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`this is not the JSON contract at all`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+	seedDueConcept(t, store, "flaky_due", "prose", 3)
+
+	serve := mustGET(t, baseURL, "/recall/bonus")
+	defer serve.Body.Close()
+	if serve.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 serve, got %d", serve.StatusCode)
+	}
+
+	accept := mustPOST(t, baseURL, "/recall/bonus/accept",
+		[]byte(`{"slug":"flaky_due","repo":"/repo/test","branch":"main"}`))
+	defer accept.Body.Close()
+	if accept.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 on synthesis failure, got %d", accept.StatusCode)
+	}
+
+	// No decline, no exit, and the defer from serve stands (not due again).
+	row := resurfacingRowFromRawDB(t, "flaky_due")
+	if row.ExitReason.Valid {
+		t.Fatalf("expected the concept to stay in the loop, got exit_reason %q", row.ExitReason.String)
+	}
+	if row.DeclinedCount != 0 {
+		t.Fatalf("expected no decline recorded, got %d", row.DeclinedCount)
+	}
+	if time.Until(row.NextEligible) < 22*time.Hour {
+		t.Fatalf("expected the serve-time defer to stand, got next_eligible %v", row.NextEligible)
+	}
+
+	// And nothing due yet: a probe returns 204.
+	probe := mustGET(t, baseURL, "/recall/bonus")
+	defer probe.Body.Close()
+	if probe.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 while deferred, got %d", probe.StatusCode)
+	}
+}
+
+// TestMCPContractUnchangedWithDueConcept verifies the MCP surface is untouched
+// with resurfacing enabled and a concept due: recall_next / recall_select keep
+// their exact response key sets and resources keep their shapes — no bonus
+// offer, no resurfaced question, no new fields.
+func TestMCPContractUnchangedWithDueConcept(t *testing.T) {
+	_, store, baseURL := startTestDaemon(t)
+	ctx := context.Background()
+
+	seedDueConcept(t, store, "due_but_mcp_ignored", "prose", 3)
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "mcp contract question",
+		[]cache.Choice{
+			{Text: "a", IsCorrect: false, Position: 0},
+			{Text: "b", IsCorrect: true, Position: 1},
+		}, "", nil); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	session := mcpSession(t, baseURL)
+
+	nextResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "recall_next",
+		Arguments: map[string]any{"repo": "/repo/test", "branch": "main"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool recall_next: %v", err)
+	}
+	var next map[string]any
+	if err := json.Unmarshal([]byte(toolText(t, nextResult)), &next); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	assertExactKeys(t, "recall_next", next, "id", "question_type", "question", "choices")
+	if next["question"] != "mcp contract question" {
+		t.Fatalf("expected the commit-diff question, got %v", next["question"])
+	}
+	id := int64(next["id"].(float64))
+
+	selectResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "recall_select",
+		Arguments: map[string]any{"id": id, "selected_index": 1, "skip": false},
+	})
+	if err != nil {
+		t.Fatalf("CallTool recall_select: %v", err)
+	}
+	var sel map[string]any
+	if err := json.Unmarshal([]byte(toolText(t, selectResult)), &sel); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	assertExactKeys(t, "recall_select", sel, "ok", "correct", "correct_index", "correct_answer")
+
+	// recall://queue keeps its shape — depth and next preview, no bonus fields.
+	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://queue?repo=" + url.QueryEscape("/repo/test") + "&branch=main"})
+	if err != nil {
+		t.Fatalf("ReadResource queue: %v", err)
+	}
+	var queue map[string]any
+	if err := json.Unmarshal([]byte(rr.Contents[0].Text), &queue); err != nil {
+		t.Fatalf("parse queue: %v", err)
+	}
+	assertExactKeys(t, "recall://queue", queue, "depth", "next")
+
+	// recall://recent keeps its row shape after the MCP answer.
+	rrRecent, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://recent?repo=" + url.QueryEscape("/repo/test") + "&branch=main"})
+	if err != nil {
+		t.Fatalf("ReadResource recent: %v", err)
+	}
+	var recent []map[string]any
+	if err := json.Unmarshal([]byte(rrRecent.Contents[0].Text), &recent); err != nil {
+		t.Fatalf("parse recent: %v", err)
+	}
+	if len(recent) != 1 {
+		t.Fatalf("expected 1 recent row, got %d", len(recent))
+	}
+	assertExactKeys(t, "recall://recent", recent[0],
+		"id", "question_type", "status", "question", "choices", "correct_index", "selected_indices", "feedback")
+
+	// And the HTTP recall_next contract stays equally unchanged.
+	resp := mustGET(t, baseURL, "/recall/next?repo=/repo/empty&branch=main")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 from an empty queue, got %d", resp.StatusCode)
+	}
+}
+
+// assertExactKeys fails when m's key set differs from the wanted names — the
+// strictness the MCP-frozen-contract check needs.
+func assertExactKeys(t *testing.T, what string, m map[string]any, want ...string) {
+	t.Helper()
+	if len(m) != len(want) {
+		t.Fatalf("%s: expected exactly keys %v, got %v", what, want, m)
+	}
+	for _, k := range want {
+		if _, ok := m[k]; !ok {
+			t.Fatalf("%s: expected key %q, got %v", what, k, m)
+		}
 	}
 }
