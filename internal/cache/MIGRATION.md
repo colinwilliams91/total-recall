@@ -18,6 +18,11 @@ applies to any `memory.db` created by an earlier build:
   alias → target pressure valve) and `question_concepts` (provenance join
   written with each saved question).
 
+The `resurfacing` table (spaced-repetition scheduler) is the exception: it is
+a brand-new table only — no existing table is reshaped — so its
+`CREATE TABLE IF NOT EXISTS` migrates cleanly against any prior `memory.db`.
+No manual reset is required for that addition.
+
 There is no incremental migration path. A stale `concepts` table that still
 carries the prose-only shape (no `slug` column) must be torn down: the new
 build's sightings inserts reference `concepts.slug`, which cannot exist in
