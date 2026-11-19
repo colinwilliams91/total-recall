@@ -9,10 +9,30 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	_ "modernc.org/sqlite"
 )
+
+// parseDBTime parses a DATETIME value read back through the raw handle. The
+// layouts mirror the ones the store itself tolerates (SQLite CURRENT_TIMESTAMP
+// defaults vs driver-bound time.Time values).
+func parseDBTime(s string) time.Time {
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
 
 func setupCache(t *testing.T) *cache.Store {
 	t.Helper()
@@ -1827,5 +1847,592 @@ CREATE TABLE questions (
 	}
 	if seqRows != 1 {
 		t.Fatalf("stale table should still carry its sqlite_sequence row, got %d rows", seqRows)
+	}
+}
+
+// ── resurfacing scheduler (spaced-repetition-resurfacing, section 1) ─────────
+
+// setupResurfacingStore is setupCache with answer-time seeding enabled — the
+// wiring the daemon performs from recall.resurfacing.
+func setupResurfacingStore(t *testing.T) *cache.Store {
+	t.Helper()
+	s := setupCache(t)
+	s.SetResurfacingEnabled(true)
+	return s
+}
+
+// seedRegistryConcept mints a registry identity directly (the scheduler's FK
+// target) without a sighting row.
+func seedRegistryConcept(t *testing.T, db *sql.DB, slug, prose string) {
+	t.Helper()
+	if _, err := db.ExecContext(context.Background(),
+		`INSERT INTO concept_registry (slug, prose, first_seen) VALUES (?, ?, ?)`,
+		slug, prose, time.Now().UTC()); err != nil {
+		t.Fatalf("seed registry %q: %v", slug, err)
+	}
+}
+
+// seedResurfacingRow inserts a scheduler row with explicit clock values so
+// tests can fast-forward the store clock.
+func seedResurfacingRow(t *testing.T, db *sql.DB, slug string, nextEligible time.Time, intervalDays int, declined int, exitReason any) {
+	t.Helper()
+	if _, err := db.ExecContext(context.Background(), `
+INSERT INTO resurfacing (slug, seeded_at, next_eligible_after, interval_days, declined_count, resurfaced_count, exit_reason)
+VALUES (?, ?, ?, ?, ?, 0, ?)`,
+		slug, time.Now().UTC().AddDate(0, 0, -intervalDays), nextEligible, intervalDays, declined, exitReason); err != nil {
+		t.Fatalf("seed resurfacing row %q: %v", slug, err)
+	}
+}
+
+// resurfacingRowState reads one scheduler row back for assertions.
+type resurfacingRowState struct {
+	Slug              string
+	NextEligibleAfter time.Time
+	IntervalDays      int
+	DeclinedCount     int
+	ResurfacedCount   int
+	ExitReason        sql.NullString
+}
+
+func readResurfacingRow(t *testing.T, db *sql.DB, slug string) resurfacingRowState {
+	t.Helper()
+	var r resurfacingRowState
+	var seededAt string
+	var nextRaw string
+	err := db.QueryRowContext(context.Background(),
+		`SELECT slug, seeded_at, next_eligible_after, interval_days, declined_count, resurfaced_count, exit_reason FROM resurfacing WHERE slug = ?`, slug).
+		Scan(&r.Slug, &seededAt, &nextRaw, &r.IntervalDays, &r.DeclinedCount, &r.ResurfacedCount, &r.ExitReason)
+	if err != nil {
+		t.Fatalf("read resurfacing row %q: %v", slug, err)
+	}
+	r.NextEligibleAfter = parseDBTime(nextRaw)
+	return r
+}
+
+// saveQuestionWithConcepts saves a question with provenance slugs and an
+// optional resolution meta, claims it, and returns the claimed row.
+func saveQuestionWithConcepts(t *testing.T, s *cache.Store, question string, slugs []string, meta cache.ResolutionMeta) *cache.StoredQuestion {
+	t.Helper()
+	ctx := context.Background()
+	fed := make([]cache.ConceptRef, len(slugs))
+	for i, slug := range slugs {
+		fed[i] = cache.ConceptRef{Slug: slug, Weight: 0.9}
+	}
+	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", question,
+		buildChoices([]string{"right", "wrong"}, 0), "", fed, meta); err != nil {
+		t.Fatalf("SaveQuestionWithResolution: %v", err)
+	}
+	claimed, err := s.NextQuestion(ctx, "/repo/test", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion: %v", err)
+	}
+	if claimed == nil {
+		t.Fatal("seeded question was not claimable")
+	}
+	return claimed
+}
+
+// TestResurfacingTableMigratesExistingDB verifies the additive migration: a
+// pre-seeded memory.db from a build without the resurfacing table opens
+// cleanly, keeps its data, and gains the scheduler table — no manual reset.
+func TestResurfacingTableMigratesExistingDB(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TR_HOME", dir)
+	dbPath := filepath.Join(dir, "memory.db")
+
+	legacy, err := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	// The old table set: everything except resurfacing, with pre-existing data.
+	legacyStmts := []string{
+		`CREATE TABLE concept_registry (slug TEXT PRIMARY KEY, prose TEXT NOT NULL, first_seen DATETIME NOT NULL)`,
+		`CREATE TABLE concept_aliases (alias TEXT PRIMARY KEY, target TEXT NOT NULL REFERENCES concept_registry(slug))`,
+		`CREATE TABLE concepts (id INTEGER PRIMARY KEY, slug TEXT NOT NULL REFERENCES concept_registry(slug), concept TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'code', weight REAL NOT NULL DEFAULT 1.0, repo TEXT NOT NULL, branch TEXT NOT NULL, seen_at DATETIME NOT NULL)`,
+		`CREATE TABLE questions (id INTEGER PRIMARY KEY, question_type TEXT NOT NULL DEFAULT 'multiple_choice', status TEXT NOT NULL DEFAULT 'queued', question TEXT NOT NULL, repo TEXT NOT NULL, branch TEXT NOT NULL, feedback TEXT)`,
+		`CREATE TABLE choices (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE, position INTEGER NOT NULL, text TEXT NOT NULL, is_correct INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE selections (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE, choice_id INTEGER NOT NULL REFERENCES choices(id) ON DELETE CASCADE, UNIQUE (question_id, choice_id))`,
+		`CREATE TABLE question_events (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE, event_type TEXT NOT NULL, occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, actor TEXT, payload TEXT)`,
+		`CREATE TABLE question_concepts (id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE, slug TEXT NOT NULL REFERENCES concept_registry(slug), weight REAL NOT NULL DEFAULT 1.0, UNIQUE (question_id, slug))`,
+		`INSERT INTO concept_registry (slug, prose, first_seen) VALUES ('legacy_concept', 'legacy prose', '2026-01-01 00:00:00')`,
+		`INSERT INTO questions (question_type, status, question, repo, branch) VALUES ('multiple_choice', 'queued', 'legacy question', '/repo/legacy', 'main')`,
+		`INSERT INTO question_events (question_id, event_type, actor) VALUES (1, 'queued', 'system')`,
+	}
+	for _, stmt := range legacyStmts {
+		if _, err := legacy.Exec(stmt); err != nil {
+			legacy.Close()
+			t.Fatalf("legacy schema stmt: %v\n%s", err, stmt)
+		}
+	}
+	legacy.Close()
+
+	s, err := cache.Open()
+	if err != nil {
+		t.Fatalf("cache.Open against pre-resurfacing db: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	s.SetResurfacingEnabled(true)
+	ctx := context.Background()
+
+	// Legacy data survives.
+	claimed, err := s.NextQuestion(ctx, "/repo/legacy", "main", "test")
+	if err != nil || claimed == nil || claimed.Question != "legacy question" {
+		t.Fatalf("legacy data lost after migration: q=%+v err=%v", claimed, err)
+	}
+	// The legacy question predates choices (old schema); a skip proves the
+	// migrated write paths work against it.
+	if err := s.SkipQuestion(ctx, claimed.ID); err != nil {
+		t.Fatalf("SkipQuestion on migrated legacy row: %v", err)
+	}
+
+	// The new table is live: seeding a correct answer on the migrated db
+	// writes a scheduler row.
+	db := openRawDB(t)
+	if err := s.SaveQuestionWithResolution(ctx, "/repo/legacy", "main", "migrated q",
+		buildChoices([]string{"right", "wrong"}, 0), "", []cache.ConceptRef{{Slug: "legacy_concept", Weight: 1.0}},
+		cache.ResolutionMeta{Difficulty: "hard"}); err != nil {
+		t.Fatalf("SaveQuestionWithResolution: %v", err)
+	}
+	claimed2, err := s.NextQuestion(ctx, "/repo/legacy", "main", "test")
+	if err != nil {
+		t.Fatalf("NextQuestion: %v", err)
+	}
+	answerClaimed(t, s, ctx, claimed2, true)
+	row := readResurfacingRow(t, db, "legacy_concept")
+	if row.IntervalDays != 14 {
+		t.Fatalf("expected hard ladder interval 14 on migrated db, got %d", row.IntervalDays)
+	}
+}
+
+// TestResurfacingIntervalLadder is the table-driven ladder check: the flat
+// intervals keyed by the answered question's resolved difficulty, unknown →
+// intermediate.
+func TestResurfacingIntervalLadder(t *testing.T) {
+	cases := []struct {
+		level    string
+		interval int
+	}{
+		{"easy", 3},
+		{"intermediate", 7},
+		{"hard", 14},
+		{"", 7},
+		{"mystery", 7},
+	}
+	for _, tc := range cases {
+		t.Run("level="+tc.level, func(t *testing.T) {
+			s := setupResurfacingStore(t)
+			db := openRawDB(t)
+			seedRegistryConcept(t, db, "ladder_concept", "ladder prose")
+
+			claimed := saveQuestionWithConcepts(t, s, "ladder question "+tc.level,
+				[]string{"ladder_concept"}, cache.ResolutionMeta{Difficulty: tc.level})
+			answerClaimed(t, s, context.Background(), claimed, true)
+
+			row := readResurfacingRow(t, db, "ladder_concept")
+			if row.IntervalDays != tc.interval {
+				t.Fatalf("expected interval %d for level %q, got %d", tc.interval, tc.level, row.IntervalDays)
+			}
+			due := row.NextEligibleAfter.Sub(time.Now().UTC())
+			if due < time.Duration(tc.interval)*24*time.Hour-time.Hour || due > time.Duration(tc.interval)*24*time.Hour+time.Hour {
+				t.Fatalf("expected next_eligible ~%d days out, got %v", tc.interval, due)
+			}
+		})
+	}
+}
+
+// TestResurfacingSeedOnCorrectAnswer verifies answer-time seeding writes one
+// row per concept of a correctly answered question, in the same write as the
+// answer.
+func TestResurfacingSeedOnCorrectAnswer(t *testing.T) {
+	s := setupResurfacingStore(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "concept_a", "prose a")
+	seedRegistryConcept(t, db, "concept_b", "prose b")
+
+	claimed := saveQuestionWithConcepts(t, s, "two-concept question",
+		[]string{"concept_a", "concept_b"}, cache.ResolutionMeta{Difficulty: "easy"})
+	answerClaimed(t, s, context.Background(), claimed, true)
+
+	for _, slug := range []string{"concept_a", "concept_b"} {
+		row := readResurfacingRow(t, db, slug)
+		if row.IntervalDays != 3 {
+			t.Fatalf("%s: expected easy interval 3, got %d", slug, row.IntervalDays)
+		}
+		if row.ExitReason.Valid {
+			t.Fatalf("%s: expected NULL exit_reason, got %q", slug, row.ExitReason.String)
+		}
+		if row.DeclinedCount != 0 || row.ResurfacedCount != 0 {
+			t.Fatalf("%s: expected fresh counters, got declined=%d resurfaced=%d", slug, row.DeclinedCount, row.ResurfacedCount)
+		}
+	}
+}
+
+// TestResurfacingIncorrectAndSkipDoNotSeed verifies misses and skips seed
+// nothing — the weakness loop owns them.
+func TestResurfacingIncorrectAndSkipDoNotSeed(t *testing.T) {
+	t.Run("incorrect answer", func(t *testing.T) {
+		s := setupResurfacingStore(t)
+		db := openRawDB(t)
+		seedRegistryConcept(t, db, "missed_concept", "prose")
+
+		claimed := saveQuestionWithConcepts(t, s, "miss question",
+			[]string{"missed_concept"}, cache.ResolutionMeta{Difficulty: "easy"})
+		answerClaimed(t, s, context.Background(), claimed, false)
+
+		var n int
+		if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM resurfacing`).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("expected no scheduler rows after a miss, got %d", n)
+		}
+	})
+
+	t.Run("skip", func(t *testing.T) {
+		s := setupResurfacingStore(t)
+		db := openRawDB(t)
+		seedRegistryConcept(t, db, "skipped_concept", "prose")
+
+		claimed := saveQuestionWithConcepts(t, s, "skip question",
+			[]string{"skipped_concept"}, cache.ResolutionMeta{Difficulty: "easy"})
+		if err := s.SkipQuestion(context.Background(), claimed.ID); err != nil {
+			t.Fatalf("SkipQuestion: %v", err)
+		}
+
+		var n int
+		if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM resurfacing`).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("expected no scheduler rows after a skip, got %d", n)
+		}
+	})
+}
+
+// TestResurfacingRenewalClearsDeclines verifies a fresh correct answer resets
+// the schedule and clears the decline count — the cap punishes continuous
+// disinterest, not one bad week.
+func TestResurfacingRenewalClearsDeclines(t *testing.T) {
+	s := setupResurfacingStore(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "renewed_concept", "prose")
+	oldNext := time.Now().UTC().AddDate(0, 0, -2)
+	seedResurfacingRow(t, db, "renewed_concept", oldNext, 7, 2, nil)
+
+	claimed := saveQuestionWithConcepts(t, s, "renewal question",
+		[]string{"renewed_concept"}, cache.ResolutionMeta{Difficulty: "intermediate"})
+	answerClaimed(t, s, context.Background(), claimed, true)
+
+	row := readResurfacingRow(t, db, "renewed_concept")
+	if row.DeclinedCount != 0 {
+		t.Fatalf("expected declines cleared on renewal, got %d", row.DeclinedCount)
+	}
+	if row.NextEligibleAfter.Before(time.Now().UTC()) {
+		t.Fatalf("expected the schedule reset from the new answer, got %v", row.NextEligibleAfter)
+	}
+}
+
+// TestResurfacingExitedStaysExited verifies terminal rows are never
+// resurrected by later correct answers.
+func TestResurfacingExitedStaysExited(t *testing.T) {
+	cases := []struct {
+		name       string
+		exitReason string
+	}{
+		{"declined-out stays exited", cache.ExitDeclinedOut},
+		{"answered-out stays exited", cache.ExitAnsweredOut},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := setupResurfacingStore(t)
+			db := openRawDB(t)
+			seedRegistryConcept(t, db, "exited_concept", "prose")
+			oldNext := time.Now().UTC().AddDate(0, 0, -10)
+			seedResurfacingRow(t, db, "exited_concept", oldNext, 7, 3, tc.exitReason)
+
+			claimed := saveQuestionWithConcepts(t, s, "resurrection attempt",
+				[]string{"exited_concept"}, cache.ResolutionMeta{Difficulty: "easy"})
+			answerClaimed(t, s, context.Background(), claimed, true)
+
+			row := readResurfacingRow(t, db, "exited_concept")
+			if row.ExitReason.String != tc.exitReason {
+				t.Fatalf("expected exit_reason %q to be terminal, got %q", tc.exitReason, row.ExitReason.String)
+			}
+			if !row.NextEligibleAfter.Equal(oldNext) {
+				t.Fatalf("expected the exited row's schedule untouched, got %v", row.NextEligibleAfter)
+			}
+		})
+	}
+}
+
+// TestResurfacingBonusResolutionExits verifies a resolved bonus question
+// exits its concept answered-out regardless of correctness — and that a
+// bonus answer never re-seeds.
+func TestResurfacingBonusResolutionExits(t *testing.T) {
+	t.Run("bonus answered incorrectly still exits", func(t *testing.T) {
+		s := setupResurfacingStore(t)
+		db := openRawDB(t)
+		seedRegistryConcept(t, db, "bonus_concept", "prose")
+		seedResurfacingRow(t, db, "bonus_concept", time.Now().UTC().AddDate(0, 0, -1), 7, 0, nil)
+
+		claimed := saveQuestionWithConcepts(t, s, "bonus question",
+			[]string{"bonus_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: "resurfaced"})
+		answerClaimed(t, s, context.Background(), claimed, false)
+
+		row := readResurfacingRow(t, db, "bonus_concept")
+		if row.ExitReason.String != cache.ExitAnsweredOut {
+			t.Fatalf("expected answered-out after a bonus miss, got %q", row.ExitReason.String)
+		}
+	})
+
+	t.Run("bonus skip exits", func(t *testing.T) {
+		s := setupResurfacingStore(t)
+		db := openRawDB(t)
+		seedRegistryConcept(t, db, "bonus_skip_concept", "prose")
+		seedResurfacingRow(t, db, "bonus_skip_concept", time.Now().UTC().AddDate(0, 0, -1), 7, 0, nil)
+
+		claimed := saveQuestionWithConcepts(t, s, "bonus skip question",
+			[]string{"bonus_skip_concept"}, cache.ResolutionMeta{Difficulty: "intermediate", Origin: "resurfaced"})
+		if err := s.SkipQuestion(context.Background(), claimed.ID); err != nil {
+			t.Fatalf("SkipQuestion: %v", err)
+		}
+
+		row := readResurfacingRow(t, db, "bonus_skip_concept")
+		if row.ExitReason.String != cache.ExitAnsweredOut {
+			t.Fatalf("expected answered-out after a bonus skip, got %q", row.ExitReason.String)
+		}
+	})
+}
+
+// TestResurfacingSeedingDisabledByDefault verifies a store without the
+// enabled flag writes no scheduler rows — the recall.resurfacing:false path.
+func TestResurfacingSeedingDisabledByDefault(t *testing.T) {
+	s := setupCache(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "disabled_concept", "prose")
+
+	claimed := saveQuestionWithConcepts(t, s, "unseeded question",
+		[]string{"disabled_concept"}, cache.ResolutionMeta{Difficulty: "easy"})
+	answerClaimed(t, s, context.Background(), claimed, true)
+
+	var n int
+	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM resurfacing`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expected no scheduler rows with seeding disabled, got %d", n)
+	}
+}
+
+// TestDueBonusOfferSelection verifies the most-overdue-first selection with
+// oldest-seeded tiebreak, and that terminal rows are never served.
+func TestDueBonusOfferSelection(t *testing.T) {
+	s := setupResurfacingStore(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "older_due", "older prose")
+	seedRegistryConcept(t, db, "newer_due", "newer prose")
+	seedRegistryConcept(t, db, "not_due_yet", "future prose")
+	seedRegistryConcept(t, db, "exited_concept", "exited prose")
+
+	now := time.Now().UTC()
+	seedResurfacingRow(t, db, "older_due", now.AddDate(0, 0, -3), 7, 0, nil)
+	seedResurfacingRow(t, db, "newer_due", now.AddDate(0, 0, -1), 7, 0, nil)
+	seedResurfacingRow(t, db, "not_due_yet", now.AddDate(0, 0, 5), 7, 0, nil)
+	seedResurfacingRow(t, db, "exited_concept", now.AddDate(0, 0, -30), 7, 0, cache.ExitAnsweredOut)
+
+	offer, err := s.DueBonusOffer(context.Background())
+	if err != nil {
+		t.Fatalf("DueBonusOffer: %v", err)
+	}
+	if offer == nil {
+		t.Fatal("expected an offer, got nil")
+	}
+	if offer.Slug != "older_due" {
+		t.Fatalf("expected the most-overdue concept, got %q", offer.Slug)
+	}
+	if offer.Prose != "older prose" {
+		t.Fatalf("expected registry prose in the offer, got %q", offer.Prose)
+	}
+
+	// Tie on next_eligible_after: the oldest seeded_at wins.
+	seedRegistryConcept(t, db, "tie_a", "tie a prose")
+	seedRegistryConcept(t, db, "tie_b", "tie b prose")
+	past := now.AddDate(0, 0, -5)
+	if _, err := db.ExecContext(context.Background(), `
+INSERT INTO resurfacing (slug, seeded_at, next_eligible_after, interval_days) VALUES (?, ?, ?, 7)`,
+		"tie_a", now.AddDate(0, 0, -20), past); err != nil {
+		t.Fatalf("seed tie_a: %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `
+INSERT INTO resurfacing (slug, seeded_at, next_eligible_after, interval_days) VALUES (?, ?, ?, 7)`,
+		"tie_b", now.AddDate(0, 0, -10), past); err != nil {
+		t.Fatalf("seed tie_b: %v", err)
+	}
+	// Move the previous winner out of the window so the tie decides.
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE resurfacing SET next_eligible_after = ? WHERE slug = 'older_due'`, now.AddDate(0, 0, 9)); err != nil {
+		t.Fatalf("bump older_due: %v", err)
+	}
+	offer, err = s.DueBonusOffer(context.Background())
+	if err != nil {
+		t.Fatalf("DueBonusOffer (tie): %v", err)
+	}
+	if offer == nil || offer.Slug != "tie_a" {
+		t.Fatalf("expected oldest-seeded tie winner tie_a, got %+v", offer)
+	}
+}
+
+// TestDeferBonusOffer verifies the serve-time defer: one day past now plus a
+// resurfaced-count bump.
+func TestDeferBonusOffer(t *testing.T) {
+	s := setupResurfacingStore(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "deferred_concept", "prose")
+	seedResurfacingRow(t, db, "deferred_concept", time.Now().UTC().AddDate(0, 0, -2), 7, 0, nil)
+
+	if err := s.DeferBonusOffer(context.Background(), "deferred_concept"); err != nil {
+		t.Fatalf("DeferBonusOffer: %v", err)
+	}
+	row := readResurfacingRow(t, db, "deferred_concept")
+	due := time.Until(row.NextEligibleAfter)
+	if due < 23*time.Hour || due > 25*time.Hour {
+		t.Fatalf("expected next_eligible ~1 day out, got %v", due)
+	}
+	if row.ResurfacedCount != 1 {
+		t.Fatalf("expected resurfaced_count 1 after serve, got %d", row.ResurfacedCount)
+	}
+
+	// Deferring an exited row is refused.
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE resurfacing SET exit_reason = ? WHERE slug = 'deferred_concept'`, cache.ExitAnsweredOut); err != nil {
+		t.Fatalf("exit row: %v", err)
+	}
+	if err := s.DeferBonusOffer(context.Background(), "deferred_concept"); err == nil {
+		t.Fatal("expected an error deferring an exited row")
+	}
+}
+
+// TestRecordBonusDeclineCap verifies the decline ladder: count increments
+// with the defer restated, the third decline exits declined-out, and an
+// unknown slug is reported as not-found.
+func TestRecordBonusDeclineCap(t *testing.T) {
+	s := setupResurfacingStore(t)
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "declining_concept", "prose")
+	seedResurfacingRow(t, db, "declining_concept", time.Now().UTC().AddDate(0, 0, -1), 7, 0, nil)
+	seedRegistryConcept(t, db, "exited_concept", "prose")
+	seedResurfacingRow(t, db, "exited_concept", time.Now().UTC(), 7, 0, cache.ExitAnsweredOut)
+
+	ctx := context.Background()
+	for i := 1; i <= 2; i++ {
+		exited, err := s.RecordBonusDecline(ctx, "declining_concept")
+		if err != nil {
+			t.Fatalf("decline %d: %v", i, err)
+		}
+		if exited {
+			t.Fatalf("decline %d must not exit the concept", i)
+		}
+		row := readResurfacingRow(t, db, "declining_concept")
+		if row.DeclinedCount != i {
+			t.Fatalf("decline %d: expected declined_count %d, got %d", i, i, row.DeclinedCount)
+		}
+		if time.Until(row.NextEligibleAfter) < 22*time.Hour {
+			t.Fatalf("decline %d: expected the one-day defer restated, got %v", i, row.NextEligibleAfter)
+		}
+	}
+
+	exited, err := s.RecordBonusDecline(ctx, "declining_concept")
+	if err != nil {
+		t.Fatalf("decline 3: %v", err)
+	}
+	if !exited {
+		t.Fatal("expected the third decline to exit the concept")
+	}
+	row := readResurfacingRow(t, db, "declining_concept")
+	if row.ExitReason.String != cache.ExitDeclinedOut {
+		t.Fatalf("expected declined-out, got %q", row.ExitReason.String)
+	}
+
+	// A decline against an exited concept is a no-op, not a resurrection.
+	exited, err = s.RecordBonusDecline(ctx, "exited_concept")
+	if err != nil {
+		t.Fatalf("decline on exited row: %v", err)
+	}
+	if exited {
+		t.Fatal("exited row cannot re-exit")
+	}
+
+	// Unknown slug: not-found.
+	if _, err := s.RecordBonusDecline(ctx, "never_minted"); err == nil {
+		t.Fatal("expected not-found error for unknown slug")
+	}
+}
+
+// TestDeliverQuestion verifies the accept-path delivery: queued → delivered
+// with a 'delivered' event attributed to the claiming surface, and the
+// terminal-state guard intact.
+func TestDeliverQuestion(t *testing.T) {
+	s := setupResurfacingStore(t)
+	ctx := context.Background()
+	db := openRawDB(t)
+	seedRegistryConcept(t, db, "concept_a", "prose")
+	if err := s.SaveQuestionWithResolution(ctx, "/repo/test", "main", "deliver-me",
+		buildChoices([]string{"right", "wrong"}, 0), "", []cache.ConceptRef{{Slug: "concept_a", Weight: 1.0}},
+		cache.ResolutionMeta{}); err != nil {
+		t.Fatalf("SaveQuestionWithResolution: %v", err)
+	}
+	queued, err := s.PeekNextQuestion(ctx, "/repo/test", "main")
+	if err != nil || queued == nil {
+		t.Fatalf("PeekNextQuestion: q=%+v err=%v", queued, err)
+	}
+	if err := s.DeliverQuestion(ctx, queued.ID, "shell"); err != nil {
+		t.Fatalf("DeliverQuestion: %v", err)
+	}
+	q, err := s.GetQuestion(ctx, queued.ID)
+	if err != nil {
+		t.Fatalf("GetQuestion: %v", err)
+	}
+	if q.Status != "delivered" {
+		t.Fatalf("expected delivered, got %q", q.Status)
+	}
+
+	// Already-delivered: refused.
+	if err := s.DeliverQuestion(ctx, queued.ID, "shell"); err == nil {
+		t.Fatal("expected an error delivering an already-delivered question")
+	}
+}
+
+// TestLastAnsweredDifficulty verifies the session-level read: the resolved
+// difficulty from the most recent answered question's queued payload.
+func TestLastAnsweredDifficulty(t *testing.T) {
+	s := setupResurfacingStore(t)
+	ctx := context.Background()
+
+	if _, ok, err := s.LastAnsweredDifficulty(ctx, "/repo/test", "main"); err != nil || ok {
+		t.Fatalf("expected no history on a fresh store, got ok=%v err=%v", ok, err)
+	}
+
+	hard := saveQuestionWithConcepts(t, s, "hard question", nil, cache.ResolutionMeta{Difficulty: "hard"})
+	answerClaimed(t, s, ctx, hard, true)
+	level, ok, err := s.LastAnsweredDifficulty(ctx, "/repo/test", "main")
+	if err != nil || !ok || level != "hard" {
+		t.Fatalf("expected hard, got level=%q ok=%v err=%v", level, ok, err)
+	}
+
+	easy := saveQuestionWithConcepts(t, s, "easy question", nil, cache.ResolutionMeta{Difficulty: "easy"})
+	answerClaimed(t, s, ctx, easy, true)
+	level, ok, err = s.LastAnsweredDifficulty(ctx, "/repo/test", "main")
+	if err != nil || !ok || level != "easy" {
+		t.Fatalf("expected easy after the newer answer, got level=%q ok=%v err=%v", level, ok, err)
+	}
+
+	// Skips never answer, so they don't shadow the last answered difficulty.
+	skipped := saveQuestionWithConcepts(t, s, "skip question", nil, cache.ResolutionMeta{Difficulty: "hard"})
+	if err := s.SkipQuestion(ctx, skipped.ID); err != nil {
+		t.Fatalf("SkipQuestion: %v", err)
+	}
+	level, _, _ = s.LastAnsweredDifficulty(ctx, "/repo/test", "main")
+	if level != "easy" {
+		t.Fatalf("expected the answered easy level to survive a skip, got %q", level)
 	}
 }

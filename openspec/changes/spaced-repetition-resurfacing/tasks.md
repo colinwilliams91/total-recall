@@ -2,9 +2,9 @@
 
 ## 1. Store foundation (scheduler state)
 
-- [ ] 1.1 Add the `resurfacing` table to `internal/cache/store.go` via `CREATE TABLE IF NOT EXISTS` (additive — no `ALTER`, no `memory.db` reset) with an index on `next_eligible_after` for the due lookup, and verify an existing `memory.db` opens and migrates without deletion by running the cache tests against a pre-seeded temp DB
-- [ ] 1.2 Implement answer-time seeding: on a correct answer (same transaction as the answer write), upsert one row per concept slug — `next_eligible_after = now + ladder(level)`, `interval_days` recorded, decline count cleared on renewal, terminal rows never resurrected; verify with `cache_test.go` cases for seed / renew-clears-declines / exited-stays-exited, reading the answered question's difficulty from its queued `question_events` payload
-- [ ] 1.3 Implement the ladder and state transitions: easy=3 / intermediate=7 / hard=14 (unknown → intermediate), serve-time defer (+1 day, applied on offer), decline count with cap 3 → `declined-out`, answered-bonus → `answered-out`; verify with table-driven `cache_test.go` cases per the spec's ladder and decline scenarios
+- [x] 1.1 Add the `resurfacing` table to `internal/cache/store.go` via `CREATE TABLE IF NOT EXISTS` (additive — no `ALTER`, no `memory.db` reset) with an index on `next_eligible_after` for the due lookup, and verify an existing `memory.db` opens and migrates without deletion by running the cache tests against a pre-seeded temp DB
+- [x] 1.2 Implement answer-time seeding: on a correct answer (same transaction as the answer write), upsert one row per concept slug — `next_eligible_after = now + ladder(level)`, `interval_days` recorded, decline count cleared on renewal, terminal rows never resurrected; verify with `cache_test.go` cases for seed / renew-clears-declines / exited-stays-exited, reading the answered question's difficulty from its queued `question_events` payload
+- [x] 1.3 Implement the ladder and state transitions: easy=3 / intermediate=7 / hard=14 (unknown → intermediate), serve-time defer (+1 day, applied on offer), decline count with cap 3 → `declined-out`, answered-bonus → `answered-out`; verify with table-driven `cache_test.go` cases per the spec's ladder and decline scenarios
 
 ## 2. Daemon bonus contract
 
