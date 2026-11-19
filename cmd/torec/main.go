@@ -329,16 +329,16 @@ var providerModelDefaults = map[string]string{
 	"custom":     "",
 }
 
-// providerAPIKeyPlaceholders maps cloud providers to an env: placeholder shown in the TUI.
-var providerAPIKeyPlaceholders = map[string]string{
-	"anthropic":  "env:ANTHROPIC_API_KEY",
-	"openai":     "env:OPENAI_API_KEY",
-	"groq":       "env:GROQ_API_KEY",
-	"qwen":       "env:QWEN_API_KEY",
-	"minimax":    "env:MINIMAX_API_KEY",
-	"deepseek":   "env:DEEPSEEK_API_KEY",
-	"openrouter": "env:OPENROUTER_API_KEY",
-	"opencode":   "env:OPENCODE_API_KEY",
+// prefillAPIKey returns the api-key value carried into a provider's key
+// prompt. An empty value or an unmodified default placeholder (including one
+// left over from a previously selected provider) is keyed to the new
+// provider; user-entered values — a custom env var name or a raw key — pass
+// through untouched so init never silently overwrites deliberate choices.
+func prefillAPIKey(existing, provider string) string {
+	if existing == "" || config.IsDefaultAPIKeyEnv(existing) {
+		return config.DefaultAPIKeyEnv(provider)
+	}
+	return existing
 }
 
 // runInitAI prompts the user to configure an AI provider for recall questions.
@@ -390,9 +390,11 @@ func runInitAI(cfg *config.UserConfig) error {
 	switch selectedProvider {
 	case "anthropic", "openai", "groq", "qwen", "minimax", "deepseek", "openrouter", "opencode":
 		// Cloud providers: prompt for API key (env: pattern) and model name.
-		if apiKey == "" {
-			apiKey = providerAPIKeyPlaceholders[selectedProvider]
-		}
+		// Issue #34: a stale default placeholder from the previously selected
+		// provider (user switched without editing the key) is re-keyed to the
+		// new provider; a custom env var name or a raw key never matches the
+		// default placeholder pattern and is left untouched.
+		apiKey = prefillAPIKey(apiKey, selectedProvider)
 		followUp := huh.NewForm(
 			huh.NewGroup(
 				huh.NewInput().
