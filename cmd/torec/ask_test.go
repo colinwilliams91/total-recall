@@ -47,7 +47,7 @@ func TestAskTimeoutSetsCaughtUpFeedback(t *testing.T) {
 func TestRenderQuestionShowsAllChoices(t *testing.T) {
 	view := renderQuestion(questionMsg{
 		question: "What does the diff hunk header mean?",
-		choices: []string{"first", "second", "third", "fourth"},
+		choices:  []string{"first", "second", "third", "fourth"},
 	})
 
 	if !strings.Contains(view, "4. fourth") {
@@ -204,31 +204,47 @@ func isQuitCmd(cmd tea.Cmd) bool {
 }
 
 func TestUpdateFeedbackReceivesFeedbackMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second, "", "main")
+	m := newAskModel(10*time.Second, "", "main")
 	m.state = stateFeedback
 
+	// The feedback resolves into the one offer probe per session — the model
+	// stays in stateFeedback until the probe resolves.
 	updated, cmd := m.updateFeedback(feedbackMsg{correct: true, correctText: "X", feedback: "Y"})
 	got := updated.(askModel)
 
-	if got.state != stateDone {
-		t.Fatalf("expected stateDone, got %v", got.state)
+	if got.state != stateFeedback {
+		t.Fatalf("expected stateFeedback while probing, got %v", got.state)
 	}
-	if !got.feedbackResult.correct {
-		t.Fatal("expected feedbackResult.correct true")
+	if got.feedbackResult.correctText != "X" || got.feedbackResult.feedback != "Y" {
+		t.Fatalf("expected feedbackResult retained, got %+v", got.feedbackResult)
 	}
-	if got.feedbackResult.correctText != "X" {
-		t.Fatalf("expected correctText %q, got %q", "X", got.feedbackResult.correctText)
+	if cmd == nil {
+		t.Fatal("expected the offer probe cmd")
 	}
-	if got.feedbackResult.feedback != "Y" {
-		t.Fatalf("expected feedback %q, got %q", "Y", got.feedbackResult.feedback)
+
+	// No offer → the session ends exactly as it does without resurfacing.
+	final, quit := got.updateFeedback(noOfferMsg{})
+	done := final.(askModel)
+	if done.state != stateDone {
+		t.Fatalf("expected stateDone after no-offer, got %v", done.state)
 	}
-	if !isQuitCmd(cmd) {
+	if !isQuitCmd(quit) {
 		t.Fatal("expected tea.Quit cmd")
+	}
+
+	// A served offer continues into the offer flow instead of quitting.
+	served, _ := got.updateFeedback(bonusOfferMsg{slug: "bonus", prose: "prose"})
+	offered := served.(askModel)
+	if offered.state != stateOffer || offered.offer == nil || offered.offer.slug != "bonus" {
+		t.Fatalf("expected stateOffer with the served offer, got state=%v offer=%+v", offered.state, offered.offer)
+	}
+	if !offered.offerShown {
+		t.Fatal("expected offerShown to mark the inline feedback render")
 	}
 }
 
 func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
-	m := newAskModel(10 * time.Second, "", "main")
+	m := newAskModel(10*time.Second, "", "main")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(skipMsg{})
@@ -246,7 +262,7 @@ func TestUpdateFeedbackReceivesSkipMsg(t *testing.T) {
 }
 
 func TestUpdateFeedbackCtrlC(t *testing.T) {
-	m := newAskModel(10 * time.Second, "", "main")
+	m := newAskModel(10*time.Second, "", "main")
 	m.state = stateFeedback
 
 	updated, cmd := m.updateFeedback(tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC}))
@@ -261,7 +277,7 @@ func TestUpdateFeedbackCtrlC(t *testing.T) {
 }
 
 func TestStateFeedbackView(t *testing.T) {
-	m := newAskModel(10 * time.Second, "", "main")
+	m := newAskModel(10*time.Second, "", "main")
 	m.state = stateFeedback
 
 	view := m.View()
@@ -387,7 +403,7 @@ func TestPostAltScreenRendering(t *testing.T) {
 }
 
 func TestAskModelQKeyExitsSilently(t *testing.T) {
-	m := newAskModel(10 * time.Second, "", "main")
+	m := newAskModel(10*time.Second, "", "main")
 
 	updated, _ := m.updateThinking(questionMsg{
 		id:       1,
@@ -590,5 +606,369 @@ func TestResolveAskBranchReturnsErrorOnDetachedHEAD(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "detached HEAD") {
 		t.Fatalf("expected detached HEAD error, got %v", err)
+	}
+}
+
+// ── bonus offer flow (spaced-repetition-resurfacing, tasks 4.1-4.3) ──────────
+
+// offerModel returns a model in the offer state with feedback retained — the
+// shape the session reaches when a bonus offer was served.
+func offerModel() askModel {
+	m := newAskModel(10*time.Second, "/repo/test", "main")
+	m.state = stateOffer
+	m.offerProbed = true
+	m.offerShown = true
+	m.feedbackResult = feedbackMsg{correct: true, correctText: "X", feedback: "Because circuits break."}
+	offer := bonusOfferMsg{slug: "circuit_breaker", prose: "circuit breaker pattern"}
+	m.offer = &offer
+	return m
+}
+
+// TestAskOfferAcceptFetchesBonusQuestion verifies the y path: y → thinking
+// animation while synthesis runs → the bonus question arrives as a normal
+// questionMsg → the existing question interaction takes over.
+func TestAskOfferAcceptFetchesBonusQuestion(t *testing.T) {
+	m := offerModel()
+
+	updated, cmd := m.updateOffer(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'y'}}))
+	got := updated.(askModel)
+	if !got.awaitingBonus {
+		t.Fatal("expected awaitingBonus while synthesis runs")
+	}
+	if got.state != stateOffer {
+		t.Fatalf("expected to stay in stateOffer, got %v", got.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected the accept cmd")
+	}
+
+	final, _ := got.updateOffer(questionMsg{id: 7, question: "bonus?", choices: []string{"a", "b"}})
+	bonus := final.(askModel)
+	if bonus.state != stateQuestion {
+		t.Fatalf("expected stateQuestion, got %v", bonus.state)
+	}
+	if !bonus.questionIsBonus {
+		t.Fatal("expected questionIsBonus for the bonus question")
+	}
+	if bonus.question.id != 7 {
+		t.Fatalf("expected the bonus question payload, got %+v", bonus.question)
+	}
+}
+
+// TestAskOfferDeclinePostsAndEnds verifies the n path: the decline POST
+// settles before the session ends, and the declined concept never shows a
+// question.
+func TestAskOfferDeclinePostsAndEnds(t *testing.T) {
+	var capturedBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		capturedBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok":true,"exited":false}`))
+	}))
+	t.Cleanup(srv.Close)
+	withDaemonBaseURL(t, srv.URL)
+	m := offerModel()
+
+	updated, cmd := m.updateOffer(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'n'}}))
+	got := updated.(askModel)
+	if cmd == nil {
+		t.Fatal("expected the decline cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(declinePostedMsg); !ok {
+		t.Fatalf("expected declinePostedMsg, got %T", msg)
+	}
+	if !strings.Contains(capturedBody, "circuit_breaker") {
+		t.Fatalf("expected the declined slug in the POST body, got %q", capturedBody)
+	}
+
+	final, quit := got.updateOffer(declinePostedMsg{})
+	done := final.(askModel)
+	if done.state != stateDone {
+		t.Fatalf("expected stateDone after the decline settles, got %v", done.state)
+	}
+	if !isQuitCmd(quit) {
+		t.Fatal("expected tea.Quit cmd")
+	}
+}
+
+// TestAskOfferKilledEndsSilently verifies the kill path at the offer: q, Esc
+// and Ctrl+C all end the session without posting anything — the daemon's
+// serve-time defer already stands.
+func TestAskOfferKilledEndsSilently(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusOK, `{"ok":true}`)
+	withDaemonBaseURL(t, srv.URL)
+
+	for _, key := range []struct {
+		name string
+		msg  tea.KeyMsg
+	}{
+		{"q", tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'q'}})},
+		{"esc", tea.KeyMsg(tea.Key{Type: tea.KeyEsc})},
+		{"ctrl+c", tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC})},
+	} {
+		t.Run(key.name, func(t *testing.T) {
+			m := offerModel()
+			final, cmd := m.updateOffer(key.msg)
+			got := final.(askModel)
+			if got.state != stateDone {
+				t.Fatalf("expected stateDone on %s, got %v", key.name, got.state)
+			}
+			if !isQuitCmd(cmd) {
+				t.Fatal("expected tea.Quit cmd")
+			}
+			// Nothing was posted: no decline, no accept.
+			if strings.Contains(*captured, "/recall/bonus/decline") || strings.Contains(*captured, "/recall/bonus/accept") {
+				t.Fatalf("expected no bonus POSTs on %s, got %q", key.name, *captured)
+			}
+			// The feedback rendered inline, so nothing repeats post-exit.
+			if out := renderPostAltScreen(got); out != "" {
+				t.Fatalf("expected empty post-exit output on %s, got %q", key.name, out)
+			}
+		})
+	}
+}
+
+// TestAskOfferAcceptFailureEndsWithoutDecline verifies the failed-fetch path:
+// the session ends, nothing is posted, the feedback is not repeated.
+func TestAskOfferAcceptFailureEndsWithoutDecline(t *testing.T) {
+	m := offerModel()
+
+	final, quit := m.updateOffer(acceptFailedMsg{})
+	got := final.(askModel)
+	if got.state != stateDone {
+		t.Fatalf("expected stateDone on accept failure, got %v", got.state)
+	}
+	if !isQuitCmd(quit) {
+		t.Fatal("expected tea.Quit cmd")
+	}
+	if out := renderPostAltScreen(got); out != "" {
+		t.Fatalf("expected empty post-exit output (feedback shown inline), got %q", out)
+	}
+}
+
+// TestAskBonusQuestionResolvedEndsSession verifies the bonus question rides
+// the existing interaction and that resolving it ends the session without a
+// second offer probe.
+func TestAskBonusQuestionResolvedEndsSession(t *testing.T) {
+	t.Run("answered", func(t *testing.T) {
+		m := offerModel()
+		updated, _ := m.updateOffer(questionMsg{id: 7, question: "bonus?", choices: []string{"a", "b"}})
+		bonusQ := updated.(askModel)
+
+		updated, cmd := bonusQ.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'1'}}))
+		answered := updated.(askModel)
+		if answered.state != stateFeedback || cmd == nil {
+			t.Fatalf("expected stateFeedback with postAnswer, got state=%v cmd=%v", answered.state, cmd)
+		}
+		if !answered.bonusAnswered {
+			t.Fatal("expected bonusAnswered so the post-exit output prints the bonus feedback")
+		}
+
+		// The bonus feedback resolves straight to done — no second probe.
+		final, quit := answered.updateFeedback(feedbackMsg{correct: false, correctText: "a", feedback: "not quite"})
+		done := final.(askModel)
+		if done.state != stateDone {
+			t.Fatalf("expected stateDone, got %v", done.state)
+		}
+		if !isQuitCmd(quit) {
+			t.Fatal("expected tea.Quit cmd")
+		}
+		if out := renderPostAltScreen(done); !strings.Contains(out, "✗ The answer was: a") {
+			t.Fatalf("expected the bonus verdict post-exit, got %q", out)
+		}
+	})
+
+	t.Run("skipped", func(t *testing.T) {
+		m := offerModel()
+		updated, _ := m.updateOffer(questionMsg{id: 7, question: "bonus?", choices: []string{"a", "b"}})
+		bonusQ := updated.(askModel)
+
+		final, cmd := bonusQ.updateQuestion(tea.KeyMsg(tea.Key{Type: tea.KeyEnter}))
+		done := final.(askModel)
+		if done.state != stateDone || !done.skipped {
+			t.Fatalf("expected stateDone+skipped, got state=%v skipped=%v", done.state, done.skipped)
+		}
+		if cmd == nil {
+			t.Fatal("expected postSkip cmd")
+		}
+		if !done.bonusAnswered {
+			t.Fatal("expected bonusAnswered on the bonus skip")
+		}
+		if out := renderPostAltScreen(done); !strings.Contains(out, "→ Question saved for later.") {
+			t.Fatalf("expected the skip message post-exit, got %q", out)
+		}
+	})
+}
+
+// TestAskOfferViewRendersAgreedCopy verifies the offer view renders the commit
+// feedback inline, the retention framing, and the agreed offer prompt.
+func TestAskOfferViewRendersAgreedCopy(t *testing.T) {
+	m := offerModel()
+	view := m.View()
+	if !strings.Contains(view, "✓ Correct.") {
+		t.Fatalf("expected inline feedback verdict, got %q", view)
+	}
+	if !strings.Contains(view, "Knowledge retention bonus") {
+		t.Fatalf("expected the retention framing, got %q", view)
+	}
+	if !strings.Contains(view, bonusOfferPrompt) {
+		t.Fatalf("expected the agreed offer copy, got %q", view)
+	}
+	if !strings.Contains(view, "circuit breaker pattern") {
+		t.Fatalf("expected the offer prose, got %q", view)
+	}
+}
+
+// TestAskOfferAwaitingShowsThinking verifies the synthesis wait renders the
+// thinking animation instead of the prompt.
+func TestAskOfferAwaitingShowsThinking(t *testing.T) {
+	m := offerModel()
+	m.awaitingBonus = true
+	m.frame = 1
+
+	view := m.View()
+	if strings.Contains(view, bonusOfferPrompt) {
+		t.Fatalf("expected the prompt hidden while synthesizing, got %q", view)
+	}
+	if !strings.Contains(view, "Thinking..") {
+		t.Fatalf("expected the thinking animation, got %q", view)
+	}
+}
+
+// TestProbeOfferCmdParsesOffer verifies the probe contract: 200 offer payload
+// → bonusOfferMsg; 204 / error / malformed → noOfferMsg.
+func TestProbeOfferCmdParsesOffer(t *testing.T) {
+	t.Run("200 offer", func(t *testing.T) {
+		srv, _ := captureRequestServer(t, http.StatusOK, `{"slug":"circuit_breaker","prose":"breaker prose"}`)
+		withDaemonBaseURL(t, srv.URL)
+		msg := probeOfferCmd(&http.Client{Timeout: 3 * time.Second})()
+		offer, ok := msg.(bonusOfferMsg)
+		if !ok {
+			t.Fatalf("expected bonusOfferMsg, got %T", msg)
+		}
+		if offer.slug != "circuit_breaker" || offer.prose != "breaker prose" {
+			t.Fatalf("unexpected offer: %+v", offer)
+		}
+	})
+	t.Run("204 no offer", func(t *testing.T) {
+		srv, _ := captureRequestServer(t, http.StatusNoContent, "")
+		withDaemonBaseURL(t, srv.URL)
+		if _, ok := probeOfferCmd(&http.Client{Timeout: 3 * time.Second})().(noOfferMsg); !ok {
+			t.Fatal("expected noOfferMsg on 204")
+		}
+	})
+	t.Run("malformed body", func(t *testing.T) {
+		srv, _ := captureRequestServer(t, http.StatusOK, `not json`)
+		withDaemonBaseURL(t, srv.URL)
+		if _, ok := probeOfferCmd(&http.Client{Timeout: 3 * time.Second})().(noOfferMsg); !ok {
+			t.Fatal("expected noOfferMsg on malformed body")
+		}
+	})
+	t.Run("unreachable daemon", func(t *testing.T) {
+		withDaemonBaseURL(t, "http://localhost:1")
+		if _, ok := probeOfferCmd(&http.Client{Timeout: 3 * time.Second})().(noOfferMsg); !ok {
+			t.Fatal("expected noOfferMsg when the daemon is unreachable")
+		}
+	})
+}
+
+// TestAcceptOfferCmdParsesBonusQuestion verifies the accept contract: 200
+// question payload → questionMsg; anything else → acceptFailedMsg.
+func TestAcceptOfferCmdParsesBonusQuestion(t *testing.T) {
+	t.Run("200 question", func(t *testing.T) {
+		var capturedBody string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			capturedBody = string(b)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"id":9,"question_type":"multiple_choice","question":"Why?","choices":["a","b"]}`))
+		}))
+		t.Cleanup(srv.Close)
+		withDaemonBaseURL(t, srv.URL)
+
+		msg := acceptOfferCmd("circuit_breaker", "/repo/test", "main", &http.Client{Timeout: 3 * time.Second})()
+		q, ok := msg.(questionMsg)
+		if !ok {
+			t.Fatalf("expected questionMsg, got %T", msg)
+		}
+		if q.id != 9 || q.question != "Why?" || len(q.choices) != 2 {
+			t.Fatalf("unexpected bonus question: %+v", q)
+		}
+		for _, want := range []string{"circuit_breaker", "/repo/test", "main"} {
+			if !strings.Contains(capturedBody, want) {
+				t.Fatalf("expected the accept POST body to carry %q, got %q", want, capturedBody)
+			}
+		}
+	})
+	t.Run("204 no question", func(t *testing.T) {
+		srv, _ := captureRequestServer(t, http.StatusNoContent, "")
+		withDaemonBaseURL(t, srv.URL)
+		if _, ok := acceptOfferCmd("x", "/repo/test", "main", &http.Client{Timeout: 3 * time.Second})().(acceptFailedMsg); !ok {
+			t.Fatal("expected acceptFailedMsg on 204")
+		}
+	})
+}
+
+// TestAskUnrecordedAnswerEndsWithoutProbe verifies the answer-not-recorded
+// path (empty correctText) ends the session immediately — no probe fires when
+// the daemon never recorded the answer.
+func TestAskUnrecordedAnswerEndsWithoutProbe(t *testing.T) {
+	m := newAskModel(10*time.Second, "", "main")
+	m.state = stateFeedback
+
+	final, cmd := m.updateFeedback(feedbackMsg{})
+	got := final.(askModel)
+	if got.state != stateDone {
+		t.Fatalf("expected stateDone, got %v", got.state)
+	}
+	if !isQuitCmd(cmd) {
+		t.Fatal("expected tea.Quit cmd")
+	}
+	if got.advisory != "[total-recall] Could not reach daemon — answer not recorded." {
+		t.Fatalf("expected the advisory, got %q", got.advisory)
+	}
+	if got.offerProbed {
+		t.Fatal("expected no offer probe after an unrecorded answer")
+	}
+}
+
+// TestRenderPostAltScreenNoOfferByteIdentical pins the no-offer path: with no
+// offer shown, the post-exit output is exactly today's rendering.
+func TestRenderPostAltScreenNoOfferByteIdentical(t *testing.T) {
+	correctOut := renderPostAltScreen(askModel{
+		feedbackResult: feedbackMsg{correct: true, correctText: "X", feedback: "Great work!"},
+	})
+	want := "✓ Correct.\n\n  Great work!\n"
+	if correctOut != want {
+		t.Fatalf("no-offer output changed: got %q want %q", correctOut, want)
+	}
+
+	skipOut := renderPostAltScreen(askModel{skipped: true})
+	if skipOut != "→ Question saved for later.\n" {
+		t.Fatalf("no-offer skip output changed: got %q", skipOut)
+	}
+
+	// With the offer shown but no bonus answer, the inline feedback is not
+	// repeated post-exit.
+	suppressed := renderPostAltScreen(askModel{
+		offerShown:     true,
+		feedbackResult: feedbackMsg{correct: true, correctText: "X", feedback: "Great work!"},
+	})
+	if suppressed != "" {
+		t.Fatalf("expected suppression after the inline render, got %q", suppressed)
+	}
+
+	// With the bonus answered, the bonus feedback prints as any other.
+	bonus := renderPostAltScreen(askModel{
+		offerShown:     true,
+		bonusAnswered:  true,
+		feedbackResult: feedbackMsg{correct: false, correctText: "a", feedback: "not quite"},
+	})
+	if !strings.Contains(bonus, "✗ The answer was: a") {
+		t.Fatalf("expected the bonus verdict post-exit, got %q", bonus)
 	}
 }

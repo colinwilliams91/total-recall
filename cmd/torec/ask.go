@@ -62,6 +62,10 @@ const caughtUpMessage = "You're all caught up on your recall questions. Great jo
 
 const daemonUnavailableMessage = "[total-recall] Daemon not running. Start with torec serve."
 
+// bonusOfferPrompt is the agreed offer copy, presented once per session after
+// the commit question's feedback renders.
+const bonusOfferPrompt = "Would you like a bonus question to boost your knowledge retention? y/n"
+
 // askCmd is the Cobra command for surfacing a recall question in the terminal.
 func askCmd() *cobra.Command {
 	var timeout int
@@ -112,6 +116,7 @@ const (
 	stateThinking askState = iota
 	stateQuestion
 	stateFeedback
+	stateOffer
 	stateDone
 )
 
@@ -134,6 +139,25 @@ type feedbackMsg struct {
 }
 type skipMsg struct{}
 
+// bonusOfferMsg is a served retention-bonus offer: the due concept's slug and
+// the registry prose the offer is framed with.
+type bonusOfferMsg struct {
+	slug  string
+	prose string
+}
+
+// noOfferMsg means no bonus offer this session: nothing due, the kill-switch
+// off, or the probe failed. The session ends exactly as it does without
+// resurfacing.
+type noOfferMsg struct{}
+
+// acceptFailedMsg means the accepted bonus could not be fetched (synthesis or
+// daemon error). No decline is recorded — the serve-time defer stands.
+type acceptFailedMsg struct{}
+
+// declinePostedMsg confirms the daemon recorded the decline.
+type declinePostedMsg struct{}
+
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type askModel struct {
@@ -150,6 +174,18 @@ type askModel struct {
 	feedbackClient *http.Client
 	repo           string
 	branch         string
+
+	// Bonus-offer session state. offerProbed guarantees exactly one probe per
+	// session (the offer is made at most once); offer is the served offer;
+	// offerShown marks that the feedback rendered inline in the offer view so
+	// the post-exit output does not repeat it. questionIsBonus/bonusAnswered
+	// distinguish the bonus question's own resolution.
+	offerProbed     bool
+	offer           *bonusOfferMsg
+	offerShown      bool
+	awaitingBonus   bool
+	questionIsBonus bool
+	bonusAnswered   bool
 }
 
 func newAskModel(timeout time.Duration, repo, branch string) askModel {
@@ -210,6 +246,8 @@ func (m askModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateQuestion(msg)
 	case stateFeedback:
 		return m.updateFeedback(msg)
+	case stateOffer:
+		return m.updateOffer(msg)
 	}
 	return m, tea.Quit
 }
@@ -263,6 +301,9 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if idx, ok := parseChoiceSelection(k.String(), len(m.question.choices)); ok {
 		if idx < len(m.question.choices) {
+			if m.questionIsBonus {
+				m.bonusAnswered = true
+			}
 			m.state = stateFeedback
 			return m, postAnswer(m.question.id, idx, m.repo, m.branch, m.feedbackClient)
 		}
@@ -273,6 +314,9 @@ func (m askModel) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.state = stateDone
 		m.skipped = true
+		if m.questionIsBonus {
+			m.bonusAnswered = true
+		}
 		return m, postSkip(m.question.id, m.repo, m.branch, m.httpClient)
 	case "q", "esc":
 		m.state = stateDone
@@ -290,7 +334,26 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.feedbackResult = msg
 		if msg.correctText == "" {
 			m.advisory = "[total-recall] Could not reach daemon — answer not recorded."
+			m.state = stateDone
+			return m, tea.Quit
 		}
+		// The offer probe fires exactly once per session, after the answer is
+		// recorded (seeding committed) and the feedback is in hand. The model
+		// stays in stateFeedback until the probe resolves — the "Evaluating..."
+		// view covers the local round-trip.
+		if !m.offerProbed {
+			m.offerProbed = true
+			return m, probeOfferCmd(m.httpClient)
+		}
+		m.state = stateDone
+		return m, tea.Quit
+	case bonusOfferMsg:
+		offer := msg
+		m.offer = &offer
+		m.offerShown = true
+		m.state = stateOffer
+		return m, nil
+	case noOfferMsg:
 		m.state = stateDone
 		return m, tea.Quit
 	case skipMsg:
@@ -299,6 +362,53 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
+			m.state = stateDone
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+// updateOffer is the bonus-offer interaction: y accepts (synthesis runs behind
+// the thinking animation), n posts the decline, and q/Esc/Ctrl+C (or any
+// terminal death) ends the session without posting anything — the daemon's
+// serve-time defer already fired.
+func (m askModel) updateOffer(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tickMsg:
+		if m.awaitingBonus {
+			m.frame = (m.frame + 1) % len(animFrames)
+			return m, tick()
+		}
+		return m, nil
+	case questionMsg:
+		m.awaitingBonus = false
+		m.questionIsBonus = true
+		m.question = msg
+		m.state = stateQuestion
+		return m, nil
+	case acceptFailedMsg:
+		m.state = stateDone
+		return m, tea.Quit
+	case declinePostedMsg:
+		m.state = stateDone
+		return m, tea.Quit
+	case tea.KeyMsg:
+		key := msg.String()
+		if m.awaitingBonus {
+			if key == "ctrl+c" || key == "q" || key == "esc" {
+				m.state = stateDone
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		switch key {
+		case "y":
+			m.awaitingBonus = true
+			return m, tea.Batch(tick(), acceptOfferCmd(m.offer.slug, m.repo, m.branch, m.feedbackClient))
+		case "n":
+			return m, declineOfferCmd(m.offer.slug, m.httpClient)
+		case "q", "esc", "ctrl+c":
 			m.state = stateDone
 			return m, tea.Quit
 		}
@@ -345,6 +455,72 @@ func postSkip(id int64, repo, branch string, client *http.Client) tea.Cmd {
 	}
 }
 
+// probeOfferCmd asks the daemon for this session's one bonus offer, after the
+// commit question's answer was recorded. Anything but a 200 offer payload is
+// noOfferMsg — the session then ends exactly as it does without resurfacing.
+func probeOfferCmd(client *http.Client) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := client.Get(daemonBaseURL + "/recall/bonus")
+		if err != nil {
+			return noOfferMsg{}
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return noOfferMsg{}
+		}
+		var body struct {
+			Slug  string `json:"slug"`
+			Prose string `json:"prose"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.Slug == "" {
+			return noOfferMsg{}
+		}
+		return bonusOfferMsg{slug: body.Slug, prose: body.Prose}
+	}
+}
+
+// acceptOfferCmd posts the accept. The daemon synthesizes the bonus question
+// at the session's current level, stores it already delivered to this session,
+// and returns it — no second poll happens. Any failure is a silent defer: no
+// decline is recorded and the serve-time defer stands.
+func acceptOfferCmd(slug, repo, branch string, client *http.Client) tea.Cmd {
+	return func() tea.Msg {
+		body, _ := json.Marshal(map[string]any{"slug": slug, "repo": repo, "branch": branch})
+		resp, err := client.Post(daemonBaseURL+"/recall/bonus/accept", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return acceptFailedMsg{}
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return acceptFailedMsg{}
+		}
+		var q struct {
+			ID           int64    `json:"id"`
+			QuestionType string   `json:"question_type"`
+			Question     string   `json:"question"`
+			Choices      []string `json:"choices"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&q); err != nil || q.ID == 0 {
+			return acceptFailedMsg{}
+		}
+		return questionMsg{id: q.ID, questionType: q.QuestionType, question: q.Question, choices: q.Choices}
+	}
+}
+
+// declineOfferCmd posts the explicit decline; the daemon increments the
+// concept's decline count (third → declined-out). The session ends when the
+// POST settles — an unanswered decline never silently drops.
+func declineOfferCmd(slug string, client *http.Client) tea.Cmd {
+	return func() tea.Msg {
+		body, _ := json.Marshal(map[string]any{"slug": slug})
+		resp, err := client.Post(daemonBaseURL+"/recall/bonus/decline", "application/json", bytes.NewReader(body))
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		return declinePostedMsg{}
+	}
+}
+
 func (m askModel) View() string {
 	switch m.state {
 	case stateThinking:
@@ -356,10 +532,38 @@ func (m askModel) View() string {
 		return renderQuestion(m.question)
 	case stateFeedback:
 		return "\rEvaluating...   "
+	case stateOffer:
+		return renderOfferView(*m.offer, m.feedbackResult, m.awaitingBonus, m.frame)
 	case stateDone:
 		return "\n\nPress any key to continue...\n"
 	}
 	return ""
+}
+
+// renderOfferView renders the commit question's feedback inline (the offer
+// comes after the feedback, per the session contract) followed by the framed
+// retention-bonus offer. While the accepted bonus is synthesizing, the
+// thinking animation covers the wait.
+func renderOfferView(offer bonusOfferMsg, fr feedbackMsg, awaiting bool, frame int) string {
+	var b strings.Builder
+	if fr.correct {
+		b.WriteString("✓ Correct.\n")
+	} else {
+		fmt.Fprintf(&b, "✗ The answer was: %s\n", fr.correctText)
+	}
+	if fr.feedback != "" {
+		fmt.Fprintf(&b, "\n  %s\n", fr.feedback)
+	}
+	b.WriteString("\n🧠💗 Knowledge retention bonus\n")
+	b.WriteString("──────────────────────────────────────\n")
+	fmt.Fprintf(&b, "  %s\n", wordWrap(offer.prose, 60))
+	b.WriteString("──────────────────────────────────────\n")
+	if awaiting {
+		fmt.Fprintf(&b, "\r%s   ", animFrames[frame])
+	} else {
+		fmt.Fprintf(&b, "%s", bonusOfferPrompt+"\n")
+	}
+	return b.String()
 }
 
 func (m askModel) showCaughtUpMessage() bool {
@@ -435,6 +639,10 @@ func renderPostAltScreen(am askModel) string {
 	switch {
 	case am.advisory != "":
 		return am.advisory + "\n"
+	case am.offerShown && !am.bonusAnswered:
+		// The commit question's feedback already rendered inline in the offer
+		// view — repeating it here would double-print on exit.
+		return ""
 	case am.skipped:
 		return "→ Question saved for later.\n"
 	case am.feedbackResult.correctText != "":

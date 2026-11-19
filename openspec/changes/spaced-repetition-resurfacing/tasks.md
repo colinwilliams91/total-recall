@@ -20,9 +20,9 @@
 
 ## 4. Ask session (TUI)
 
-- [ ] 4.1 Extend the ask state machine: after feedback, if an offer was served, present the bonus offer (`y` accept / `n` decline / `q`-`Esc`-kill silent defer) using the agreed copy ("Would you like a bonus question to boost your knowledge retention? y/n"); `n` posts the decline; verify with model-isolation tests in `ask_test.go` per state transition
-- [ ] 4.2 Render and resolve the bonus question through the existing question interaction (choices, Enter skip, q/Esc), then end the session; verify with model-isolation tests plus a golden file for the offer view (`UPDATE_GOLDEN=1` workflow per AGENTS.md)
-- [ ] 4.3 Guarantee the no-offer path is byte-identical to today's behavior (feedback → done, no extra HTTP call beyond the offer probe); verify with a golden run of the caught-up and question views
+- [x] 4.1 Extend the ask state machine: after feedback, if an offer was served, present the bonus offer (`y` accept / `n` decline / `q`-`Esc`-kill silent defer) using the agreed copy ("Would you like a bonus question to boost your knowledge retention? y/n"); `n` posts the decline; verify with model-isolation tests in `ask_test.go` per state transition
+- [x] 4.2 Render and resolve the bonus question through the existing question interaction (choices, Enter skip, q/Esc), then end the session; verify with model-isolation tests plus a golden file for the offer view (`UPDATE_GOLDEN=1` workflow per AGENTS.md)
+- [x] 4.3 Guarantee the no-offer path is byte-identical to today's behavior (feedback → done, no extra HTTP call beyond the offer probe); verify with a golden run of the caught-up and question views
 
 ## 5. End-to-end validation
 
