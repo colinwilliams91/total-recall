@@ -185,7 +185,7 @@ func runInit() error {
 		enableConversationAnalysis = existing.Privacy.ConversationAnalysis
 	}
 
-	form := huh.NewForm(
+	form := newHuhForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("🧠  Enable conversation analysis?").
@@ -246,7 +246,7 @@ func runRepo() error {
 		preCommit = true
 	}
 
-	hookForm := huh.NewForm(
+	hookForm := newHuhForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Enable pre-commit hook?").
@@ -356,7 +356,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		selectedProvider = "anthropic"
 	}
 
-	providerForm := huh.NewForm(
+	providerForm := newHuhForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("🤖  AI Provider").
@@ -398,7 +398,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		// new provider; a custom env var name or a raw key never matches the
 		// default placeholder pattern and is left untouched.
 		apiKey = prefillAPIKey(apiKey, selectedProvider)
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("API Key").
@@ -417,7 +417,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		cfg.AI.Model = model
 
 	case "ollama":
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Model").
@@ -432,7 +432,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		cfg.AI.APIKey = ""
 
 	case "lm-studio":
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Model").
@@ -451,7 +451,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		if baseURL == "" {
 			baseURL = "http://localhost:8080/v1"
 		}
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Base URL").
