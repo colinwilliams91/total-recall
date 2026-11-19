@@ -81,6 +81,37 @@ The user declined to answer, whether or not they ever saw the Question. Event hi
 **Cold Start**:
 The baseline-only regime before enough answered history exists: the commit-shape heuristics resolve alone — no learner tier, no focus concepts. Marked by the `cold-start` signal.
 
+### Retention
+
+**Resurfacing**:
+Bringing a correctly-answered Concept back once, near its decay point, as an opt-in bonus on a later commit event. Closes the retention loop without a new event source or a review session; a Miss is the weakness loop's job, not Resurfacing's.
+
+**Resurfacing Eligibility**:
+The scheduler state a correct answer grants per linked Concept, keyed on user-scoped concept identity so it follows the Learner across repositories. Skipped and missed Questions grant nothing.
+
+**Ladder**:
+The flat interval schedule keyed by the answered Difficulty Level — easy 3 days, intermediate 7 days, hard 14 days, unknown as intermediate. A documented constant, deliberately not a formula.
+_Avoid_: calling it a difficulty system or SM-2
+
+**Bonus Offer**:
+The opt-in knowledge-retention prompt the terminal session presents after a commit Question's feedback renders, framed as a retention bonus rather than a commit question. Served most-overdue first, at most one per session. Shell-only: MCP surfaces never see it.
+_Avoid_: "review question", "flashcard"
+
+**Serve-Time Defer**:
+The one-day eligibility push applied the moment a Bonus Offer is served, before the Learner answers. A session killed at the offer is a silent defer — no decline recorded, nothing posted.
+
+**Decline**:
+An explicit "no" at a Bonus Offer: the defer restated and one count added. Three consecutive Declines exit the concept from the loop.
+
+**Declined-out**:
+The terminal state of a Concept that hit the decline cap: never offered again, distinct from Answered-out.
+
+**Answered-out**:
+The terminal state of a Concept whose one resurface was used — the bonus Question was resolved (answered or skipped), regardless of correctness. Exited concepts are never resurrected by later answers.
+
+**Renewal**:
+A fresh correct answer in a normal (commit-diff) Question resets a concept's schedule from the new answer and clears its Decline count — the cap punishes continuous disinterest, not one bad week.
+
 ## Notes
 
 - The word "answer" belongs to the engine only. The user selects; the engine holds the Answer Key.
