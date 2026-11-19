@@ -1281,10 +1281,16 @@ func TestMCPRecallAnswerReturnsCorrectness(t *testing.T) {
 	if err := json.Unmarshal([]byte(toolText(t, answerResult)), &m); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	for _, field := range []string{"ok", "correct", "correct_index", "correct_answer"} {
+	// feedback is part of the canonical submit-response shape (issue #33):
+	// the MCP payload matches REST /recall/select, with feedback null on
+	// the MCP path (agents explain themselves per recall_workflow).
+	for _, field := range []string{"ok", "correct", "correct_index", "correct_answer", "feedback"} {
 		if _, ok := m[field]; !ok {
 			t.Fatalf("expected %q field in MCP response, got %v", field, m)
 		}
+	}
+	if v, present := m["feedback"]; !present || v != nil {
+		t.Fatalf("expected feedback null on the MCP path, got %v", m["feedback"])
 	}
 	if m["correct"] != true {
 		t.Fatalf("expected correct true, got %v", m["correct"])
