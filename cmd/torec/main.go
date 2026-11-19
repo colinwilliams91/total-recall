@@ -565,11 +565,16 @@ func runStatus() error {
 
 	resp, err := client.Get(healthURL)
 	if err != nil {
+		// Daemon down does not blind the config view: status is the de facto
+		// command for inspecting resolved config (issue #56), so the render
+		// runs before the failure exit.
 		fmt.Println("✗ Daemon not running on localhost:7331")
 		fmt.Println("  Start with: torec serve")
 		if pid, stale := staleDaemonPid(); stale {
 			fmt.Printf("  (stale daemon.pid with pid %d ignored — delete it or re-run 'torec stop')\n", pid)
 		}
+		fmt.Println()
+		printResolvedConfig()
 		osExit(1)
 	}
 	defer resp.Body.Close()
@@ -588,12 +593,7 @@ func runStatus() error {
 	}
 	fmt.Println(healthLine)
 
-	cfg, err := config.Load(quiet)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  (could not load config: %v)\n", err)
-		return nil
-	}
-	config.Show(cfg, os.Stdout)
+	printResolvedConfig()
 
 	// Stale-questions advisory: ask the daemon for per-branch undelivered
 	// counts in the current repo. Skipped silently when not in a git repo
@@ -604,6 +604,20 @@ func runStatus() error {
 		printStaleQuestionsAdvisory(client, repo)
 	}
 	return nil
+}
+
+// printResolvedConfig loads the two-tier config and renders it with
+// config.Show — the same render used whether or not the daemon is up, so
+// `torec status` stays the de facto config inspector when the daemon is
+// down (issue #56). Load errors are advisories, not fatal: a broken config
+// is exactly what the user came here to diagnose.
+func printResolvedConfig() {
+	cfg, err := config.Load(quiet)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  (could not load config: %v)\n", err)
+		return
+	}
+	config.Show(cfg, os.Stdout)
 }
 
 // printStaleQuestionsAdvisory queries GET /recall/stale?repo=<repo> with the
