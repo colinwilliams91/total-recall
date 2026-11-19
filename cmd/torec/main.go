@@ -81,7 +81,10 @@ func serveCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("opening concept cache: %w", err)
 			}
-			defer store.Close()
+			// Close error on shutdown is unactionable — the process is
+			// exiting either way. Explicitly ignored for errcheck (issue #67
+			// keeps project types out of its exclusion list).
+			defer func() { _ = store.Close() }()
 
 			var recallEngine *recall.Engine
 			if provider != nil {

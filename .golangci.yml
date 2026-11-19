@@ -1,0 +1,32 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # Deliberate teardown/idiomatic ignores. Everything else — especially
+      # unchecked writes in production paths — stays flagged.
+      exclude-functions:
+        # database/sql cleanup whose real failure surfaces through the
+        # surrounding scan/exec error handling; deferring these bare is the
+        # standard library's own idiom (issue #67: ~100 of the 136 findings).
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+        - (*database/sql.Tx).Rollback
+        # Read-only resource cleanup: deferred closes of files opened for
+        # reading and HTTP response bodies already drained or only inspected
+        # (resp.Body's static type is the io.ReadCloser interface, so the
+        # exclusion must name the interface method, not *net/http.Response).
+        - (*os.File).Close
+        - (io.ReadCloser).Close
+        # Print-to-writer helpers: a failed config/debug print is not an
+        # error the caller can act on.
+        - fmt.Fprintln
+        - fmt.Fprintf
+  exclusions:
+    rules:
+      # Test files deliberately ignore teardown (store.Close, srv.Serve,
+      # os.Chdir) and helper writes; errcheck stays strict in production
+      # paths where an unchecked error is a real bug.
+      - path: _test\.go
+        linters:
+          - errcheck

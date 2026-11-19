@@ -1414,9 +1414,6 @@ func TestRecallRecentEnriched(t *testing.T) {
 
 // ── 10. MCP repo-scoped tests ─────────────────────────────────────────────────
 
-// ptrStr returns a pointer to s, for populating *string fields in tool arguments.
-func ptrStr(s string) *string { return &s }
-
 // Task 10.5: recall_next with Repo field returns repo X's question and skips Y.
 func TestMCPRecallNextRepoScoped(t *testing.T) {
 	_, store, baseURL := startTestDaemon(t)

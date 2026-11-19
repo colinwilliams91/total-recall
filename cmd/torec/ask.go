@@ -132,7 +132,6 @@ type questionMsg struct {
 }
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
-type answerPostedMsg struct{}
 type feedbackMsg struct {
 	correct     bool
 	correctText string
