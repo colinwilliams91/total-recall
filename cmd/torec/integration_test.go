@@ -2454,3 +2454,248 @@ func assertExactKeys(t *testing.T, what string, m map[string]any, want ...string
 		}
 	}
 }
+
+// ── resurfacing headless e2e (task 5.1) ──────────────────────────────────────
+
+// makeConceptDue fast-forwards the store clock: the seeded scheduler row
+// becomes overdue `days` days ago.
+func makeConceptDue(t *testing.T, slug string, days int) {
+	t.Helper()
+	db := openRawDB(t)
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE resurfacing SET next_eligible_after = ? WHERE slug = ?`,
+		time.Now().UTC().AddDate(0, 0, -days), slug); err != nil {
+		t.Fatalf("fast-forward %q: %v", slug, err)
+	}
+}
+
+// TestResurfacingHeadlessLoop drives the retention loop end to end over the
+// daemon HTTP contract: hook → question → correct answer seeds the scheduler →
+// probe finds nothing due → clock fast-forward → offer served (defer applied)
+// → accept synthesizes a fresh marked question → answer → answered-out. Store
+// state is asserted at every step.
+func TestResurfacingHeadlessLoop(t *testing.T) {
+	provider := &scriptedProvider{}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+	ctx := context.Background()
+
+	// The full AI-call sequence for this run: concept extraction, commit
+	// question synthesis, then the bonus synthesis on accept.
+	provider.responses = []string{
+		`[{"concept":"circuit breaker","slug":"circuit_breaker","source":"code","weight":0.9}]`,
+		`{"question":"Why does a circuit breaker trip?","choices":["Right","Wrong"]}`,
+		`{"question":"Why would a circuit breaker fail open?","choices":["Right","Wrong"]}`,
+	}
+
+	// 1. Commit event: the hook pipeline extracts one concept and queues the
+	// commit question.
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func guard() {}")))
+	resp.Body.Close()
+	commitQ := waitForUndeliveredQuestion(t, store, "/repo/test")
+
+	// 2. The learner answers the commit question correctly.
+	claim := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
+	var claimed struct {
+		ID int64 `json:"id"`
+	}
+	json.NewDecoder(claim.Body).Decode(&claimed)
+	claim.Body.Close()
+	if claimed.ID != commitQ.ID {
+		t.Fatalf("expected the commit question claimed, got %d want %d", claimed.ID, commitQ.ID)
+	}
+	// The delivery withholds the correctness key; the test reads it from the
+	// store (the engine shuffles choice order at synthesis time).
+	storedQ, err := store.GetQuestion(ctx, claimed.ID)
+	if err != nil || storedQ == nil {
+		t.Fatalf("GetQuestion: q=%+v err=%v", storedQ, err)
+	}
+	answer := mustPOST(t, baseURL, "/recall/select?repo=/repo/test&branch=main",
+		[]byte(fmt.Sprintf(`{"id":%d,"selected_index":%d}`, claimed.ID, storedQ.CorrectIndex)))
+	answer.Body.Close()
+	if answer.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on the commit answer, got %d", answer.StatusCode)
+	}
+
+	// 3. Answer-time seeding: the concept is eligible, due in a week (the
+	// adaptive baseline resolved intermediate on a cold install).
+	row := resurfacingRowFromRawDB(t, "circuit_breaker")
+	if row.ExitReason.Valid {
+		t.Fatalf("expected a live row after the correct answer, got %q", row.ExitReason.String)
+	}
+	if due := time.Until(row.NextEligible); due < 6*24*time.Hour || due > 8*24*time.Hour {
+		t.Fatalf("expected ~7d eligibility, got %v", due)
+	}
+	// 4. Not due yet: the ask-session probe reports no offer.
+	probe := mustGET(t, baseURL, "/recall/bonus")
+	probe.Body.Close()
+	if probe.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 before the decay point, got %d", probe.StatusCode)
+	}
+
+	// 5. Fast-forward the store clock: the concept is now due.
+	makeConceptDue(t, "circuit_breaker", 1)
+	offer := mustGET(t, baseURL, "/recall/bonus")
+	defer offer.Body.Close()
+	if offer.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 offer, got %d", offer.StatusCode)
+	}
+	var served struct {
+		Slug  string `json:"slug"`
+		Prose string `json:"prose"`
+	}
+	if err := json.NewDecoder(offer.Body).Decode(&served); err != nil {
+		t.Fatalf("decode offer: %v", err)
+	}
+	if served.Slug != "circuit_breaker" {
+		t.Fatalf("unexpected offer: %+v", served)
+	}
+	// The serve-time defer fired.
+	if due := time.Until(resurfacingRowFromRawDB(t, "circuit_breaker").NextEligible); due < 22*time.Hour {
+		t.Fatalf("expected the serve-time defer, got %v", due)
+	}
+
+	// 6. Accept: a fresh retention question is synthesized (third AI call in
+	// the sequence), already delivered to this session.
+	accept := mustPOST(t, baseURL, "/recall/bonus/accept",
+		[]byte(`{"slug":"circuit_breaker","repo":"/repo/test","branch":"main"}`))
+	defer accept.Body.Close()
+	if accept.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 accept, got %d", accept.StatusCode)
+	}
+	var bonus struct {
+		ID       int64    `json:"id"`
+		Question string   `json:"question"`
+		Choices  []string `json:"choices"`
+	}
+	if err := json.NewDecoder(accept.Body).Decode(&bonus); err != nil {
+		t.Fatalf("decode accept: %v", err)
+	}
+	if bonus.Question != "Why would a circuit breaker fail open?" {
+		t.Fatalf("unexpected bonus question: %+v", bonus)
+	}
+
+	// 7. The bonus question carries its resurfaced provenance.
+	db := openRawDB(t)
+	var payload sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT payload FROM question_events WHERE question_id = ? AND event_type = 'queued'`, bonus.ID).Scan(&payload); err != nil {
+		t.Fatalf("read queued payload: %v", err)
+	}
+	var decoded struct {
+		Origin string `json:"origin"`
+	}
+	json.Unmarshal([]byte(payload.String), &decoded)
+	if decoded.Origin != "resurfaced" {
+		t.Fatalf("expected origin resurfaced on the bonus question, got %q", decoded.Origin)
+	}
+
+	// 8. Resolving the bonus exits the concept answered-out (max once).
+	bonusAnswer := mustPOST(t, baseURL, "/recall/select?repo=/repo/test&branch=main",
+		[]byte(fmt.Sprintf(`{"id":%d,"selected_index":0}`, bonus.ID)))
+	defer bonusAnswer.Body.Close()
+	if bonusAnswer.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 on the bonus answer, got %d", bonusAnswer.StatusCode)
+	}
+	row = resurfacingRowFromRawDB(t, "circuit_breaker")
+	if row.ExitReason.String != "answered-out" {
+		t.Fatalf("expected answered-out after the bonus resolution, got %q", row.ExitReason.String)
+	}
+
+	// 9. Nothing more is ever offered.
+	final := mustGET(t, baseURL, "/recall/bonus")
+	defer final.Body.Close()
+	if final.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 after answered-out, got %d", final.StatusCode)
+	}
+}
+
+// TestResurfacingHeadlessDeclineLoop drives the decline path end to end:
+// correct answer seeds, the clock fast-forward offers, three declines exit
+// declined-out and the concept is never offered again.
+func TestResurfacingHeadlessDeclineLoop(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`[{"concept":"retry backoff","slug":"retry_backoff","source":"code","weight":0.9}]`,
+		`{"question":"Why does jitter help backoff?","choices":["Right","Wrong"]}`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+
+	resp := mustPOST(t, baseURL, "/hooks/pre-commit", []byte(hookBody("/repo/test", "+ func backoff() {}")))
+	resp.Body.Close()
+	commitQ := waitForUndeliveredQuestion(t, store, "/repo/test")
+
+	claim := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
+	var claimed struct {
+		ID int64 `json:"id"`
+	}
+	json.NewDecoder(claim.Body).Decode(&claimed)
+	claim.Body.Close()
+	if claimed.ID != commitQ.ID {
+		t.Fatalf("expected the commit question claimed, got %d", claimed.ID)
+	}
+	// The correctness key is withheld at delivery; the test reads the
+	// shuffled correct index from the store.
+	storedQ, err := store.GetQuestion(context.Background(), claimed.ID)
+	if err != nil || storedQ == nil {
+		t.Fatalf("GetQuestion: q=%+v err=%v", storedQ, err)
+	}
+	answer := mustPOST(t, baseURL, "/recall/select?repo=/repo/test&branch=main",
+		[]byte(fmt.Sprintf(`{"id":%d,"selected_index":%d}`, claimed.ID, storedQ.CorrectIndex)))
+	answer.Body.Close()
+
+	// Not due; fast-forward; offered. Each decline restates the one-day
+	// defer, so the clock is fast-forwarded again before the next offer.
+	probe := mustGET(t, baseURL, "/recall/bonus")
+	probe.Body.Close()
+	if probe.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 before due, got %d", probe.StatusCode)
+	}
+	makeConceptDue(t, "retry_backoff", 1)
+	for i := 1; i <= 3; i++ {
+		if i > 1 {
+			makeConceptDue(t, "retry_backoff", 1)
+		}
+		offer := mustGET(t, baseURL, "/recall/bonus")
+		defer offer.Body.Close()
+		if offer.StatusCode != http.StatusOK {
+			t.Fatalf("offer %d: expected 200, got %d", i, offer.StatusCode)
+		}
+		var served struct {
+			Slug string `json:"slug"`
+		}
+		if err := json.NewDecoder(offer.Body).Decode(&served); err != nil {
+			t.Fatalf("offer %d decode: %v", i, err)
+		}
+		if served.Slug != "retry_backoff" {
+			t.Fatalf("offer %d: unexpected concept %q", i, served.Slug)
+		}
+
+		decline := mustPOST(t, baseURL, "/recall/bonus/decline", []byte(`{"slug":"retry_backoff"}`))
+		defer decline.Body.Close()
+		var body struct {
+			OK     bool `json:"ok"`
+			Exited bool `json:"exited"`
+		}
+		if err := json.NewDecoder(decline.Body).Decode(&body); err != nil {
+			t.Fatalf("decline %d decode: %v", i, err)
+		}
+		if !body.OK || body.Exited != (i == 3) {
+			t.Fatalf("decline %d: unexpected response %+v", i, body)
+		}
+	}
+
+	row := resurfacingRowFromRawDB(t, "retry_backoff")
+	if row.ExitReason.String != "declined-out" {
+		t.Fatalf("expected declined-out after three declines, got %q", row.ExitReason.String)
+	}
+	final := mustGET(t, baseURL, "/recall/bonus")
+	defer final.Body.Close()
+	if final.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 after declined-out, got %d", final.StatusCode)
+	}
+}

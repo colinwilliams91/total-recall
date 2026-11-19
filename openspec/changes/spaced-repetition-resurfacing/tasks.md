@@ -26,7 +26,7 @@
 
 ## 5. End-to-end validation
 
-- [ ] 5.1 Headless e2e: seed a concept, answer it correctly, manipulate the store clock to make it due, drive the daemon hook + ask HTTP contract end to end (correct answer → offer served → accept → fresh question → answer → `answered-out`), and separately the decline-to-`declined-out` path; verify with an integration test asserting store state at each step
+- [x] 5.1 Headless e2e: seed a concept, answer it correctly, manipulate the store clock to make it due, drive the daemon hook + ask HTTP contract end to end (correct answer → offer served → accept → fresh question → answer → `answered-out`), and separately the decline-to-`declined-out` path; verify with an integration test asserting store state at each step
 - [ ] 5.2 Manual e2e: drive the flow against a scratch data dir (`TR_HOME`) with a real provider per `scripts/e2e/README.md` — commit → question → bonus offer → accept → retention question → stats-visible provenance; record the walkthrough output in the change notes
 - [ ] 5.3 Update `GLOSSARY.md` if new domain terms entered the ubiquitous language (e.g. "resurfacing", "bonus offer", "decline-out"), per its vocabulary-only style; verify the domain-modeling audit passes locally
 - [ ] 5.4 Full gate: `go build ./... && go vet ./... && go test ./...` green; changelog entry drafted under Unreleased
