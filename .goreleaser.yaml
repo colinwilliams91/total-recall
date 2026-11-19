@@ -33,6 +33,40 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Homebrew tap: cask pushed to colinwilliams91/homebrew-tap on release.
+# `brews` (formulas) is deprecated since goreleaser v2.16 — casks are the
+# supported way to ship a tap binary. The tap repo must exist with a Casks/
+# directory. Binaries are unsigned, so the post-install step clears the
+# quarantine bit Gatekeeper would otherwise put on the download.
+homebrew_casks:
+  - name: total-recall
+    repository:
+      owner: colinwilliams91
+      name: homebrew-tap
+    binaries:
+      - torec
+    homepage: https://github.com/colinwilliams91/total-recall
+    description: "The cognitive retention layer for AI-assisted engineering."
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/torec"]
+          end
+
+# Scoop bucket: manifest pushed to colinwilliams91/scoop-bucket on release
+# (Windows only; goreleaser reuses the windows zip archive). The bucket repo
+# must exist; manifests live at the repo root per the scoop bucket convention.
+# Winget is post-1.0.0 — see GTM.md.
+scoops:
+  - name: total-recall
+    repository:
+      owner: colinwilliams91
+      name: scoop-bucket
+    homepage: https://github.com/colinwilliams91/total-recall
+    description: "The cognitive retention layer for AI-assisted engineering."
+    license: GPL-3.0
+
 changelog:
   use: git
   sort: desc
