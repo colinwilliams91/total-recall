@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/colinwilliams91/total-recall/assets"
+	"github.com/colinwilliams91/total-recall/internal/autostart"
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/engine"
@@ -212,7 +213,54 @@ func runInit() error {
 		fmt.Println("  Conversation analysis: disabled (enable anytime in ~/.tr/config.yaml)")
 	}
 
+	if err := runInitAutostart(); err != nil {
+		return fmt.Errorf("daemon autostart setup: %w", err)
+	}
+
 	fmt.Println("\nNext: cd into your project and run torec repo.")
+	return nil
+}
+
+// runInitAutostart offers (opt-in, default No) to start the daemon at
+// login/reboot. Declining never removes an existing autostart entry — init
+// is the installer, not the uninstaller — but it surfaces the leftover so
+// the user isn't left with an unnoticed running daemon after opting out.
+func runInitAutostart() error {
+	var enableAutostart bool
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("🚀  Start the daemon automatically at login?").
+				Description("Keeps recall questions flowing across reboots without you running 'torec serve'.\n'torec stop' still works — autostart only kicks in again at the next login.").
+				Value(&enableAutostart),
+		),
+	)
+	if err := form.Run(); err != nil {
+		return fmt.Errorf("prompt: %w", err)
+	}
+
+	if !enableAutostart {
+		if path, err := autostart.FilePath(); err == nil {
+			if _, statErr := os.Stat(path); statErr == nil {
+				fmt.Println("  Existing daemon autostart left in place at " + path)
+			}
+		}
+		return nil
+	}
+
+	selfPath, err := autostart.SelfPath()
+	if err != nil {
+		return fmt.Errorf("resolving torec binary path: %w", err)
+	}
+	path, err := autostart.Install(selfPath)
+	if err != nil {
+		return fmt.Errorf("installing autostart entry: %w", err)
+	}
+	fmt.Printf("✓ Daemon autostart installed at %s\n", path)
+
+	if err := autostart.Enable(); err != nil {
+		fmt.Printf("  ⚠  Could not register it automatically: %v\n", err)
+	}
 	return nil
 }
 
