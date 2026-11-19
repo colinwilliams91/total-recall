@@ -37,6 +37,7 @@ func Show(cfg *Config, w io.Writer) {
 	fmt.Fprintln(w, "recall:")
 	fmt.Fprintf(w, "  difficulty: %s  # \033[0;34m%s\033[0m\n", cfg.Recall.Difficulty, s.RecallDifficulty)
 	fmt.Fprintf(w, "  max_questions: %d  # \033[0;34m%s\033[0m\n", cfg.Recall.MaxQuestions, s.RecallMaxQuestions)
+	fmt.Fprintf(w, "  resurfacing: %v  # \033[0;34m%s\033[0m\n", cfg.Recall.ResurfacingEnabled(), s.RecallResurfacing)
 
 	fmt.Fprintln(w, "prompt-asset:")
 	fmt.Fprintf(w, "  drift-warning-days: %d  # \033[0;34m%s\033[0m\n", cfg.PromptAsset.DriftWarningDays, s.PromptAssetDriftWarningDays)

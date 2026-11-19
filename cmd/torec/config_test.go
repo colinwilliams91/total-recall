@@ -546,3 +546,113 @@ func TestDaemonPidPath(t *testing.T) {
 		t.Fatalf("expected ~/.tr/daemon.pid, got %q", path)
 	}
 }
+
+// ── recall.resurfacing (spaced-repetition-resurfacing, task 3.1) ──────────────
+
+func boolPtr(b bool) *bool { return &b }
+
+// TestResurfacingDefaultEnabled verifies the shipped default: resurfacing on,
+// including for a nil pointer (a pre-existing config.yaml without the key).
+func TestResurfacingDefaultEnabled(t *testing.T) {
+	if !config.DefaultUserConfig().Recall.ResurfacingEnabled() {
+		t.Fatal("expected resurfacing enabled by default")
+	}
+	var unset config.RecallConfig
+	if !unset.ResurfacingEnabled() {
+		t.Fatal("expected a nil resurfacing pointer to resolve enabled (existing configs keep the feature)")
+	}
+	if (&config.RecallConfig{Resurfacing: boolPtr(false)}).ResurfacingEnabled() {
+		t.Fatal("expected an explicit false to disable resurfacing")
+	}
+}
+
+// TestMergeResurfacingFromUserAndRepoTiers verifies the deep merge: the repo
+// tier can flip the kill-switch off without discarding the user's other
+// recall keys, and an absent repo key leaves the user value intact.
+func TestMergeResurfacingFromUserAndRepoTiers(t *testing.T) {
+	t.Run("repo overrides to false", func(t *testing.T) {
+		user := config.DefaultUserConfig()
+		repo := &config.RepoConfig{
+			Recall: &config.RecallConfig{Resurfacing: boolPtr(false)},
+		}
+		cfg := config.Merge(&user, repo)
+		if cfg.Recall.ResurfacingEnabled() {
+			t.Fatal("expected repo false to disable resurfacing")
+		}
+		if cfg.Sources.RecallResurfacing != "[repo]" {
+			t.Fatalf("expected [repo] source, got %q", cfg.Sources.RecallResurfacing)
+		}
+		if cfg.Recall.Difficulty != user.Recall.Difficulty {
+			t.Fatal("difficulty should remain from user (deep merge)")
+		}
+	})
+
+	t.Run("repo block without the key keeps user value", func(t *testing.T) {
+		user := config.DefaultUserConfig()
+		repo := &config.RepoConfig{
+			Recall: &config.RecallConfig{Difficulty: "hard"},
+		}
+		cfg := config.Merge(&user, repo)
+		if !cfg.Recall.ResurfacingEnabled() {
+			t.Fatal("expected the user's enabled value to survive a repo recall block without resurfacing")
+		}
+		if cfg.Sources.RecallResurfacing != "[user]" {
+			t.Fatalf("expected [user] source, got %q", cfg.Sources.RecallResurfacing)
+		}
+	})
+
+	t.Run("repo overrides to true against user false", func(t *testing.T) {
+		user := config.DefaultUserConfig()
+		user.Recall.Resurfacing = boolPtr(false)
+		repo := &config.RepoConfig{
+			Recall: &config.RecallConfig{Resurfacing: boolPtr(true)},
+		}
+		cfg := config.Merge(&user, repo)
+		if !cfg.Recall.ResurfacingEnabled() {
+			t.Fatal("expected repo true to re-enable resurfacing")
+		}
+	})
+}
+
+// TestUserConfigYAMLParsesResurfacing verifies the key round-trips through the
+// YAML loader at both tiers.
+func TestUserConfigYAMLParsesResurfacing(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TR_HOME", tempDir)
+
+	path, err := config.UserConfigPath()
+	if err != nil {
+		t.Fatalf("UserConfigPath: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("recall:\n  difficulty: adaptive\n  max_questions: 1\n  resurfacing: false\n"), 0o600); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+	user, err := config.LoadUserConfig()
+	if err != nil {
+		t.Fatalf("LoadUserConfig: %v", err)
+	}
+	if user.Recall.ResurfacingEnabled() {
+		t.Fatal("expected resurfacing false parsed from YAML")
+	}
+}
+
+// TestShowRendersResurfacing verifies the kill-switch appears in
+// `torec config --show` output with its source tag.
+func TestShowRendersResurfacing(t *testing.T) {
+	user := config.DefaultUserConfig()
+	cfg := config.Merge(&user, nil)
+
+	var buf bytes.Buffer
+	config.Show(cfg, &buf)
+	if !strings.Contains(buf.String(), "resurfacing: true  # \033[0;34m[user]\033[0m") {
+		t.Fatalf("expected resurfacing line in show output, got:\n%s", buf.String())
+	}
+
+	repo := &config.RepoConfig{Recall: &config.RecallConfig{Resurfacing: boolPtr(false)}}
+	cfg = config.Merge(&user, repo)
+	buf.Reset()
+	config.Show(cfg, &buf)
+	if !strings.Contains(buf.String(), "resurfacing: false  # \033[0;34m[repo]\033[0m") {
+		t.Fatalf("expected repo-overridden resurfacing in show output, got:\n%s", buf.String())
+	}
+}

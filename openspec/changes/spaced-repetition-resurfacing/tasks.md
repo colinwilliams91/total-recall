@@ -15,7 +15,7 @@
 
 ## 3. Config and policy
 
-- [ ] 3.1 Add `recall.resurfacing` (default `true`, user-level, deep-merged) and thread it to the engine; verify in `config_test.go` (default, merge from user/repo tiers, `torec config --show` rendering)
+- [x] 3.1 Add `recall.resurfacing` (default `true`, user-level, deep-merged) and thread it to the engine; verify in `config_test.go` (default, merge from user/repo tiers, `torec config --show` rendering)
 - [ ] 3.2 Add the "resurfaced concept" framing section to `assets/prompts/question-generation-policy.md` (durable understanding, no commit context, never reference a commit) and verify `torec asset show` loads the shipped asset and the synthesis request carries the updated body
 
 ## 4. Ask session (TUI)

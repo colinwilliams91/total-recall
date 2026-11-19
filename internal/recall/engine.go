@@ -175,6 +175,38 @@ func (e *Engine) Synthesize(ctx context.Context, repo, branch, model string, syn
 	return q, resolution, nil
 }
 
+// focusResolver pins one resolution for a synthesis call: a concrete
+// difficulty level plus the concept slugs to lead the feed with. It exists so
+// callers that already know the targeting (the resurfaced-concept path) can
+// ride the same Synthesize machinery commit-diff questions use, without the
+// resolver re-deriving a resolution from a commit signal it does not have.
+type focusResolver struct {
+	level string
+	focus []string
+}
+
+func (r focusResolver) Resolve(_ context.Context, _ SynthesisContext) difficulty.Resolution {
+	return difficulty.Resolution{Difficulty: r.level, FocusConcepts: r.focus}
+}
+
+// SynthesizeResurfaced builds a bonus question about one due concept at the
+// session's current adaptive level: concept-level framing with no commit
+// message and no diff snippet, the concept passed the way FocusConcepts is
+// (it leads the feed) so the question lands on durable understanding rather
+// than recent changes. Feed is the caller-supplied concept rows (the working
+// surface's recent sightings, with the due concept guaranteed present);
+// synthesis failure returns nil — the caller keeps the serve-time defer and
+// records no decline.
+func (e *Engine) SynthesizeResurfaced(ctx context.Context, repo, branch, model, slug, level string, feed []cache.ConceptRow) *Question {
+	q, _, err := e.Synthesize(ctx, repo, branch, model,
+		SynthesisContext{Repo: repo, Branch: branch, Concepts: feed},
+		focusResolver{level: level, focus: []string{slug}})
+	if err != nil || q == nil {
+		return nil
+	}
+	return q
+}
+
 // GenerateFeedback calls the configured AI provider to produce a short prose
 // explanation of whether the developer answered correctly, why the correct
 // answer is right, and (if applicable) why the chosen answer doesn't fit.

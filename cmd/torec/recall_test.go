@@ -483,3 +483,58 @@ func TestSynthesisRequestMaxTokensAndJSON(t *testing.T) {
 		t.Fatal("expected JSON true for synthesis request")
 	}
 }
+
+// ── resurfaced-concept synthesis (spaced-repetition-resurfacing, task 2.3) ───
+
+// TestSynthesizeResurfacedComposesConceptOnlyRequest verifies the bonus
+// synthesis request shape: the due concept leads the feed the way FocusConcepts
+// is passed, no commit message and no diff snippet ride into the user turn, and
+// the pinned level lands in the system turn.
+func TestSynthesizeResurfacedComposesConceptOnlyRequest(t *testing.T) {
+	s := setupCache(t)
+	provider := &mockProvider{response: `{"question":"Why does this pattern hold?","choices":["a","b"]}`}
+	engine := recall.New(provider, s, nil)
+
+	feed := []cache.ConceptRow{
+		{Concept: "retry backoff", Slug: "retry_backoff", Weight: 0.9, SeenAt: time.Now()},
+		{Concept: "circuit breaker", Slug: "circuit_breaker", Weight: 0.8, SeenAt: time.Now()},
+	}
+	q := engine.SynthesizeResurfaced(context.Background(), "/repo", "main", "m",
+		"retry_backoff", "hard", feed)
+	if q == nil {
+		t.Fatal("expected a synthesized bonus question")
+	}
+
+	req := provider.lastReq
+	if !strings.Contains(req.System, "Difficulty level: hard") {
+		t.Fatalf("expected the session's pinned level in the system turn, got %q", req.System)
+	}
+	if !strings.Contains(req.UserTurn, "Concepts the developer is currently working through:\n- retry backoff (") {
+		t.Fatalf("expected the due concept in the focused lead section, got %q", req.UserTurn)
+	}
+	if strings.Contains(req.UserTurn, "Recent commit context") {
+		t.Fatalf("bonus synthesis must not carry commit context, got %q", req.UserTurn)
+	}
+}
+
+// TestSynthesizeResurfacedFailureReturnsNil verifies the no-question outcome:
+// a provider failure or malformed contract yields nil — the caller keeps the
+// serve-time defer, records no decline, and exits nothing.
+func TestSynthesizeResurfacedFailureReturnsNil(t *testing.T) {
+	cases := map[string]*mockProvider{
+		"ai error":     {err: errors.New("provider down")},
+		"bad contract": {response: "this is not the JSON contract"},
+		"too few":      {response: `{"question":"q","choices":["only-one"]}`},
+	}
+	for name, provider := range cases {
+		t.Run(name, func(t *testing.T) {
+			engine := recall.New(provider, setupCache(t), nil)
+			q := engine.SynthesizeResurfaced(context.Background(), "/repo", "main", "m",
+				"retry_backoff", "intermediate",
+				[]cache.ConceptRow{{Concept: "retry backoff", Slug: "retry_backoff", Weight: 0.9, SeenAt: time.Now()}})
+			if q != nil {
+				t.Fatalf("expected nil question on %s, got %+v", name, q)
+			}
+		})
+	}
+}
