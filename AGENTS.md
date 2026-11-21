@@ -8,7 +8,7 @@
 | Quick rebuild (Windows) | `.\scripts\rebuild.ps1` → `go install ./cmd/torec` to `$GOBIN`, also runs `go vet` |
 | Test | `go test ./...` |
 | Single test | `go test -run TestName ./path/to/pkg/...` |
-| Lint | `golangci-lint run` (must be installed separately; repo config in `.golangci.yml` — errcheck excludes the idiomatic `database/sql` teardown pattern per issue #67, stays strict everywhere else) |
+| Lint | `golangci-lint run` (must be installed separately; repo config in `.golangci.yml` — errcheck excludes idiomatic resource-teardown patterns (`database/sql` Close/Rollback, read-only file/body closes, debug prints to writers) per issue #67, and skips `_test.go`; strict elsewhere, including unchecked production writes) |
 | Tidy deps | `go mod tidy` |
 
 Run order: `go build ./... && go vet ./... && go test ./...`

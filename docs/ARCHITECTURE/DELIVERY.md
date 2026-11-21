@@ -30,7 +30,7 @@ git commit  →  pre-commit hook  →  POST /hooks/pre-commit  →  202 Accepted
 `mcp.NewStreamableHTTPHandler` is mounted at `/mcp/` on port 7331. AI coding agents (Claude Code, Copilot CLI) connected via MCP receive questions through the `recall_next` tool. After `Synthesize`, `runPipeline` calls `mcpServer.ResourceUpdated("recall://queue")` to notify subscribed clients.
 
 **MCP surface:**
-- `recall_next` tool — atomically dequeues one question (`claimed_by = "mcp"`); accepts `repo` and `branch` to scope to a repository and branch (both required — no global pool exists)
+- `recall_next` tool — atomically dequeues one question (the `delivered` `question_events` row records `actor = "mcp"`; the store has no `claimed_by` column); `repo`/`branch` are optional pointers — absent or empty yields no dequeue (the store layer refuses empty scopes; no global pool exists)
 - `recall_select` tool — records selection or `"skip"` (renamed from `recall_answer`; user-side field is `selected_index`); ID-keyed, optional `repo`/`branch` accepted for symmetry
 - `recall_status` tool — daemon health, `ai_configured`, `queue_depth`; accepts optional `repo`/`branch` to scope depth
 - `recall://queue` resource — subscribable; updated after each `SaveQuestion`; repo and branch derived from URI query string
@@ -46,7 +46,7 @@ GET /recall/next?repo=<path>&branch=<branch>  →  200 OK (question JSON) or 204
 POST /recall/select?repo=<path>&branch=<branch>  →  {"ok":true,...}
 ```
 
-Both REST endpoints use the same atomic `UPDATE ... RETURNING` dequeue as `recall_next`, scoped by `repo` and `branch`. SQLite's serialized writes guarantee exactly-once delivery per repo.
+Both REST endpoints use the same atomic `UPDATE ... RETURNING` dequeue as `recall_next`, scoped by `repo` and `branch`. SQLite's serialized writes guarantee exactly-once delivery per repo+branch scope (the Working Surface, per GLOSSARY.md).
 
 `torec ask` is TTY-aware: if stdout is not an interactive terminal (CI/CD, piped output), it exits 0 silently.
 
@@ -163,7 +163,7 @@ The recall surfaces share one payload vocabulary: snake_case keys, integer ids, 
 
 REST skip response: `{"ok": true, "skipped": true}`; MCP skip response: the same.
 
-**Deliberate divergences (do not "fix" by breaking the MCP v1 contract):**
+**Deliberate divergences (do not "fix" by breaking the MCP v1 contract — the bet is recorded in [docs/adr/0005-mcp-v1-wire-contract.md](../adr/0005-mcp-v1-wire-contract.md)):**
 
 | Divergence | REST | MCP | Rationale |
 |---|---|---|---|
