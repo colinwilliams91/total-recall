@@ -63,7 +63,13 @@ Commits are the only question trigger, and questions must stay relevant to the
 commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 — no new event source:
 
-1. A concept answered correctly in the past accrues "decay time". When its
+> **Pre-design vocabulary**: Resurfacing, Bonus Question, Decay Time, Re-arm,
+> the interval ladder, and "recall debt" below are placeholder proposals, not
+> canonical terms. They are pinned in GLOSSARY.md only when the B1 OpenSpec
+> change resolves them (its artifacts are authored on `10-opsx` before
+> implementation branches open); until then, do not treat them as canonical.
+
+1. A concept with a past Hit accrues "decay time". When its
    interval elapses, the *next* normal commit event offers a bonus:
    **"Would you like a bonus question to boost your knowledge retention? y/n"**
 2. On `y`, the resurfaced question is asked after the normal commit question;
@@ -76,9 +82,10 @@ commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 Design decisions (resolve in the design doc):
 
 - **Interval policy** — simple interval ladder (1d / 3d / 7d / 14d) keyed by
-  the concept's difficulty level and answer correctness; fits the
+  the concept's Difficulty Level and its Hits/Misses; fits the
   "thin, no over-engineering" posture and roadmap 4.2's "recall debt" framing.
-- **Scheduling state** — `question_events` already captures answer history;
+- **Scheduling state** — `question_events` already captures the
+  Selection/Hit/Miss history;
   a small scheduler table (concept → next-eligible-after, resurfaced-count)
   plus a selection hook in `internal/recall` that offers the bonus question
   alongside the commit-derived question.
@@ -88,11 +95,15 @@ Design decisions (resolve in the design doc):
   "ask about a concept the user hasn't touched recently" (different framing
   than commit-derived concepts).
 
-**Completion signal**: a concept asked 10 days ago and answered correctly
+**Completion signal**: a concept asked 10 days ago that recorded a Hit
 produces a bonus-question offer on a commit ~day 10, even though no commit
 touches that concept — and after being asked once, it never resurfaces again.
 
 ### Workstream B2 — `torec stats` (`10-opsx-e`)
+
+> Streak and the resurfaced-and-held count are placeholder stat names pending
+> the B2 design — same pre-design rule as B1: pinned in GLOSSARY.md only when
+> that design resolves them.
 
 Streak, accuracy over a rolling window, concepts covered, resurfaced-and-held
 count — read from local `memory.db` only, **no telemetry** (privacy position

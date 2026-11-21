@@ -12,6 +12,10 @@ A piece of knowledge extracted from the user's changes; the unit that Total Reca
 **Question**:
 A synthesized prompt testing the user's recall of a Concept. Choice-based; true/false is expressed as a two-choice question, not a separate type.
 
+**Quiz**:
+The user-facing word for a Question: what the user "gets" on a git event. One quiz is one Question — the word adds no separate structure or state.
+_Avoid_: treating quiz and Question as different things; "quiz" for engine-side state
+
 **Choice**:
 One option of a Question.
 
