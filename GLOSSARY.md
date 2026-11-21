@@ -74,7 +74,11 @@ The flat schedule that sets when a resurfacing-eligible concept comes due, keyed
 _Avoid_: decay time, SM-2
 
 **Bonus Offer**:
-The opt-in prompt the ask session makes for one due concept — most-overdue first — after the commit question is resolved. Serving it defers the concept one day regardless of the reply; an explicit decline counts toward the three-decline exit.
+The opt-in prompt the ask session makes for one due concept — most-overdue first — after the Commit Question is resolved. Serving it defers the concept one day regardless of the reply; an explicit decline counts toward the three-decline exit.
+
+**Commit Question**:
+A Question synthesized from a commit's changed content — the default delivery, in contrast to the Bonus Question. Not a second type; the pair names the origin of a Question's events, not two kinds of Question.
+_Avoid_: "commit question" as a second question type
 
 **Bonus Question**:
 The fresh question synthesized about a due concept when a Bonus Offer is accepted — concept-level framing with no commit context, delivered through the normal question flow. One term: "resurfaced" is this question's origin marking, not a second question type.
