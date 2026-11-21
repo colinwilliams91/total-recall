@@ -33,6 +33,51 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Homebrew tap: cask pushed to colinwilliams91/homebrew-tap on release.
+# `brews` (formulas) is deprecated since goreleaser v2.16 — casks are the
+# supported way to ship a tap binary. The tap repo must exist with a Casks/
+# directory. Binaries are unsigned, so the post-install step clears the
+# quarantine bit Gatekeeper would otherwise put on the download.
+#
+# The default GITHUB_TOKEN only has write access to the release repo itself,
+# so pushing the cask to a separate tap repo needs its own token
+# (contents:write on homebrew-tap). Wire it as the HOMEBREW_TAP_TOKEN secret;
+# goreleaser logs a failed publish without failing the pipeline, so a missing
+# token would otherwise go half-invisible. Local releases without the env var
+# skip tap publishing the same way.
+homebrew_casks:
+  - name: total-recall
+    repository:
+      owner: colinwilliams91
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    binaries:
+      - torec
+    homepage: https://github.com/colinwilliams91/total-recall
+    description: "The cognitive retention layer for AI-assisted engineering."
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/torec"]
+          end
+
+# Scoop bucket: manifest pushed to colinwilliams91/scoop-bucket on release
+# (Windows only; goreleaser reuses the windows zip archive). The bucket repo
+# must exist; manifests live at the repo root per the scoop bucket convention.
+# Same cross-repo token rule as the tap above: SCOOP_BUCKET_TOKEN needs
+# contents:write on scoop-bucket.
+# Winget is post-1.0.0 — see GTM.md.
+scoops:
+  - name: total-recall
+    repository:
+      owner: colinwilliams91
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+    homepage: https://github.com/colinwilliams91/total-recall
+    description: "The cognitive retention layer for AI-assisted engineering."
+    license: GPL-3.0
+
 changelog:
   use: git
   sort: desc

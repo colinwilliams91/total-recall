@@ -12,6 +12,10 @@ A piece of knowledge extracted from the user's changes; the unit that Total Reca
 **Question**:
 A synthesized prompt testing the user's recall of a Concept. Choice-based; true/false is expressed as a two-choice question, not a separate type.
 
+**Quiz**:
+The user-facing word for a Question: what the user "gets" on a git event. One quiz is one Question — the word adds no separate structure or state.
+_Avoid_: treating quiz and Question as different things; "quiz" for engine-side state
+
 **Choice**:
 One option of a Question.
 
@@ -80,6 +84,9 @@ The user declined to answer, whether or not they ever saw the Question. Event hi
 
 **Cold Start**:
 The baseline-only regime before enough answered history exists: the commit-shape heuristics resolve alone — no learner tier, no focus concepts. Marked by the `cold-start` signal.
+
+**Autostart**:
+The opt-in arrangement that starts the daemon at login, so recall works across reboots without the user remembering to serve. Autostart only launches the daemon; stopping it and restarting it remain the user's lifecycle actions until the next login.
 
 ## Notes
 

@@ -81,7 +81,7 @@ Prints every key annotated with its source (`[user]` / `[repo]` / `[default]`).
 
 Every quiz is shaped by a markdown policy doc shipped inside the binary. Want your quizzes to push game-dev best practices, DB query plans, or your team's conventions? Drop in your own — no recompile (`torec asset sync` names the file for you); `torec asset sync|show|reset` manage the slot; `torec stop && torec serve` picks up changes.
 
-**[FEATURES.md](FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
+**[FEATURES.md](docs/FEATURES.md)** — the full tour: what Total Recall does today, how to bend it to your domain, and what's coming next.
 
 ## Philosophy
 You're a software engineer.

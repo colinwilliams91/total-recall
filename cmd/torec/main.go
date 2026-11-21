@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/colinwilliams91/total-recall/assets"
+	"github.com/colinwilliams91/total-recall/internal/autostart"
 	"github.com/colinwilliams91/total-recall/internal/cache"
 	"github.com/colinwilliams91/total-recall/internal/config"
 	"github.com/colinwilliams91/total-recall/internal/engine"
@@ -212,7 +213,67 @@ func runInit() error {
 		fmt.Println("  Conversation analysis: disabled (enable anytime in ~/.tr/config.yaml)")
 	}
 
+	if err := runInitAutostart(&cfg); err != nil {
+		return fmt.Errorf("daemon autostart setup: %w", err)
+	}
+
 	fmt.Println("\nNext: cd into your project and run torec repo.")
+	return nil
+}
+
+// runInitAutostart offers (opt-in, default No) to start the daemon at
+// login/reboot. Declining never removes an existing autostart entry — init
+// is the installer, not the uninstaller — but it surfaces the leftover so
+// the user isn't left with an unnoticed running daemon after opting out.
+func runInitAutostart(cfg *config.UserConfig) error {
+	// Follow-up: this form predates the accessible-mode stdin hardening
+	// (newHuhForm's process-wide lineReader, landing with the Wave A polish
+	// branch). Once that branch merges, build this form through newHuhForm
+	// like every other init prompt, or piped TERM=dumb torec init cannot
+	// drive this field.
+	var enableAutostart bool
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("🚀  Start the daemon automatically at login?").
+				Description("Keeps recall questions flowing across reboots without you running 'torec serve'.\n'torec stop' still works — autostart only kicks in again at the next login.").
+				Value(&enableAutostart),
+		),
+	)
+	if err := form.Run(); err != nil {
+		return fmt.Errorf("prompt: %w", err)
+	}
+
+	if !enableAutostart {
+		if path, err := autostart.FilePath(); err == nil {
+			if _, statErr := os.Stat(path); statErr == nil {
+				fmt.Println("  Existing daemon autostart left in place at " + path)
+			}
+		}
+		return nil
+	}
+
+	selfPath, err := autostart.SelfPath()
+	if err != nil {
+		return fmt.Errorf("resolving torec binary path: %w", err)
+	}
+	path, err := autostart.Install(selfPath)
+	if err != nil {
+		return fmt.Errorf("installing autostart entry: %w", err)
+	}
+	fmt.Printf("✓ Daemon autostart installed at %s\n", path)
+
+	if err := autostart.Enable(); err != nil {
+		fmt.Printf("  ⚠  Could not register it automatically: %v\n", err)
+	}
+
+	// An env:-pattern key is the init default, but a login-started daemon
+	// does not inherit shell exports — without platform-specific exposure
+	// the daemon binds :7331 with no provider after the first reboot.
+	if advice, ok := autostart.ServiceEnvAdvisory(cfg.AI.APIKey); ok {
+		fmt.Printf("  ⚠  Your API key is an environment reference (%s), which the login-started daemon cannot see from your shell profile:\n     %s\n",
+			cfg.AI.APIKey, advice)
+	}
 	return nil
 }
 
@@ -517,11 +578,16 @@ func runStatus() error {
 
 	resp, err := client.Get(healthURL)
 	if err != nil {
+		// Daemon down does not blind the config view: status is the de facto
+		// command for inspecting resolved config (issue #56), so the render
+		// runs before the failure exit.
 		fmt.Println("✗ Daemon not running on localhost:7331")
 		fmt.Println("  Start with: torec serve")
 		if pid, stale := staleDaemonPid(); stale {
 			fmt.Printf("  (stale daemon.pid with pid %d ignored — delete it or re-run 'torec stop')\n", pid)
 		}
+		fmt.Println()
+		printResolvedConfig()
 		osExit(1)
 	}
 	defer resp.Body.Close()
@@ -540,12 +606,7 @@ func runStatus() error {
 	}
 	fmt.Println(healthLine)
 
-	cfg, err := config.Load(quiet)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  (could not load config: %v)\n", err)
-		return nil
-	}
-	config.Show(cfg, os.Stdout)
+	printResolvedConfig()
 
 	// Stale-questions advisory: ask the daemon for per-branch undelivered
 	// counts in the current repo. Skipped silently when not in a git repo
@@ -556,6 +617,20 @@ func runStatus() error {
 		printStaleQuestionsAdvisory(client, repo)
 	}
 	return nil
+}
+
+// printResolvedConfig loads the two-tier config and renders it with
+// config.Show — the same render used whether or not the daemon is up, so
+// `torec status` stays the de facto config inspector when the daemon is
+// down (issue #56). Load errors are advisories, not fatal: a broken config
+// is exactly what the user came here to diagnose.
+func printResolvedConfig() {
+	cfg, err := config.Load(quiet)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  (could not load config: %v)\n", err)
+		return
+	}
+	config.Show(cfg, os.Stdout)
 }
 
 // printStaleQuestionsAdvisory queries GET /recall/stale?repo=<repo> with the
