@@ -69,9 +69,9 @@ commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 > names the bonus question's origin marking, not a second question type.
 
 1. A concept with a past Hit becomes resurfacing-eligible, due after the
-   ladder interval for the difficulty its question was answered at. When it
-   comes due, the next ask session — after the commit question is resolved —
-   offers a bonus:
+   Retention Interval for the Difficulty Level its question was answered
+   at. When it comes due, the next ask session — after the commit question
+   is resolved — offers a bonus:
    **"Would you like a bonus question to boost your knowledge retention? y/n"**
 2. On `y`, a fresh bonus question about the concept is synthesized and asked
    in the same session; on `n`, the concept defers one day, and the third
@@ -84,8 +84,8 @@ commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 
 Design decisions (resolved in the B1 design doc, on `10-opsx`):
 
-- **Interval policy** — flat ladder, easy 3d / intermediate 7d / hard 14d,
-  keyed by the difficulty the question was answered at; no growth on
+- **Retention Interval policy** — flat, easy 3d / intermediate 7d / hard 14d,
+  keyed by the Difficulty Level the question was answered at; no growth on
   re-offers. Fits the "thin, no over-engineering" posture and roadmap 4.2's
   "recall debt" framing.
 - **Scheduling state** — scheduler state written at answer time and read at
