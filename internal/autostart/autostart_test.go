@@ -167,6 +167,44 @@ func TestInstallIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestServiceEnvAdvisory covers the env:-pattern detection (raw keys and
+// empty patterns are not env references) and the per-platform instruction
+// shape for exposing the variable to the service environment.
+func TestServiceEnvAdvisory(t *testing.T) {
+	if _, ok := ServiceEnvAdvisory("sk-ant-raw-key"); ok {
+		t.Fatalf("raw key must not be reported as an env reference")
+	}
+	if _, ok := ServiceEnvAdvisory(""); ok {
+		t.Fatalf("empty key must not be reported as an env reference")
+	}
+	// A bare "env:" with no variable name is not a usable reference either.
+	if _, ok := ServiceEnvAdvisory("env:"); ok {
+		t.Fatalf("bare env: prefix must not be reported as an env reference")
+	}
+
+	advice, ok := ServiceEnvAdvisory("env:ANTHROPIC_API_KEY")
+	if !ok {
+		t.Fatalf("env:ANTHROPIC_API_KEY must be reported as an env reference")
+	}
+	if !strings.Contains(advice, "ANTHROPIC_API_KEY") {
+		t.Fatalf("advisory must name the variable, got: %s", advice)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		if !strings.Contains(advice, "EnvironmentVariables") || !strings.Contains(advice, "plist") {
+			t.Fatalf("darwin advisory should point at the plist environment, got: %s", advice)
+		}
+	case "windows":
+		if !strings.Contains(advice, "setx") {
+			t.Fatalf("windows advisory should mention setx, got: %s", advice)
+		}
+	default:
+		if !strings.Contains(advice, "environment.d") {
+			t.Fatalf("linux advisory should mention environment.d, got: %s", advice)
+		}
+	}
+}
+
 // TestInstallUpdatesStalePath exercises the overwrite branch: a previously
 // installed file pointing at a moved binary is refreshed on re-install.
 func TestInstallUpdatesStalePath(t *testing.T) {

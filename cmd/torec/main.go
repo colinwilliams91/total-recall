@@ -213,7 +213,7 @@ func runInit() error {
 		fmt.Println("  Conversation analysis: disabled (enable anytime in ~/.tr/config.yaml)")
 	}
 
-	if err := runInitAutostart(); err != nil {
+	if err := runInitAutostart(&cfg); err != nil {
 		return fmt.Errorf("daemon autostart setup: %w", err)
 	}
 
@@ -225,7 +225,12 @@ func runInit() error {
 // login/reboot. Declining never removes an existing autostart entry — init
 // is the installer, not the uninstaller — but it surfaces the leftover so
 // the user isn't left with an unnoticed running daemon after opting out.
-func runInitAutostart() error {
+func runInitAutostart(cfg *config.UserConfig) error {
+	// Follow-up: this form predates the accessible-mode stdin hardening
+	// (newHuhForm's process-wide lineReader, landing with the Wave A polish
+	// branch). Once that branch merges, build this form through newHuhForm
+	// like every other init prompt, or piped TERM=dumb torec init cannot
+	// drive this field.
 	var enableAutostart bool
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -260,6 +265,14 @@ func runInitAutostart() error {
 
 	if err := autostart.Enable(); err != nil {
 		fmt.Printf("  ⚠  Could not register it automatically: %v\n", err)
+	}
+
+	// An env:-pattern key is the init default, but a login-started daemon
+	// does not inherit shell exports — without platform-specific exposure
+	// the daemon binds :7331 with no provider after the first reboot.
+	if advice, ok := autostart.ServiceEnvAdvisory(cfg.AI.APIKey); ok {
+		fmt.Printf("  ⚠  Your API key is an environment reference (%s), which the login-started daemon cannot see from your shell profile:\n     %s\n",
+			cfg.AI.APIKey, advice)
 	}
 	return nil
 }

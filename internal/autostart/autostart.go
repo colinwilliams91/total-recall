@@ -162,6 +162,31 @@ func Enable() error {
 	return nil
 }
 
+// ServiceEnvAdvisory returns the platform-specific instruction for exposing
+// an env:<VAR>-pattern API key to the login-started daemon, and whether the
+// given api-key is such a pattern at all. Login hooks (a launchd agent, a
+// systemd user unit) do not inherit shell-rc environment, so an env-pattern
+// key resolves to nothing after a reboot unless the variable is visible to
+// the service environment — the daemon would bind :7331 with no provider.
+func ServiceEnvAdvisory(apiKey string) (string, bool) {
+	const prefix = "env:"
+	if len(apiKey) <= len(prefix) || apiKey[:len(prefix)] != prefix {
+		return "", false
+	}
+	varName := apiKey[len(prefix):]
+	switch runtime.GOOS {
+	case "darwin":
+		return fmt.Sprintf("add an EnvironmentVariables entry for %s to the installed plist (%s) — launchd does not read shell profiles; 'launchctl setenv' does not survive a reboot",
+			varName, launchdLabel+".plist"), true
+	case "windows":
+		return fmt.Sprintf("set %s as a user environment variable ('setx %s <value>') — Startup-folder scripts inherit the registry-defined user environment, not shell profiles",
+			varName, varName), true
+	default:
+		return fmt.Sprintf("put '%s=<value>' in ~/.config/environment.d/torec.conf — the systemd user manager reads it at login and does not read shell profiles",
+			varName), true
+	}
+}
+
 // launchdPath places the agent in the user LaunchAgents directory.
 func launchdPath() (string, error) {
 	home, err := os.UserHomeDir()
