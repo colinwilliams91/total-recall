@@ -63,47 +63,54 @@ Commits are the only question trigger, and questions must stay relevant to the
 commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 — no new event source:
 
-> **Pre-design vocabulary**: Resurfacing, Bonus Question, Decay Time, Re-arm,
-> the interval ladder, and "recall debt" below are placeholder proposals, not
-> canonical terms. They are pinned in GLOSSARY.md only when the B1 OpenSpec
-> change resolves them (its artifacts are authored on `10-opsx` before
-> implementation branches open); until then, do not treat them as canonical.
+> **Vocabulary**: the B1 terms — Resurfacing, Retention Interval, Bonus
+> Offer, Bonus Question, Exit — are pinned in GLOSSARY.md, resolved by the
+> B1 delta spec (authored on the `10-opsx` planning branch). "Resurfaced"
+> names the bonus question's origin marking, not a second question type.
 
-1. A concept with a past Hit accrues "decay time". When its
-   interval elapses, the *next* normal commit event offers a bonus:
+1. A concept with a past Hit becomes resurfacing-eligible, due after the
+   ladder interval for the difficulty its question was answered at. When it
+   comes due, the next ask session — after the commit question is resolved —
+   offers a bonus:
    **"Would you like a bonus question to boost your knowledge retention? y/n"**
-2. On `y`, the resurfaced question is asked after the normal commit question;
-   on `n`, the bonus is skipped (and the concept re-arms for the next event).
-3. After a resurfacing, the concept's timer **exits the loop** — it does not
-   reset to a shorter interval. A concept is resurfaced **once** (at most
-   twice); this keeps the resurfacing pool from filling with repeat questions
-   and preserves the "quiz the commit diff" norm.
+2. On `y`, a fresh bonus question about the concept is synthesized and asked
+   in the same session; on `n`, the concept defers one day, and the third
+   decline exits it from the loop.
+3. After the bonus question is resolved — answered or skipped — the concept
+   exits the loop permanently: each concept is resurfaced **once**. This
+   keeps the eligible concepts from filling with repeat questions and
+   preserves the "question tests the commit diff" norm (the labeled bonus is
+   the deliberate exception).
 
-Design decisions (resolve in the design doc):
+Design decisions (resolved in the B1 design doc, on `10-opsx`):
 
-- **Interval policy** — simple interval ladder (1d / 3d / 7d / 14d) keyed by
-  the concept's Difficulty Level and its Hits/Misses; fits the
-  "thin, no over-engineering" posture and roadmap 4.2's "recall debt" framing.
-- **Scheduling state** — `question_events` already captures the
-  Selection/Hit/Miss history;
-  a small scheduler table (concept → next-eligible-after, resurfaced-count)
-  plus a selection hook in `internal/recall` that offers the bonus question
-  alongside the commit-derived question.
-- **Decline semantics** — `n` re-arms the concept at the next interval step;
-  repeated declines eventually exhaust the concept (same exit rule).
+- **Interval policy** — flat ladder, easy 3d / intermediate 7d / hard 14d,
+  keyed by the difficulty the question was answered at; no growth on
+  re-offers. Fits the "thin, no over-engineering" posture and roadmap 4.2's
+  "recall debt" framing.
+- **Scheduling state** — scheduler state written at answer time and read at
+  ask time; `question_events` already carries the Selection/Hit/Miss
+  history, and the bonus rides the same synthesis, storage, and delivery
+  flow as commit questions.
+- **Decline semantics** — serving the offer defers one day even if the
+  session dies at the prompt; three declines exit the concept as
+  declined-out, distinct from answered-out; a renewed Hit clears prior
+  declines and reschedules.
+- **Surface scope** — bonus offers are shell-session only; the MCP tool and
+  resource contracts stay unchanged.
 - **Policy-asset impact** — the question-generation policy must handle
   "ask about a concept the user hasn't touched recently" (different framing
   than commit-derived concepts).
 
-**Completion signal**: a concept asked 10 days ago that recorded a Hit
-produces a bonus-question offer on a commit ~day 10, even though no commit
-touches that concept — and after being asked once, it never resurfaces again.
+**Completion signal**: a concept whose Hit was on a hard question is due 14
+days later and produces a bonus-question offer on a commit ~day 14, even
+though no commit touches that concept — and after its bonus question is
+resolved once, it never resurfaces again.
 
 ### Workstream B2 — `torec stats` (`10-opsx-e`)
 
 > Streak and the resurfaced-and-held count are placeholder stat names pending
-> the B2 design — same pre-design rule as B1: pinned in GLOSSARY.md only when
-> that design resolves them.
+> the B2 design — pinned in GLOSSARY.md only when that design resolves them.
 
 Streak, accuracy over a rolling window, concepts covered, resurfaced-and-held
 count — read from local `memory.db` only, **no telemetry** (privacy position
