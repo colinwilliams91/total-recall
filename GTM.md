@@ -102,10 +102,10 @@ Design decisions (resolved in the B1 design doc, on `10-opsx`):
   "ask about a concept the user hasn't touched recently" (different framing
   than commit-derived concepts).
 
-**Completion signal**: a concept whose Hit was on a hard question is due 14
-days later and produces a bonus-question offer on a commit ~day 14, even
-though no commit touches that concept — and after its bonus question is
-resolved once, it never resurfaces again.
+**Completion signal**: a concept whose Hit came from a question answered at
+the hard Difficulty Level is due 14 days later and produces a Bonus Offer on
+a commit ~day 14, even though no commit touches that concept — and after its
+bonus question is resolved once, it never resurfaces again.
 
 ### Workstream B2 — `torec stats` (`10-opsx-e`)
 
