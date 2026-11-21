@@ -10,6 +10,8 @@ Decisions folded in: (1) `recall_answer` → `recall_select` rename with `select
 
 Full design, the surface survey that produced it, and the remaining deliberate divergences: [DELIVERY.md wire-schema section](../ARCHITECTURE/DELIVERY.md).
 
+Procedural note (recorded variance, appended when the audit raised it): the house convention routes the full design through an OpenSpec change's `design.md`. This bet spans multiple capabilities — the behavior requirements live in the `question-delivery` and `mcp-server` specs — so the full design is kept in DELIVERY.md, the cross-surface reference doc, and no single change owns it. Like ADR 0002's prose-only context, treat this footer as the deliberate exception.
+
 ## Consequences
 
 - External MCP clients integrate against `recall_next`/`recall_select` names and these payload shapes with a stability guarantee; the schema-normalization work (issue #33) must not reshape them — additive fields only until MCP v2.
