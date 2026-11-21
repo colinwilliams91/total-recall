@@ -1,0 +1,60 @@
+Diagramming conflict log
+========================
+
+Authoritative priority used:
+1. DOCS/
+2. openspec/
+3. Source files in assets/, cmd/, hooks/, internal/
+
+When the documentation and implementation disagreed, the diagrams defaulted to the current implementation/source files per task instructions.
+
+Status (audited 2026-11-20, branch 10-opsx-c)
+---------------------------------------------
+
+All seven conflicts logged at diagram-synthesis time have been resolved and
+were removed from this log. Resolution notes:
+
+1. Engine wiring (was: watchers/pipeline/presentation/MCP described as active
+   but unwired). Now wired for real: internal/engine/server.go runs the async
+   pipeline (pipeline.ExtractConcepts → cache.Save → recall.Synthesize →
+   store.SaveQuestion → MCP ResourceUpdated + optional dispatcher), and the
+   full route set is hooks, recall REST, alias REST, and the MCP server.
+   diagrams/architecture-event-propagation.mmd's "Reserved subsystem" block
+   was rewritten as the live async-pipeline flow.
+2. Stale daemon-foundation design note (was: openspec/changes/daemon-foundation/
+   design.md said serve was unimplemented). The change completed and moved to
+   openspec/changes/archive/ — archived records are historical and untouched.
+3. E2E.md Phase 01 check 1.5 (was: repo-level privacy override expected to
+   show [repo]). Rewritten: privacy/ai keys are user-level only; repo-level
+   values are discarded with a warning.
+4. E2E.md Phase 02 POST examples (was: bare {"diff": ...} payloads). Now send
+   the full HookEnvelope. Resolved before this audit; verified current.
+5. E2E.md daemon startup text (was: "listening on :7331"). Corrected to the
+   actual "✓ Total Recall daemon running on localhost:7331".
+6. CONFIG.md .tr.yaml creation (was: manual or future `tr init --repo`).
+   Corrected to `torec repo`. INSTALL_LAYERS.md's `tr init`/`tr repo` command
+   names corrected in the same pass.
+7. CONFIG.md missing link targets. DAEMON/INDEX.md and
+   EVENT_MONITOR/GIT_HOOKS.md both exist now. Resolved before this audit.
+
+Additional drift fixed in the 2026-11-20 audit pass (not in the original log):
+
+- docs/ARCHITECTURE/DAEMON/INDEX.md described `/mcp/*` as a stub with "Phase 03
+  wires in AI processing" — MCP is a live server (tools, resources, prompt)
+  and the pipeline is wired; status paragraph rewritten.
+- docs/ARCHITECTURE/DELIVERY.md carried recall_answer-era payload text
+  (POST /recall/answer, answer_index, MCP recall_next returning correct_index).
+  Rewritten during the issue #33 schema normalization; see its "Canonical wire
+  schema" section for the current shapes.
+- diagrams/architecture-event-propagation.mmd named the repo config file
+  `.torec.yaml` — corrected to `.tr.yaml`.
+
+Still open (known, deliberate):
+
+- docs/ARCHITECTURE/MCP_ADAPTER.md is aspirational ("Something like:") — it is
+  a vision list, not a runtime claim; no conflict.
+- docs/ARCHITECTURE/data_model/index.md was verified field-by-field against
+  internal/cache/store.go CREATE TABLE statements during this audit and is
+  current. The rendered PNGs (diagrams/*.png, docs/ARCHITECTURE/data_model/*.png)
+  are generated binary assets and were not regenerated here; re-render them
+  with the diagramming tooling when visuals next change.
