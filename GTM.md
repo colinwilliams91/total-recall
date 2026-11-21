@@ -24,8 +24,8 @@ small and parallelizable.
 
 | Item | Detail |
 |------|--------|
-| Package managers | Add `brews` + `scoop` to `.goreleaser.yaml`; `release.yml` already fires on tags — config plus tap/scoop repo setup |
-| Daemon autostart | Opt-in offer in `torec init`: launchd plist (macOS), systemd user unit (Linux), Task Scheduler (Windows). Must interoperate with `torec stop` and the pidfile |
+| Package managers | Add `homebrew_casks` + `scoop` to `.goreleaser.yaml` (`brews`/formulas is deprecated since goreleaser v2.16 and fails `goreleaser check`); `release.yml` already fires on tags — config, tap/bucket repos, and per-repo publish tokens |
+| Daemon autostart | Opt-in offer in `torec init`: launchd plist (macOS), systemd user unit (Linux), Startup-folder script (Windows). Must interoperate with `torec stop` and the pidfile |
 | Status without daemon | Fix #56 — `torec status` / `config --show` work with the daemon down (read pidfile + config directly) |
 
 *Winget* is **post-1.0.0**: Windows CI exists (`windows-latest` in the CI

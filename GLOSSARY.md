@@ -82,7 +82,7 @@ The user declined to answer, whether or not they ever saw the Question. Event hi
 The baseline-only regime before enough answered history exists: the commit-shape heuristics resolve alone — no learner tier, no focus concepts. Marked by the `cold-start` signal.
 
 **Autostart**:
-The opt-in arrangement that starts the daemon at login, so recall works across reboots without the learner remembering to serve. Autostart only launches the daemon; stopping it and restarting it remain the learner's lifecycle actions until the next login.
+The opt-in arrangement that starts the daemon at login, so recall works across reboots without the user remembering to serve. Autostart only launches the daemon; stopping it and restarting it remain the user's lifecycle actions until the next login.
 
 ## Notes
 
