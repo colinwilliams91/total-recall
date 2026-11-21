@@ -3,6 +3,7 @@ package autostart
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,13 @@ func TestLinuxPathUnderSystemdUserDir(t *testing.T) {
 }
 
 func TestWindowsPathUnderStartupFolder(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		// os.UserConfigDir on darwin ignores XDG_CONFIG_HOME and AppData and
+		// returns ~/Library/Application Support, so this expectation can't be
+		// isolated there — and FilePath dispatches windowsPath only on
+		// windows anyway, so the test asserts non-production semantics.
+		t.Skip("windowsPath is unreachable on darwin at runtime")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
