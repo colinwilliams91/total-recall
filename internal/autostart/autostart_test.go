@@ -44,8 +44,8 @@ func TestSystemdUnitTemplateWantedByDefaultTarget(t *testing.T) {
 
 func TestStartupCmdTemplateQuotesBinaryPath(t *testing.T) {
 	content := windowsContent(`C:\Users\colin\go\bin\torec.exe`)
-	if !strings.Contains(content, `"C:\Users\colin\go\bin\torec.exe" serve`) {
-		t.Fatalf("expected quoted baked path with serve, got:\n%s", content)
+	if !strings.Contains(content, `start "total-recall daemon" /min "C:\Users\colin\go\bin\torec.exe" serve`) {
+		t.Fatalf("expected minimized launch with quoted baked path, got:\n%s", content)
 	}
 	if !strings.Contains(content, "Managed by Total Recall") {
 		t.Fatalf("expected managed-by marker in cmd, got:\n%s", content)

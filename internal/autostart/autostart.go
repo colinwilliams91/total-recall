@@ -52,9 +52,13 @@ Restart=no
 WantedBy=default.target
 `
 
+// startupCmdTemplate launches the daemon minimized. The Startup-folder
+// choice is deliberate (no admin rights, unlike Task Scheduler), and its
+// trade-off is a console window for the daemon's lifetime — /min keeps it
+// to a taskbar entry instead of an open window.
 const startupCmdTemplate = "@echo off\r\n" +
 	":: Managed by Total Recall — re-run 'torec init' to update.\r\n" +
-	"\"%s\" serve\r\n"
+	"start \"total-recall daemon\" /min \"%s\" serve\r\n"
 
 // SelfPath resolves the absolute, symlink-followed path of the running
 // binary. Autostart entries bake this path in so the login hook execs the
@@ -112,7 +116,8 @@ func linuxContent(selfPath string) string {
 }
 
 // windowsContent renders the Startup-folder batch script, which Windows
-// executes at logon.
+// executes at logon. The daemon's console is launched minimized: it still
+// occupies a taskbar entry while serving, but no open window.
 func windowsContent(selfPath string) string {
 	return fmt.Sprintf(startupCmdTemplate, selfPath)
 }
