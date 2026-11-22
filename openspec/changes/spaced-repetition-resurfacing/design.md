@@ -120,6 +120,9 @@ the daemon immediately sets `next_eligible_after = now + 1 day`. Consequences:
   exited rows are terminal. The cap counts continuous disinterest, and fresh
   evidence restarts the lease.
 
+Exit permanence — answered-out and declined-out rows are never resurrected —
+is a recorded bet: see docs/adr/0006.
+
 ### D6 — One bonus per session, most-overdue wins
 
 `GET /recall/bonus` selects the eligible concept with the largest

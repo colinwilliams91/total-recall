@@ -61,7 +61,7 @@ When the daemon serves a bonus offer for a concept, it SHALL immediately push th
 - **THEN** the accept flow supersedes the serve-time defer (see the answered-bonus requirement below)
 
 ### Requirement: A decline defers and counts; three declines exit the concept
-When the user explicitly declines an offer, the system SHALL record a decline for the concept. A declined concept is not re-offered before its serve-time defer elapses (one day). Upon the third recorded decline, the concept SHALL permanently exit the resurfacing loop with a declined-out state, distinct from the answered-out state, and SHALL never be offered again.
+When the user explicitly declines an offer, the system SHALL record a decline for the concept. A declined concept is not re-offered before its serve-time defer elapses (one day). Upon the third recorded decline, the concept SHALL permanently exit the resurfacing loop with a declined-out state, distinct from the answered-out state, and SHALL never be offered again (see docs/adr/0006).
 
 #### Scenario: First decline defers without exiting
 - **WHEN** the user declines an offer for the first time
@@ -72,7 +72,7 @@ When the user explicitly declines an offer, the system SHALL record a decline fo
 - **THEN** the concept exits the loop as declined-out and is never offered again, while remaining distinguishable from concepts that exited by answering
 
 ### Requirement: A renewed correct answer clears prior declines
-When a concept that has recorded declines records a Hit again in a normal (commit-diff) question, the system SHALL reset its schedule from the new answer (due after the Retention Interval) and clear its decline count — the decline cap punishes continuous disinterest, not one bad week. Concepts that have already exited (answered-out or declined-out) SHALL NOT be resurrected by later Hits.
+When a concept that has recorded declines records a Hit again in a normal (commit-diff) question, the system SHALL reset its schedule from the new answer (due after the Retention Interval) and clear its decline count — the decline cap punishes continuous disinterest, not one bad week. Concepts that have already exited (answered-out or declined-out) SHALL NOT be resurrected by later Hits (see docs/adr/0006).
 
 #### Scenario: Two declines followed by a fresh correct answer
 - **WHEN** a concept has 2 recorded declines and then records a Hit in a Commit Question
@@ -83,7 +83,7 @@ When a concept that has recorded declines records a Hit again in a normal (commi
 - **THEN** it stays exited — no new offer is ever scheduled for it
 
 ### Requirement: An accepted bonus question is a fresh synthesis at the current adaptive level
-When the user accepts an offer, the system SHALL synthesize a brand-new question about the due concept — concept-level framing with no commit context, never pretending there was a commit — at the ask session's current adaptive Difficulty Level. The synthesized question SHALL ride the same storage, delivery, and select-and-feedback flow as commit questions, and its recorded events SHALL carry an origin marking it as a resurfaced question so downstream statistics can distinguish retention questions from diff questions. After the bonus question is resolved (answered or skipped), the concept SHALL permanently exit the loop as answered-out — each concept is resurfaced at most once — regardless of whether it Hit or Missed. A Missed bonus needs no special handling: it flows into the existing learner-weakness history like any other Miss.
+When the user accepts an offer, the system SHALL synthesize a brand-new question about the due concept — concept-level framing with no commit context, never pretending there was a commit — at the ask session's current adaptive Difficulty Level. The synthesized question SHALL ride the same storage, delivery, and select-and-feedback flow as commit questions, and its recorded events SHALL carry an origin marking it as a resurfaced question so downstream statistics can distinguish retention questions from diff questions. After the bonus question is resolved (answered or skipped), the concept SHALL exit the loop as answered-out, regardless of whether it Hit or Missed (see docs/adr/0006). A Missed bonus needs no special handling: it flows into the existing learner-weakness history like any other Miss.
 
 #### Scenario: Accepted bonus produces a fresh, marked question
 - **WHEN** the user accepts an offer for a concept
