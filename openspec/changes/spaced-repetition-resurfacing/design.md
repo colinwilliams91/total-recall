@@ -136,7 +136,13 @@ is a recorded bet: see docs/adr/0006.
 Bonus questions carry `origin: "resurfaced"` in their queued
 `question_events` payload (the payload is JSON and already carries resolved
 difficulty and fired signals). `torec stats` (Wave B) separates
-diff-question accuracy from retention-question accuracy by this field.
+commit-question accuracy from bonus-question accuracy by this field.
+
+Note: `openspec/specs/question-events/spec.md` names `resurfaced` among
+*future lifecycle event types* (row inserts). This design deliberately adds
+no such event type — the origin marking rides the existing queued event's
+JSON payload, superseding that forward-looking example for resurfacing;
+the event-type set stays unchanged.
 
 ### D8 — Shell-only v1; MCP contract frozen
 

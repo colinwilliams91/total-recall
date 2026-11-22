@@ -24,14 +24,16 @@ the v1.0.0 launch (GTM.md, Wave B) because it is the feature that turns
   "Would you like a bonus question to boost your knowledge retention? y/n".
   `y` synthesizes a fresh question about the due concept (option A — no
   stored-question re-serving) at the user's *current adaptive Difficulty
-  Level*; `n` defers the concept by one day and increments its decline count.
-- **Decline semantics** — decline = defer by 1 day (timer rewound one day, not
-  re-offered immediately); a cap of **3 declines** exits the concept from the
-  loop as `declined-out`. A resolved bonus question (answered or skipped)
+  Level*; `n` increments the decline count — the serve-time defer (one day
+  from serve) already stands.
+- **Decline semantics** — a decline only increments the count; the
+  serve-time defer (one day from serve) already stands, so the concept is
+  not re-offered before it elapses; a cap of **3 declines** exits the
+  concept from the loop as `declined-out`. A resolved bonus question (answered or skipped)
   exits it as `answered-out` (max one resurface per concept). A killed ask session at the
   offer is a *silent defer* (+1 day, no decline increment).
-- **`GET /recall/bonus` endpoint** — returns the most-due concept for the
-  session (204 if none due); the accept/decline outcome is recorded via the
+- **`GET /recall/bonus` endpoint** — returns the most-overdue concept for
+  the session (204 if none due); the accept/decline outcome is recorded via the
   same endpoint family. One bonus per ask session; hook pipeline and commit
   path untouched.
 - **Shell-only in v1** — the MCP Delivery Surface keeps its current
@@ -43,7 +45,7 @@ the v1.0.0 launch (GTM.md, Wave B) because it is the feature that turns
   understanding, never pretend there was a commit.
 - **Provenance** — bonus questions and their events carry their origin
   in the event payload so `torec stats` (Wave B, `10-opsx-e`) can separate
-  diff-question accuracy from retention-question accuracy.
+  commit-question accuracy from bonus-question accuracy.
 
 ### Developer workflow impact
 
