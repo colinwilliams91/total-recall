@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // UserConfig is loaded from ~/.tr/config.yaml.
@@ -148,14 +149,49 @@ type ConfigSources struct {
 	PresentationMCP             string
 }
 
+// defaultProvider is the zero-config AI provider. Anthropic stays the
+// default: routing recall traffic through a free multi-model aggregator by
+// default trades privacy for friction, and that is a product decision, not a
+// safe default. See GTM.md Wave A2 / issue #34.
+const defaultProvider = "anthropic"
+
+// DefaultAIModel is the model paired with the default provider.
+const DefaultAIModel = "claude-sonnet-4-5"
+
+// DefaultAPIKeyEnv returns the zero-config api-key pattern for a provider:
+// "env:" + upper-cased provider name + "_API_KEY". Hyphens become underscores
+// so lm-studio resolves to env:LM_STUDIO_API_KEY. Keeping the pattern
+// provider-derived (rather than a single hardcoded env var) means the default
+// config is never pointing at the wrong provider's variable — issue #34.
+func DefaultAPIKeyEnv(provider string) string {
+	name := strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
+	return "env:" + name + "_API_KEY"
+}
+
+// IsDefaultAPIKeyEnv reports whether s is exactly the unmodified default
+// api-key placeholder of a known provider. Matching only known placeholders —
+// not anything shaped like one — keeps init from re-keying a user's custom
+// env var (e.g. env:MY_COMPANY_API_KEY) that happens to look like the
+// pattern. Used to re-key when the user switches providers in init without
+// touching their existing value; a custom env var name or raw key never
+// matches.
+func IsDefaultAPIKeyEnv(s string) bool {
+	for provider := range KnownProviders {
+		if s == DefaultAPIKeyEnv(provider) {
+			return true
+		}
+	}
+	return false
+}
+
 // DefaultUserConfig returns the safe-default UserConfig written on first init or auto-creation.
 func DefaultUserConfig() UserConfig {
 	return UserConfig{
 		Privacy: PrivacyConfig{ConversationAnalysis: false},
 		AI: AIConfig{
-			Provider: "anthropic",
-			Model:    "claude-sonnet-4-5",
-			APIKey:   "env:ANTHROPIC_API_KEY",
+			Provider: defaultProvider,
+			Model:    DefaultAIModel,
+			APIKey:   DefaultAPIKeyEnv(defaultProvider),
 			BaseURL:  "",
 		},
 		Recall: RecallConfig{

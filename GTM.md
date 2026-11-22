@@ -24,8 +24,8 @@ small and parallelizable.
 
 | Item | Detail |
 |------|--------|
-| Package managers | Add `brews` + `scoop` to `.goreleaser.yaml`; `release.yml` already fires on tags — config plus tap/scoop repo setup |
-| Daemon autostart | Opt-in offer in `torec init`: launchd plist (macOS), systemd user unit (Linux), Task Scheduler (Windows). Must interoperate with `torec stop` and the pidfile |
+| Package managers | Add `homebrew_casks` + `scoop` to `.goreleaser.yaml` (`brews`/formulas is deprecated since goreleaser v2.16 and fails `goreleaser check`); `release.yml` already fires on tags — config, tap/bucket repos, and per-repo publish tokens |
+| Daemon autostart | Opt-in offer in `torec init`: launchd plist (macOS), systemd user unit (Linux), Startup-folder script (Windows). Must interoperate with `torec stop` and the pidfile |
 | Status without daemon | Fix #56 — `torec status` / `config --show` work with the daemon down (read pidfile + config directly) |
 
 *Winget* is **post-1.0.0**: Windows CI exists (`windows-latest` in the CI
@@ -44,7 +44,7 @@ fixed.
 |------|--------|
 | Duplicate daemon advisory on commit (#14) | **Likely live** — on a single commit, `pre-commit` and `commit-msg` hooks each print the no-daemon advisory (`hooks/pre-commit.sh:49`, `hooks/commit-msg.sh:31`); confirm and dedupe |
 | Empty-queue message too long (#30) | **Likely stale** — the caught-up message is now one short line (`cmd/torec/ask.go:61`) and the repo-move advisory was removed (`integration_test.go:807`); verify manually, probably close |
-| MCP/TUI schema normalization (#33) | **Valid** — cross-surface payload consistency remains architectural debt |
+| MCP/TUI schema normalization (#33) | **Valid** — payload consistency across Delivery Surfaces remains architectural debt |
 | Default LLM provider value (#34) | **Valid, small** — config defaults to `anthropic` (`internal/config/config.go:156`); decide the zero-friction default (candidate: OpenRouter free tier for a no-BYOK first run) |
 | golangci errcheck config (#67) | **Valid** — no `.golangci.yml` exists in the tree; add the errcheck exclusions |
 | Stale architecture docs/diagrams (#32) | **Partially stale** — `diagramming-conflicts.txt` exists but docs have been refreshed since June; audit and close |
@@ -63,36 +63,55 @@ Commits are the only question trigger, and questions must stay relevant to the
 commit diff. Resurfacing therefore **piggybacks on normal commit hook events**
 — no new event source:
 
-1. A concept answered correctly in the past accrues "decay time". When its
-   interval elapses, the *next* normal commit event offers a bonus:
+> **Vocabulary**: the B1 terms — Resurfacing, Retention Interval, Bonus
+> Offer, Bonus Question, Exit — are pinned in GLOSSARY.md, resolved by the
+> B1 delta spec (authored on the `10-opsx` planning branch). "Resurfaced"
+> names the bonus question's origin marking, not a second question type.
+
+1. A concept with a past Hit becomes resurfacing-eligible, due after the
+   Retention Interval for the Difficulty Level its question was answered
+   at. When it comes due, the next ask session — after the commit question
+   is resolved — offers a bonus:
    **"Would you like a bonus question to boost your knowledge retention? y/n"**
-2. On `y`, the resurfaced question is asked after the normal commit question;
-   on `n`, the bonus is skipped (and the concept re-arms for the next event).
-3. After a resurfacing, the concept's timer **exits the loop** — it does not
-   reset to a shorter interval. A concept is resurfaced **once** (at most
-   twice); this keeps the resurfacing pool from filling with repeat questions
-   and preserves the "quiz the commit diff" norm.
+2. On `y`, a fresh bonus question about the concept is synthesized and asked
+   in the same session; on `n`, the concept defers one day, and the third
+   decline exits it from the loop.
+3. After the bonus question is resolved — answered or skipped — the concept
+   exits the loop permanently: each concept is resurfaced **once**. This
+   keeps the eligible concepts from filling with repeat questions and
+   preserves the "question tests the commit diff" norm (the labeled bonus is
+   the deliberate exception).
 
-Design decisions (resolve in the design doc):
+Design decisions (resolved in the B1 design doc, on `10-opsx`):
 
-- **Interval policy** — simple interval ladder (1d / 3d / 7d / 14d) keyed by
-  the concept's difficulty level and answer correctness; fits the
-  "thin, no over-engineering" posture and roadmap 4.2's "recall debt" framing.
-- **Scheduling state** — `question_events` already captures answer history;
-  a small scheduler table (concept → next-eligible-after, resurfaced-count)
-  plus a selection hook in `internal/recall` that offers the bonus question
-  alongside the commit-derived question.
-- **Decline semantics** — `n` re-arms the concept at the next interval step;
-  repeated declines eventually exhaust the concept (same exit rule).
+- **Retention Interval policy** — flat, easy 3d / intermediate 7d / hard 14d,
+  keyed by the Difficulty Level the question was answered at; no growth on
+  re-offers. Fits the "thin, no over-engineering" posture and roadmap 4.2's
+  "recall debt" framing.
+- **Scheduling state** — scheduler state written at answer time and read at
+  ask time; `question_events` + `selections` already carry the history
+  Hit/Miss are tallied from, and the bonus rides the same synthesis,
+  storage, and delivery flow as commit questions.
+- **Decline semantics** — serving the offer defers one day even if the
+  session dies at the prompt; three declines exit the concept as
+  declined-out, distinct from answered-out; a renewed Hit clears prior
+  declines and reschedules only while the concept is still in the loop —
+  declined-out concepts stay exited.
+- **Delivery Surface** — bonus offers reach the terminal shell only; the
+  MCP tool and resource contracts stay unchanged.
 - **Policy-asset impact** — the question-generation policy must handle
   "ask about a concept the user hasn't touched recently" (different framing
   than commit-derived concepts).
 
-**Completion signal**: a concept asked 10 days ago and answered correctly
-produces a bonus-question offer on a commit ~day 10, even though no commit
-touches that concept — and after being asked once, it never resurfaces again.
+**Completion signal**: a concept whose Hit came from a question answered at
+the hard Difficulty Level is due 14 days later and produces a Bonus Offer on
+a commit ~day 14, even though no commit touches that concept — and after its
+bonus question is resolved once, it never resurfaces again.
 
 ### Workstream B2 — `torec stats` (`10-opsx-e`)
+
+> Streak and the resurfaced-and-held count are placeholder stat names pending
+> the B2 design — pinned in GLOSSARY.md only when that design resolves them.
 
 Streak, accuracy over a rolling window, concepts covered, resurfaced-and-held
 count — read from local `memory.db` only, **no telemetry** (privacy position

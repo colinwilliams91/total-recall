@@ -12,6 +12,10 @@ A piece of knowledge extracted from the user's changes; the unit that Total Reca
 **Question**:
 A synthesized prompt testing the user's recall of a Concept. Choice-based; true/false is expressed as a two-choice question, not a separate type.
 
+**Quiz**:
+The user-facing word for a Question: what the user "gets" on a git event. One quiz is one Question — the word adds no separate structure or state.
+_Avoid_: treating quiz and Question as different things; "quiz" for engine-side state
+
 **Choice**:
 One option of a Question.
 
@@ -59,6 +63,35 @@ _Avoid_: answer, submission (for completed picks)
 **Select**:
 The user-side verb: the user selects. All user-facing language uses select/selected.
 _Avoid_: answer, submit (user-facing phrasing)
+
+### Delivery
+
+**Delivery Surface**:
+The transport that delivers Questions to the user — the terminal TUI, REST, or MCP. Distinct from the Working Surface: one is where the work happens, the other is how the question reaches the user.
+_Avoid_: bare "surface" (ambiguates the two)
+
+### Resurfacing
+
+**Resurfacing**:
+The mechanism that brings a concept back once through the normal ask session: a Hit seeds resurfacing eligibility for that concept (skips and Misses never seed), the elapsed Retention Interval makes it due, and the session may then offer a bonus. Not a second event source — it rides normal commit events.
+
+**Retention Interval**:
+The flat schedule that sets when a resurfacing-eligible concept comes due, keyed by the Difficulty Level its question was answered at, with no growth on re-offers. Auxiliary scheduling, not a difficulty system.
+_Avoid_: decay time, SM-2
+
+**Bonus Offer**:
+The opt-in prompt the ask session makes for one due concept — most-overdue first — after the Commit Question is resolved. Serving it defers the concept one day regardless of the reply; an explicit decline counts toward the three-decline exit.
+
+**Commit Question**:
+A Question synthesized from a commit's changed content — the default delivery, in contrast to the Bonus Question. Not a second type; the pair names the origin of a Question's events, not two kinds of Question.
+_Avoid_: "commit question" as a second question type
+
+**Bonus Question**:
+The fresh question synthesized about a due concept when a Bonus Offer is accepted — concept-level framing with no commit context, delivered through the normal question flow. One term: "resurfaced" is this question's origin marking, not a second question type.
+_Avoid_: "resurfaced question" as a separate term
+
+**Exit**:
+A concept leaves the resurfacing loop permanently, as answered-out (its Bonus Question was resolved, answered or skipped) or declined-out (three declines). Exited concepts are never resurrected by later Hits.
 
 ### Lifecycle
 

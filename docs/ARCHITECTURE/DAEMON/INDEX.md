@@ -1,6 +1,6 @@
 The daemon IS the Core Go Engine runtime.[^1]
 
-> **Phase 02 status**: Daemon HTTP server is live. `torec serve` binds to `:7331`, registers all hook routes (`/hooks/*`) and the MCP stub (`/mcp/*`), and handles graceful shutdown on SIGTERM/SIGINT. The daemon writes its PID to `<data-dir>/daemon.pid` at bind time (`$TR_HOME` when set, else `~/.tr`) and removes it on graceful exit; `torec stop` signals that PID (Unix: SIGTERM; Windows: best-effort `taskkill /PID`) and waits for the drain; `torec status` surfaces the pid. Phase 03 wires in AI processing, concept extraction, and recall synthesis.
+> **Status**: The daemon is live and fully wired. `torec serve` binds to `:7331`, registers the hook routes (`/hooks/*`), the recall REST Delivery surface (`GET /recall/next`, `POST /recall/select`, `GET /recall/stale`), the alias routes, and the MCP server at `/mcp/` (tools `recall_next`/`recall_select`/`recall_status`, resources `recall://queue`/`recall://recent`, prompt `recall_workflow`), and handles graceful shutdown on SIGTERM/SIGINT. The daemon writes its PID to `<data-dir>/daemon.pid` at bind time (`$TR_HOME` when set, else `~/.tr`) and removes it on graceful exit; `torec stop` signals that PID (Unix: SIGTERM; Windows: best-effort `taskkill /PID`) and waits for the drain; `torec status` surfaces the pid. Hook events run the async pipeline: concept extraction, cache save, recall synthesis, MCP resource notification, and (opt-in) terminal dispatch.
 
 ## Lifecycle
 
