@@ -18,7 +18,7 @@ proposal.md — Why):
   repo+branch scoped.
 - `torec ask` is a Bubble Tea state machine (`thinking → question → feedback →
   done`) that polls `/recall/next` (atomic dequeue) and records outcomes via
-  `/recall/answer`.
+  `/recall/select`.
 
 ## Goals / Non-Goals
 
@@ -27,19 +27,19 @@ proposal.md — Why):
 - Scheduler state that is written at answer time and read at ask time — zero
   new work on the commit path.
 - Bonus questions indistinguishable from commit questions downstream: same
-  synthesis machinery, same tables, same answer/feedback flow.
+  synthesis machinery, same tables, same select-and-feedback flow.
 - Offer economics that respect a "no": defer, don't nag.
 
 **Non-Goals:**
 
 - (Restated in proposal Non-goals: no SM-2, no re-serving, no MCP in v1.)
-- No change to `recall_next` / `recall_answer` wire contracts.
+- No change to `recall_next` / `recall_select` wire contracts.
 - No scheduler GC — exit states make rows ineligible; storage is bounded by
   real usage.
 
 ## Decisions
 
-### D1 — Fresh synthesis at the learner's current adaptive level (option A)
+### D1 — Fresh synthesis at the user's current adaptive level (option A)
 
 On `y`, the daemon synthesizes a new question about the due concept: no diff
 snippet, concept-level framing, difficulty = the session's current adaptive
@@ -53,13 +53,14 @@ semantics. Fresh synthesis rides existing machinery.
 
 ### D2 — Scheduler writes at answer time, reads at ask time
 
-Seeding happens inside the same transaction as the answer: when a question is
-answered correctly, upsert one `resurfacing` row per concept slug. Due-check
+Seeding happens inside the same transaction as the answer: when a question
+records a Hit, upsert one `resurfacing` row per concept slug. Due-check
 happens only when the ask session calls `GET /recall/bonus`. The hook
 pipeline, hook routes, and commit latency are untouched.
 
-Ladder key: the *answered question's* resolved difficulty, read back from its
-queued `question_events` payload; absent/unknown → `intermediate`.
+Retention Interval key: the *answered question's* resolved Difficulty Level,
+read back from its queued `question_events` payload; absent/unknown →
+`intermediate`.
 
 *Alternative considered — hook-time staging of a pre-synthesized bonus
 question:* rejected. Dequeue is exactly-once, so a staged question that the
@@ -73,7 +74,7 @@ CREATE TABLE IF NOT EXISTS resurfacing (
   slug                TEXT PRIMARY KEY REFERENCES concept_registry(slug),
   seeded_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   next_eligible_after DATETIME NOT NULL,  -- due when now >= this
-  interval_days       INTEGER NOT NULL,   -- ladder value at seed time
+  interval_days       INTEGER NOT NULL,   -- Retention Interval value at seed time
   declined_count      INTEGER NOT NULL DEFAULT 0,
   resurfaced_count    INTEGER NOT NULL DEFAULT 0,
   exit_reason         TEXT                -- NULL | 'answered-out' | 'declined-out'
@@ -90,7 +91,7 @@ required scope is satisfied.
 NOT EXISTS` migrates cleanly without the delete-`memory.db` step** (that
 caveat applies when existing tables change; they do not here).
 
-### D4 — Dumb interval ladder, no SM-2
+### D4 — Dumb Retention Interval, no SM-2
 
 | Answered at | interval_days |
 |---|---|
@@ -98,7 +99,7 @@ caveat applies when existing tables change; they do not here).
 | intermediate | 7 |
 | hard | 14 |
 
-Three constants keyed by the answered level. SM-2's easiness factor and
+Three constants keyed by the answered Difficulty Level. SM-2's easiness factor and
 success chain need multiple reviews per item; the max-once rule supplies
 exactly one. Rationale in proposal Non-goals.
 
@@ -114,9 +115,10 @@ the daemon immediately sets `next_eligible_after = now + 1 day`. Consequences:
 - Session killed at the offer → no client callback, and none is needed: the
   serve-time defer already fired. **Silent defer, no punishment** — this is
   why defer lives on the daemon side of the offer, not in the client.
-- A later *correct* answer of the same concept (diff question) renews the
-  schedule and clears `declined_count` — the cap counts continuous
-  disinterest, and fresh evidence restarts the lease.
+- A later Hit on the same concept (Commit Question) renews the schedule and
+  clears `declined_count` — only while the concept is still in the loop;
+  exited rows are terminal. The cap counts continuous disinterest, and fresh
+  evidence restarts the lease.
 
 ### D6 — One bonus per session, most-overdue wins
 
@@ -133,10 +135,10 @@ diff-question accuracy from retention-question accuracy by this field.
 
 ### D8 — Shell-only v1; MCP contract frozen
 
-The offer exists only in the `torec ask` session. MCP surfaces keep
-`recall_next` / `recall_answer` untouched. Scheduler state is
-surface-agnostic, so the future MCP story (issue #68 — auto-accept) extends
-the loop without rework.
+The offer exists only in the `torec ask` session. The MCP Delivery Surface
+keeps `recall_next` / `recall_select` untouched. Scheduler state is
+Delivery-Surface-agnostic, so the future MCP story (issue #68 — auto-accept)
+extends the loop without rework.
 
 ### D9 — Config kill-switch
 
@@ -148,13 +150,13 @@ rest of `recall.*`.
 ### D10 — Bonus question lifecycle
 
 On accept, the daemon synthesizes and stores the question as a normal row
-(`claimed_by = 'shell'`, already delivered to this session) and returns it in
-the accept response — no second poll, no re-dequeue. The user answers it via
-the existing `/recall/answer` flow; the store then sets
+(delivered event `actor = 'shell'`, already delivered to this session) and
+returns it in the accept response — no second poll, no re-dequeue. The user
+selects a choice via the existing `/recall/select` flow; the store then sets
 `exit_reason = 'answered-out'` for the concept's scheduler row (regardless of
-correctness — max one resurface; a miss is handed to the weakness loop
-automatically by the existing Performance resolver, which reads the same
-answered history).
+whether it Hit or Missed — max one resurface; a Miss is handed to the
+weakness loop automatically by the existing Performance resolver, which
+reads the same Selection/Hit/Miss history).
 
 ## Flows
 
@@ -166,9 +168,9 @@ torec ask                                     daemon
    |------------------------------------------->|
    | 200 commit question (atomic dequeue)       |
    | render, user answers                       |
-   | POST /recall/answer                        |
-   |------------------------------------------->| store answer;
-   |                                            | IF correct: seed/reschedule
+   | POST /recall/select                        |
+   |------------------------------------------->| store selection;
+   |                                            | on Hit: seed/reschedule
    | render feedback                            | resurfacing rows (txn)
    | GET /recall/bonus?repo&branch              |
    |------------------------------------------->| due concept? serve + defer
@@ -177,7 +179,7 @@ torec ask                                     daemon
    | [offer] "Bonus question? y/n"              |
    |   n --> POST decline ----------------------|--> declined_count++
    |   y --> POST accept ----------------------->| synthesize at current
-   | 200 bonus question (claimed shell)         |  adaptive level; store row;
+   | 200 bonus question (delivered, actor shell)|  adaptive level; store row;
    | render, answer, feedback                   |  events origin=resurfaced
    | concept exits answered-out                 |
  done                                          (kill at offer: no callback,
@@ -187,15 +189,15 @@ torec ask                                     daemon
 ### Answer-time seeding (transaction)
 
 ```
-POST /recall/answer (correct answer)
+POST /recall/select (Hit)
    |
    v
 BEGIN
-  existing answer/selection/event writes
+  existing selection/event writes
   for each concept slug of the question:
     upsert resurfacing(slug):
-      next_eligible_after = now + ladder(question level)
-      interval_days       = ladder(question level)
+      next_eligible_after = now + interval(question level)
+      interval_days       = interval(question level)
       declined_count      = 0            (renewal clears disinterest)
       exit_reason         = NULL         (only if previously NULL;
                                           exited rows are terminal)
@@ -213,10 +215,10 @@ COMMIT
 - [Cross-repo surfacing surprises a user ("why is this repo's quiz about that
   other project?")] → the offer labels itself as a knowledge-retention bonus,
   not a commit question; framed in the policy asset and the TUI copy.
-- [Pool grows unboundedly] → rows are one-per-concept-ever-answered-correctly,
+- [Table grows unboundedly] → rows are one per concept that has recorded a Hit,
   terminal rows stop being read, and no queries scan the table at commit
   time (only the ask-session due lookup, indexed on `next_eligible_after`).
-- [Ladder feels arbitrary] → three constants, documented, trivially tunable
+- [Retention Interval feels arbitrary] → three constants, documented, trivially tunable
   later; deliberately not a formula (see D4).
 - [Serve-time defer races a slow accept] → accept overrides the defer and
   terminates the row; no double-offer window exists because the row is no
