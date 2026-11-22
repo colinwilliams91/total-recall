@@ -82,7 +82,10 @@ func serveCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("opening concept cache: %w", err)
 			}
-			defer store.Close()
+			// Close error on shutdown is unactionable — the process is
+			// exiting either way. Explicitly ignored for errcheck (issue #67
+			// keeps project types out of its exclusion list).
+			defer func() { _ = store.Close() }()
 
 			var recallEngine *recall.Engine
 			if provider != nil {
@@ -183,7 +186,7 @@ func runInit() error {
 		enableConversationAnalysis = existing.Privacy.ConversationAnalysis
 	}
 
-	form := huh.NewForm(
+	form := newHuhForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("🧠  Enable conversation analysis?").
@@ -304,7 +307,7 @@ func runRepo() error {
 		preCommit = true
 	}
 
-	hookForm := huh.NewForm(
+	hookForm := newHuhForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Enable pre-commit hook?").
@@ -390,16 +393,16 @@ var providerModelDefaults = map[string]string{
 	"custom":     "",
 }
 
-// providerAPIKeyPlaceholders maps cloud providers to an env: placeholder shown in the TUI.
-var providerAPIKeyPlaceholders = map[string]string{
-	"anthropic":  "env:ANTHROPIC_API_KEY",
-	"openai":     "env:OPENAI_API_KEY",
-	"groq":       "env:GROQ_API_KEY",
-	"qwen":       "env:QWEN_API_KEY",
-	"minimax":    "env:MINIMAX_API_KEY",
-	"deepseek":   "env:DEEPSEEK_API_KEY",
-	"openrouter": "env:OPENROUTER_API_KEY",
-	"opencode":   "env:OPENCODE_API_KEY",
+// prefillAPIKey returns the api-key value carried into a provider's key
+// prompt. An empty value or an unmodified default placeholder (including one
+// left over from a previously selected provider) is keyed to the new
+// provider; user-entered values — a custom env var name or a raw key — pass
+// through untouched so init never silently overwrites deliberate choices.
+func prefillAPIKey(existing, provider string) string {
+	if existing == "" || config.IsDefaultAPIKeyEnv(existing) {
+		return config.DefaultAPIKeyEnv(provider)
+	}
+	return existing
 }
 
 // runInitAI prompts the user to configure an AI provider for recall questions.
@@ -414,7 +417,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		selectedProvider = "anthropic"
 	}
 
-	providerForm := huh.NewForm(
+	providerForm := newHuhForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("🤖  AI Provider").
@@ -451,10 +454,12 @@ func runInitAI(cfg *config.UserConfig) error {
 	switch selectedProvider {
 	case "anthropic", "openai", "groq", "qwen", "minimax", "deepseek", "openrouter", "opencode":
 		// Cloud providers: prompt for API key (env: pattern) and model name.
-		if apiKey == "" {
-			apiKey = providerAPIKeyPlaceholders[selectedProvider]
-		}
-		followUp := huh.NewForm(
+		// Issue #34: a stale default placeholder from the previously selected
+		// provider (user switched without editing the key) is re-keyed to the
+		// new provider; a custom env var name or a raw key never matches the
+		// default placeholder pattern and is left untouched.
+		apiKey = prefillAPIKey(apiKey, selectedProvider)
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("API Key").
@@ -473,7 +478,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		cfg.AI.Model = model
 
 	case "ollama":
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Model").
@@ -488,7 +493,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		cfg.AI.APIKey = ""
 
 	case "lm-studio":
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Model").
@@ -507,7 +512,7 @@ func runInitAI(cfg *config.UserConfig) error {
 		if baseURL == "" {
 			baseURL = "http://localhost:8080/v1"
 		}
-		followUp := huh.NewForm(
+		followUp := newHuhForm(
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Base URL").

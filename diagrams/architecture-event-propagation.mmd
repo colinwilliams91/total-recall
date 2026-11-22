@@ -4,7 +4,7 @@ sequenceDiagram
     participant CLI as cmd/torec
     participant Cfg as internal/config
     participant UserCfg as ~/.tr/config.yaml
-    participant RepoCfg as .torec.yaml
+    participant RepoCfg as .tr.yaml
     participant Engine as internal/engine.Server
     participant HTTP as net/http mux
     participant Health as GET /health
@@ -25,7 +25,7 @@ sequenceDiagram
     Cfg-->>CLI: resolved Config
     CLI->>Engine: New(cfg).Start()
     Engine->>HTTP: RegisterRoutes()
-    Note over HTTP: Implemented routes:\nGET /health\nPOST /hooks/pre-commit\nPOST /hooks/commit-msg\nPOST /hooks/pre-push\n/mcp/* stub
+    Note over HTTP: Implemented routes:\nGET /health\nPOST /hooks/pre-commit\nPOST /hooks/commit-msg\nPOST /hooks/pre-push\nGET /recall/next\nPOST /recall/select\nGET /recall/stale\nGET /alias/list\nPOST /alias/add\nPOST /alias/remove\n/mcp/ MCP server (tools, resources, prompt)
 
     User->>CLI: torec init
     CLI->>UserCfg: WriteUserConfig()
@@ -40,13 +40,11 @@ sequenceDiagram
     HookAPI-->>HookScripts: 202 {"status":"received"}
     HookScripts-->>User: Exit 0 (non-blocking)
 
-    opt Reserved subsystem path in current source tree
-        Note over Gate,Present: These packages are present or documented,\nbut they are not yet wired into engine/server.go request handling.
-        HookAPI-->>Gate: Future hook / MCP event routing
-        Gate-->>Pipeline: ConversationGate / CodeContextGate
-        Pipeline-->>Cache: Concept fingerprints only
-        Cache-->>Recall: Cached cognition state
-        Recall-->>Present: Recall prompt dispatch
-        Present-->>MCP: Future MCP presentation path
-        HTTP-->>MCP: Current /mcp/* responses are 501 stub
+    opt Async pipeline (runPipeline goroutine, fires when a provider is configured)
+        Note over Gate,Present: All packages below are wired into\nengine/server.go request handling.
+        HookAPI-->>Pipeline: runPipeline(env)\nExtractConcepts(provider, diff)
+        Pipeline-->>Cache: store.Save(repo, branch, fingerprints)
+        Pipeline-->>Recall: Synthesize(ctx, repo, branch, SynthesisContext)\nstore.SaveQuestion + queued event
+        Recall-->>MCP: ResourceUpdated(recall://queue)
+        Recall-->>Present: dispatcher.Dispatch(question)\n(terminal.Adapter, opt-in)
     end

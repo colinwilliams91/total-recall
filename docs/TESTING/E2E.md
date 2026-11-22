@@ -87,18 +87,18 @@ Recall questions are tagged with the absolute repo path at ingestion and scoped 
 ```sh
 # Optionally clear existing config to test a fresh state:
 rm ~/.tr/config.yaml   # Linux/macOS
-del %USERPROFILE%\.torec\config.yaml  # Windows
+del %USERPROFILE%\.tr\config.yaml  # Windows
 ```
 
 ### Checks
 
 | # | Check | Command | Expected |
 |---|-------|---------|----------|
-| 1.1 | User config auto-creates | `./tr serve` (then Ctrl-C) | Advisory: "created ~/.tr/config.yaml" (unless --quiet) |
+| 1.1 | User config auto-creates | `./torec serve` (then Ctrl-C) | Advisory: "created ~/.tr/config.yaml" (unless --quiet) |
 | 1.2 | Quiet flag suppresses advisory | `./torec serve --quiet` (then Ctrl-C) | No advisory printed |
 | 1.3 | Init prompts for opt-in | `./torec init` (inside a git repo) | TUI confirm for conversation analysis; config written |
 | 1.4 | Config show displays merged result | `./torec config --show` | Table of keys with `[user]`, `[repo]`, or `[default]` source tags |
-| 1.5 | Repo config respected | Add `privacy:\n  conversation_analysis: true` to `.torec.yaml`; run `./torec config --show` | `conversation_analysis` shows `[repo]` source |
+| 1.5 | Repo-level privacy keys discarded | Add `privacy:\n  conversation_analysis: true` to `.tr.yaml`; run `./torec config --show` | `conversation_analysis` shows `[user]`/`[default]` source (never `[repo]`) and the daemon logs a discard warning — privacy and ai keys are user-level only |
 
 **Not yet testable:** Daemon routes, hook installation, AI calls.
 
@@ -122,7 +122,7 @@ del %USERPROFILE%\.torec\config.yaml  # Windows
 ./torec serve # posix
 .\torec.exe serve # windows
 
-# Expected: "Total Recall daemon listening on :7331"
+# Expected: "✓ Total Recall daemon running on localhost:7331"
 ```
 
 ```sh

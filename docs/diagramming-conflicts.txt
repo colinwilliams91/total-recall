@@ -8,51 +8,53 @@ Authoritative priority used:
 
 When the documentation and implementation disagreed, the diagrams defaulted to the current implementation/source files per task instructions.
 
-Conflicts found and decisions
-----------------------------
+Status (audited 2026-11-20, branch 10-opsx-c)
+---------------------------------------------
 
-1. DOCS/ARCHITECTURE/GO_CORE_ENGINE.md and DOCS/ARCHITECTURE/INDEX.md describe filesystem watchers, Git index watchers, background cache writes, recall synthesis, presentation dispatch, and MCP behavior as if they are active runtime paths.
-   Source status:
-   - internal/engine/server.go currently implements /health, /hooks/pre-commit, /hooks/commit-msg, /hooks/pre-push, and an /mcp/* stub.
-   - internal/eventmonitor/gate.go only exposes gating helpers.
-   - internal/pipeline/extraction.go is a stub that returns nil.
-   Decision:
-   - The architecture diagram shows the implemented hook/daemon/config flow as the primary path.
-   - Future/internal packages remain visible as reserved subsystem paths with an explicit note that they are not yet wired into runtime request handling.
+All seven conflicts logged at diagram-synthesis time have been resolved and
+were removed from this log. Resolution notes:
 
-2. openspec/changes/daemon-foundation/design.md still states that `total-recall serve` prints "not implemented" and that hook scripts exit immediately.
-   Source status:
-   - cmd/total-recall/main.go and internal/engine/server.go implement a working daemon startup path.
-   - internal/hooks/install.go and internal/hooks/scripts.go implement managed hook installation and HTTP POST dispatch.
-   Decision:
-   - Both diagrams reflect the current shipped implementation rather than the stale design note.
+1. Engine wiring (was: watchers/pipeline/presentation/MCP described as active
+   but unwired). Now wired for real: internal/engine/server.go runs the async
+   pipeline (pipeline.ExtractConcepts → cache.Save → recall.Synthesize →
+   store.SaveQuestion → MCP ResourceUpdated + optional dispatcher), and the
+   full route set is hooks, recall REST, alias REST, and the MCP server.
+   diagrams/architecture-event-propagation.mmd's "Reserved subsystem" block
+   was rewritten as the live async-pipeline flow.
+2. Stale daemon-foundation design note (was: openspec/changes/daemon-foundation/
+   design.md said serve was unimplemented). The change completed and moved to
+   openspec/changes/archive/ — archived records are historical and untouched.
+3. E2E.md Phase 01 check 1.5 (was: repo-level privacy override expected to
+   show [repo]). Rewritten: privacy/ai keys are user-level only; repo-level
+   values are discarded with a warning.
+4. E2E.md Phase 02 POST examples (was: bare {"diff": ...} payloads). Now send
+   the full HookEnvelope. Resolved before this audit; verified current.
+5. E2E.md daemon startup text (was: "listening on :7331"). Corrected to the
+   actual "✓ Total Recall daemon running on localhost:7331".
+6. CONFIG.md .tr.yaml creation (was: manual or future `tr init --repo`).
+   Corrected to `torec repo`. INSTALL_LAYERS.md's `tr init`/`tr repo` command
+   names corrected in the same pass.
+7. CONFIG.md missing link targets. DAEMON/INDEX.md and
+   EVENT_MONITOR/GIT_HOOKS.md both exist now. Resolved before this audit.
 
-3. DOCS/TESTING/E2E.md Phase 01 check 1.5 says a repo-level `privacy.conversation_analysis` value should appear as a `[repo]` override.
-   Source and spec status:
-   - internal/config/merge.go ignores repo-level privacy keys.
-   - internal/config/loader.go warns that `privacy.*` in `.tr.yaml` is ignored.
-   - openspec/specs/config-override-chain/spec.md says privacy keys are not overridable per repo.
-   Decision:
-   - The diagrams treat conversation analysis as a user-level setting loaded from `~/.tr/config.yaml`, not a repo override.
+Additional drift fixed in the 2026-11-20 audit pass (not in the original log):
 
-4. DOCS/TESTING/E2E.md Phase 02 manual POST examples send bare JSON payloads such as `{\"diff\":\"+ foo\"}` to `/hooks/pre-commit`.
-   Source status:
-   - internal/engine/server.go expects a HookEnvelope with `hook`, `repo`, `branch`, `timestamp`, and `payload`.
-   Decision:
-   - The diagrams show hook scripts POSTing a HookEnvelope JSON body.
+- docs/ARCHITECTURE/DAEMON/INDEX.md described `/mcp/*` as a stub with "Phase 03
+  wires in AI processing" — MCP is a live server (tools, resources, prompt)
+  and the pipeline is wired; status paragraph rewritten.
+- docs/ARCHITECTURE/DELIVERY.md carried recall_answer-era payload text
+  (POST /recall/answer, answer_index, MCP recall_next returning correct_index).
+  Rewritten during the issue #33 schema normalization; see its "Canonical wire
+  schema" section for the current shapes.
+- diagrams/architecture-event-propagation.mmd named the repo config file
+  `.torec.yaml` — corrected to `.tr.yaml`.
 
-5. DOCS/TESTING/E2E.md expects the daemon startup text "Total Recall daemon listening on :7331".
-   Source status:
-   - internal/engine/server.go prints "✓ Total Recall daemon running on localhost:7331".
-   Decision:
-   - The user-flow diagram reflects the current startup behavior and address format from source.
+Still open (known, deliberate):
 
-6. DOCS/ARCHITECTURE/CONFIG.md says `.tr.yaml` is created manually or by a future `tr init --repo`.
-   Source status:
-   - cmd/total-recall/main.go currently writes `.tr.yaml` during `total-recall init`.
-   Decision:
-   - The user-flow diagram shows `total-recall init` writing both user and repo config files.
-
-7. DOCS/ARCHITECTURE/CONFIG.md links to DAEMON/INDEX.md and EVENT_MONITOR/GIT_HOOKS.md, but those targets are not present in the repository.
-   Decision:
-   - No diagram behavior was derived from those missing references; only existing docs/specs/source were used.
+- docs/ARCHITECTURE/MCP_ADAPTER.md is aspirational ("Something like:") — it is
+  a vision list, not a runtime claim; no conflict.
+- docs/ARCHITECTURE/data_model/index.md was verified field-by-field against
+  internal/cache/store.go CREATE TABLE statements during this audit and is
+  current. The rendered PNGs (diagrams/*.png, docs/ARCHITECTURE/data_model/*.png)
+  are generated binary assets and were not regenerated here; re-render them
+  with the diagramming tooling when visuals next change.
