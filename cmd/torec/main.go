@@ -229,13 +229,8 @@ func runInit() error {
 // is the installer, not the uninstaller — but it surfaces the leftover so
 // the user isn't left with an unnoticed running daemon after opting out.
 func runInitAutostart(cfg *config.UserConfig) error {
-	// Follow-up: this form predates the accessible-mode stdin hardening
-	// (newHuhForm's process-wide lineReader, landing with the Wave A polish
-	// branch). Once that branch merges, build this form through newHuhForm
-	// like every other init prompt, or piped TERM=dumb torec init cannot
-	// drive this field.
 	var enableAutostart bool
-	form := huh.NewForm(
+	form := newHuhForm(
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("🚀  Start the daemon automatically at login?").
