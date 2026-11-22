@@ -7,7 +7,7 @@ const sentinel = "# total-recall managed"
 const hookHeader = "#!/usr/bin/env bash\n" +
 	sentinel + "\n" +
 	"# Managed by Total Recall — do not edit this block manually.\n" +
-	"# Re-run 'torec init' to update.\n\n"
+	"# Re-run 'torec repo' to update.\n\n"
 
 // preCommitBody is the sh hook body for the pre-commit hook (no shebang/sentinel).
 // Order: P0 credential scan → curl check → capture context → POST (non-blocking).
@@ -66,7 +66,11 @@ exit 0
 // pipeline requires a `diff` payload, which commit-msg cannot supply, so the
 // hook is preserved only to keep the file present (chains any pre-existing
 // unmanaged commit-msg content) and exit cleanly.
-const commitMsgBody = `exit 0
+const commitMsgBody = `# No-op: pre-commit is the only dispatch point on a git commit. Commit-msg
+# previously dispatched too, so a single commit with the daemon down printed
+# the advisory twice. Kept as a clean exit so a chained pre-existing
+# unmanaged commit-msg hook can still be installed over.
+exit 0
 `
 
 // prePushBody is the sh hook body for the pre-push hook.
@@ -106,7 +110,7 @@ exit 0
 const preCommitBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'torec init' to update.
+:: Re-run 'torec repo' to update.
 
 set "DAEMON_URL=http://localhost:7331"
 
@@ -137,8 +141,12 @@ exit /b 0
 const commitMsgBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'torec init' to update.
+:: Re-run 'torec repo' to update.
 
+:: No-op: pre-commit is the only dispatch point on a git commit. Commit-msg
+:: previously dispatched too, so a single commit with the daemon down printed
+:: the advisory twice. Kept as a clean exit so a chained pre-existing
+:: unmanaged commit-msg hook can still be installed over.
 exit /b 0
 `
 
@@ -146,7 +154,7 @@ exit /b 0
 const prePushBat = `@echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'torec init' to update.
+:: Re-run 'torec repo' to update.
 
 set "DAEMON_URL=http://localhost:7331"
 

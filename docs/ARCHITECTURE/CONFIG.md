@@ -8,8 +8,8 @@ Total Recall uses a two-tier configuration model: a personal user config and an 
 
 | File | Scope | Committed? | Created by |
 |---|---|---|---|
-| `~/.tr/config.yaml` | User-level: privacy, AI credentials, recall defaults | **No** | `total-recall init` (or auto-created on first `tr serve`) |
-| `.tr.yaml` | Per-repo: hooks, mode, presentation, optional recall overrides | **Yes** (safe to commit) | Developer — created manually or via future `tr init --repo` |
+| `~/.tr/config.yaml` | User-level: privacy, AI credentials, recall defaults | **No** | `torec init` (or auto-created on first `torec serve`) |
+| `.tr.yaml` | Per-repo: hooks, mode, presentation, optional recall overrides | **Yes** (safe to commit) | `torec repo` |
 
 ---
 
