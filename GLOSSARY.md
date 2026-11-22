@@ -64,6 +64,12 @@ _Avoid_: answer, submission (for completed picks)
 The user-side verb: the user selects. All user-facing language uses select/selected.
 _Avoid_: answer, submit (user-facing phrasing)
 
+### Delivery
+
+**Delivery Surface**:
+The transport that delivers Questions to the user — the terminal TUI, REST, or MCP. Distinct from the Working Surface: one is where the work happens, the other is how the question reaches the user.
+_Avoid_: bare "surface" (ambiguates the two)
+
 ### Resurfacing
 
 **Resurfacing**:

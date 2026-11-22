@@ -29,7 +29,7 @@ git commit  →  pre-commit hook  →  POST /hooks/pre-commit  →  202 Accepted
 
 `mcp.NewStreamableHTTPHandler` is mounted at `/mcp/` on port 7331. AI coding agents (Claude Code, Copilot CLI) connected via MCP receive questions through the `recall_next` tool. After `Synthesize`, `runPipeline` calls `mcpServer.ResourceUpdated("recall://queue")` to notify subscribed clients.
 
-**MCP surface:**
+**MCP Delivery Surface:**
 - `recall_next` tool — atomically dequeues one question (the `delivered` `question_events` row records `actor = "mcp"`; the store has no `claimed_by` column); `repo`/`branch` are optional pointers — absent or empty yields no dequeue (the store layer refuses empty scopes; no global pool exists)
 - `recall_select` tool — records selection or `"skip"` (renamed from `recall_answer`; user-side field is `selected_index`); ID-keyed, optional `repo`/`branch` accepted for symmetry
 - `recall_status` tool — daemon health, `ai_configured`, `queue_depth`; accepts optional `repo`/`branch` to scope depth
@@ -107,7 +107,7 @@ recall_select tool:
   Skip output: {ok, "skipped": true}
 ```
 
-The MCP `recall_next` tool withholds `correct_index` — the agent drives the user's reflection, not its own answer key. `recall_select` evaluates server-side (for the atomic DB write) but does NOT call the AI for feedback — the agent is expected to explain using its own knowledge, per the `recall_workflow` prompt; `feedback` rides the response as `null` so the submit-response shape is identical across surfaces.
+The MCP `recall_next` tool withholds `correct_index` — the agent drives the user's reflection, not its own answer key. `recall_select` evaluates server-side (for the atomic DB write) but does NOT call the AI for feedback — the agent is expected to explain using its own knowledge, per the `recall_workflow` prompt; `feedback` rides the response as `null` so the submit-response shape is identical across Delivery Surfaces.
 
 ### Information boundary
 
@@ -147,7 +147,7 @@ Schema changes are manual: `cache.Open()` uses `CREATE TABLE IF NOT EXISTS` with
 
 ## Canonical wire schema (issue #33)
 
-The recall surfaces share one payload vocabulary: snake_case keys, integer ids, and the withheld-correctness rule above. This section is the reference for the canonical shapes and the deliberate divergences.
+The recall Delivery Surfaces share one payload vocabulary: snake_case keys, integer ids, and the withheld-correctness rule above. This section is the reference for the canonical shapes and the deliberate divergences.
 
 **Question delivery — identical across REST and MCP:**
 
@@ -171,8 +171,8 @@ REST skip response: `{"ok": true, "skipped": true}`; MCP skip response: the same
 | Errors | HTTP status + `{"error": "..."}` body | Tool error (protocol-level) | Same transport idiom |
 | Status | `GET /health` → `{"status": "ok"}`; queue depth only via `GET /recall/stale` (repo) | `recall_status` composite: `{"daemon", "ai_configured", "queue_depth"}` (repo+branch) | MCP agents need one call; the CLI composes health + config + `/recall/stale` itself |
 | Scope inputs | `repo`/`branch` are required query params | Optional pointers (absent → empty → no dequeue) | MCP tool schemas tolerate omitted fields; the store layer refuses empty scopes either way |
-| `recall://recent` rows | no REST equivalent | `{id, question_type, status, question, choices, correct_index, selected_indices, feedback}` | Post-answer surface, MCP-only; `selected_indices` is already plural for a future multi-select question type |
+| `recall://recent` rows | no REST equivalent | `{id, question_type, status, question, choices, correct_index, selected_indices, feedback}` | Post-answer Delivery Surface, MCP-only; `selected_indices` is already plural for a future multi-select question type |
 | `recall://queue` preview rows | no REST equivalent | `next.choices` marshals raw `cache.Choice` (PascalCase keys, includes the answer key) | Pre-answer preview only; treat as an MCP-internal shape. If an external consumer needs it, stabilize it before the MCP v2 work (issue #68) |
 
-Any future surface (VS Code extension, stats) should consume the canonical shapes above rather than minting new field names.
+Any future Delivery Surface (VS Code extension, stats) should consume the canonical shapes above rather than minting new field names.
 
