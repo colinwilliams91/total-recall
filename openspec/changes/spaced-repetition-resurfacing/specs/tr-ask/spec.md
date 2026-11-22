@@ -18,7 +18,7 @@ After a choice keypress, `torec ask` SHALL transition to `stateFeedback` and ren
 ## ADDED Requirements
 
 ### Requirement: Bonus offer is presented after the commit question resolves
-When a bonus offer has been served (a due concept returned by the daemon), `torec ask` SHALL present an offer to the user after the commit question's feedback renders, clearly framed as a knowledge-retention bonus (not a commit question). The offer SHALL accept `y` (accept) and `n` (decline). Pressing `q`/`Esc` at the offer, or session termination of any other kind (Ctrl+C, timeout, closed terminal), SHALL end the session without recording a decline and without posting anything — the daemon's serve-time defer already stands.
+When a bonus offer has been served (a due concept returned by the daemon), `torec ask` SHALL present an offer to the user after the commit question's feedback renders, clearly framed as a knowledge-retention bonus (not a commit question). The offer SHALL accept `y` (accept) and `n` (decline). Pressing `q`/`Esc` at the offer, or session termination of any other kind (Ctrl+C, timeout, closed terminal window), SHALL end the session without recording a decline and without posting anything — the daemon's serve-time defer already stands.
 
 #### Scenario: User accepts with y
 - **WHEN** the user presses `y` at the bonus offer

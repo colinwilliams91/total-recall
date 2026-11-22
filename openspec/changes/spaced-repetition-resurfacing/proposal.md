@@ -74,8 +74,8 @@ demand inside the ask session only after `y`. Nothing new runs at commit time.
 ## Impact
 
 - **Code**: `internal/cache/store.go` (new scheduler table + accessors;
-  manual-migration caveat applies — delete `memory.db` after a
-  schema-changing build, per AGENTS.md), `internal/recall/engine.go`
+  additive `CREATE TABLE IF NOT EXISTS` — no `memory.db` reset needed, see
+  the design's Migration Plan), `internal/recall/engine.go`
   (resurfaced-concept synthesis path reusing `FocusConcepts` + current
   adaptive level), `internal/engine` (new `/recall/bonus` routes),
   `cmd/torec/ask.go` (offer + bonus states), `internal/config`

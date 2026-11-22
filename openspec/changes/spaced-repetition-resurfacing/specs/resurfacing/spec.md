@@ -31,7 +31,7 @@ The system SHALL schedule a concept's resurfacing using the Retention Interval k
 - **THEN** the concept becomes due for resurfacing 3 days later
 
 ### Requirement: Bonus offers are served to the shell session only, most-overdue first
-When the terminal ask session requests a bonus offer after resolving its commit question, and resurfacing is enabled, and at least one concept is due (current time at or past its next-eligible time), the system SHALL offer the concept with the largest overdue amount, breaking ties by oldest seeding time. At most one bonus offer SHALL be made per ask session. When no concept is due, or resurfacing is disabled, the daemon SHALL report no offer and the session ends as it does today. MCP surfaces SHALL NOT receive bonus offers — their tool and resource contracts remain unchanged in this change.
+When the shell ask session requests a bonus offer after resolving its commit question, and resurfacing is enabled, and at least one concept is due (current time at or past its next-eligible time), the system SHALL offer the concept with the largest overdue amount, breaking ties by oldest seeding time. At most one bonus offer SHALL be made per ask session. When no concept is due, or resurfacing is disabled, the daemon SHALL report no offer and the session ends as it does today. The MCP Delivery Surface SHALL NOT receive bonus offers — its tool and resource contracts remain unchanged in this change.
 
 #### Scenario: A due concept is offered on a commit in another repository
 - **WHEN** a concept seeded from repository A is due and the user commits in repository B, then answers the commit question in the ask session
@@ -53,7 +53,7 @@ When the terminal ask session requests a bonus offer after resolving its commit 
 When the daemon serves a bonus offer for a concept, it SHALL immediately push the concept's next-eligible time to one day later. This defer applies regardless of what the user does with the offer, so a session that terminates at the offer is a silent defer: no decline is recorded and no offer is re-served before the deferred time.
 
 #### Scenario: Session is killed at the offer
-- **WHEN** the ask session terminates while the bonus offer is displayed (Ctrl+C, timeout, closed terminal) without an explicit accept or decline
+- **WHEN** the ask session terminates while the bonus offer is displayed (Ctrl+C, timeout, closed terminal window) without an explicit accept or decline
 - **THEN** no decline is recorded for the concept and the concept becomes eligible again one day after the offer was served
 
 #### Scenario: Offer is accepted

@@ -11,8 +11,10 @@ proposal.md — Why):
 - The difficulty pipeline already has a concept-injection point:
   `Resolution.FocusConcepts` rides into `SynthesisRequest`, and the resolved
   level rides out in the queued `question_events` payload. A resurfaced
-  concept is just a focus concept that arrived via the scheduler instead of
-  via weakness detection.
+  concept rides the same injection point but arrives via the scheduler
+  instead of via weakness detection — it is not a Focus Concept (no
+  demonstrated weakness), and unlike a Focus Concept it must never be
+  dropped from the feed.
 - Concept identity is user-scoped at `concept_registry` (ADR 0004: weaknesses
   follow the learner across repos); sightings and question tables are
   repo+branch scoped.
