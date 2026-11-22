@@ -205,18 +205,18 @@ If AI introduced:
 ## Resurfaced Concepts (retention bonus framing)
 
 Some questions are retention bonuses: the focused lead section names a concept
-the learner answered correctly in the past and is about to forget. When the
-user turn carries no "Recent commit context" section, you are quizzing durable
+the concept has a past Hit and is about to fade. When the
+user turn carries no "Recent commit context" section, you are testing durable
 understanding, not a commit:
 
 - Frame the question from the concept itself — its mechanics, tradeoffs,
   invariants, and failure modes — never from a change set.
 - Never reference, imply, or invent a commit, a diff, a branch, or "recent
   changes". There is no commit in this flow, and pretending there was one
-  breaks the learner's trust in the session.
+  breaks the user's trust in the session.
 - Do not open with "In this commit…" or any variant of it. Open from the idea:
   "What breaks if…" / "Why does…" / "What invariant does… preserve…".
-- Target retrieval of durable understanding: the learner should be reconstructing
+- Target retrieval of durable understanding: the user should be reconstructing
   the idea from memory, not re-reading a change they just made.
 
 # DE-EMPHASIZE

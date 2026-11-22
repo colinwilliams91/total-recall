@@ -506,9 +506,9 @@ func (s *Server) handleRecallStale(w http.ResponseWriter, r *http.Request) {
 
 // ── bonus offer routes (resurfacing) ─────────────────────────────────────────
 
-// The bonus surface is the ask session's opt-in retention offer. The offer is
-// shell-only by design — MCP surfaces keep their recall_next / recall_select
-// contract untouched. Serving an offer IS the defer: the concept's
+// The bonus offer is the ask session's opt-in retention prompt. It is
+// shell-only by design — the MCP Delivery Surface keeps its recall_next /
+// recall_select contract untouched. Serving an offer IS the defer: the concept's
 // next-eligible time moves one day out at serve time, so a session killed at
 // the offer is a silent defer with no decline.
 
@@ -545,7 +545,7 @@ func (s *Server) handleRecallBonus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRecallBonusDecline records an explicit decline: count incremented
-// (third → declined-out), the one-day defer restated. The client's n keypress
+// (third → declined-out); the serve-time defer from the offer already stands. The client's n keypress
 // lands here; the session kill path posts nothing at all.
 func (s *Server) handleRecallBonusDecline(w http.ResponseWriter, r *http.Request) {
 	if s.store == nil {
@@ -574,7 +574,7 @@ func (s *Server) handleRecallBonusDecline(w http.ResponseWriter, r *http.Request
 // handleRecallBonusAccept synthesizes and stores the bonus question for the
 // accepted concept — a fresh question at the session's current adaptive level
 // (read from the last answered question's queued payload), no diff snippet, no
-// commit context — already delivered to this session (claimed_by shell), and
+// commit context — already delivered to this session (delivered event actor shell), and
 // returns it in the response. No second dequeue happens. Synthesis failure is
 // a silent defer: 204, no decline, no exit; the serve-time defer stands.
 func (s *Server) handleRecallBonusAccept(w http.ResponseWriter, r *http.Request) {
@@ -655,7 +655,7 @@ func (s *Server) handleRecallBonusAccept(w http.ResponseWriter, r *http.Request)
 	// Provenance is the due concept only: the bonus answer's answered-out exit
 	// keys off this join, so feeding the whole feed here would exit unrelated
 	// concepts. The origin marker in the queued payload is the stats
-	// provenance (diff-question accuracy vs retention-question accuracy).
+	// provenance (commit-question accuracy vs bonus-question accuracy).
 	meta := cache.ResolutionMeta{Difficulty: level, Origin: cache.ResurfacedOrigin}
 	questionID, err := s.store.SaveQuestionWithResolution(r.Context(), body.Repo, body.Branch, q.Question, cacheChoices, "multiple_choice",
 		[]cache.ConceptRef{{Slug: body.Slug, Weight: 1.0}}, meta)

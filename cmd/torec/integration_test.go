@@ -2256,7 +2256,7 @@ func TestRecallBonusAcceptSynthesizesAndDelivers(t *testing.T) {
 		t.Fatalf("read delivered event: %v", err)
 	}
 	if actor != "shell" {
-		t.Fatalf("expected claimed_by shell, got %q", actor)
+		t.Fatalf("expected delivered event actor shell, got %q", actor)
 	}
 	var payload sql.NullString
 	if err := db.QueryRowContext(ctx,
@@ -2408,7 +2408,7 @@ func TestMCPContractUnchangedWithDueConcept(t *testing.T) {
 	if err := json.Unmarshal([]byte(toolText(t, selectResult)), &sel); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	assertExactKeys(t, "recall_select", sel, "ok", "correct", "correct_index", "correct_answer")
+	assertExactKeys(t, "recall_select", sel, "ok", "correct", "correct_index", "correct_answer", "feedback")
 
 	// recall://queue keeps its shape — depth and next preview, no bonus fields.
 	rr, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: "recall://queue?repo=" + url.QueryEscape("/repo/test") + "&branch=main"})
@@ -2499,7 +2499,7 @@ func TestResurfacingHeadlessLoop(t *testing.T) {
 	resp.Body.Close()
 	commitQ := waitForUndeliveredQuestion(t, store, "/repo/test")
 
-	// 2. The learner answers the commit question correctly.
+	// 2. The user records a Hit on the Commit Question.
 	claim := mustGET(t, baseURL, "/recall/next?repo=/repo/test&branch=main")
 	var claimed struct {
 		ID int64 `json:"id"`
@@ -2535,7 +2535,7 @@ func TestResurfacingHeadlessLoop(t *testing.T) {
 	probe := mustGET(t, baseURL, "/recall/bonus")
 	probe.Body.Close()
 	if probe.StatusCode != http.StatusNoContent {
-		t.Fatalf("expected 204 before the decay point, got %d", probe.StatusCode)
+		t.Fatalf("expected 204 before the Retention Interval elapses, got %d", probe.StatusCode)
 	}
 
 	// 5. Fast-forward the store clock: the concept is now due.

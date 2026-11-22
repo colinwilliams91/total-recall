@@ -376,7 +376,7 @@ func (m askModel) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateOffer is the bonus-offer interaction: y accepts (synthesis runs behind
 // the thinking animation), n posts the decline, and q/Esc/Ctrl+C (or any
-// terminal death) ends the session without posting anything — the daemon's
+// terminal closed) ends the session without posting anything — the daemon's
 // serve-time defer already fired.
 func (m askModel) updateOffer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {

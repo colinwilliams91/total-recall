@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS question_events (
 `
 
 	// resurfacingTableSQL is purely additive scheduler state: keyed on the
-	// user-scoped registry slug, so eligibility follows the learner across
+	// user-scoped registry slug, so eligibility follows the user across
 	// repos and branches. Rows are written at answer time and read at ask
 	// time; exit_reason is the terminal marker that prunes eligibility
 	// (never resurrected by later answers).
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS resurfacing (
 `
 )
 
-// Resurfacing exit states and scheduling constants. The interval ladder is a
+// Resurfacing exit states and scheduling constants. The Retention Interval is a
 // flat table keyed by the answered question's resolved difficulty — a single
 // review per concept gives SM-2's machinery no data, so the values are
 // documented constants, deliberately not a formula.
@@ -568,8 +568,8 @@ type ConceptRef struct {
 // question_events row's payload: the resolved difficulty, the fired resolver
 // signals, and (for bonus questions) the resurfaced origin marker. It is the
 // spine operator debugging and future resolvers correlate level↔outcome
-// through, and the record the answer-time seeding reads the ladder level
-// from.
+// through, and the record the answer-time seeding reads the Difficulty
+// Level from.
 type ResolutionMeta struct {
 	Difficulty string
 	Signals    []string
@@ -1052,7 +1052,7 @@ type queuedEventPayload struct {
 }
 
 // parseQueuedEventPayload decodes a queued payload value. Absent or
-// unparseable payloads decode to the zero value — the ladder treats an empty
+// unparseable payloads decode to the zero value — the Retention Interval treats an empty
 // difficulty as intermediate and a blank origin as a commit-diff question.
 func parseQueuedEventPayload(raw sql.NullString) queuedEventPayload {
 	var p queuedEventPayload
@@ -1063,8 +1063,9 @@ func parseQueuedEventPayload(raw sql.NullString) queuedEventPayload {
 }
 
 // resurfacingIntervalDays maps the answered question's resolved difficulty
-// onto the flat ladder. Unknown or missing levels land on intermediate — an
-// unscheduled concept still gets a sane decay window, never none.
+// onto the flat Retention Interval. Unknown or missing levels land on
+// intermediate — an unscheduled concept still gets a sane default window,
+// never none.
 func resurfacingIntervalDays(level string) int {
 	switch level {
 	case "easy":
@@ -1219,7 +1220,7 @@ LIMIT 1`, time.Now().UTC())
 
 // DeferBonusOffer applies the serve-time defer: the served concept's
 // next-eligible time moves one day past now and the resurface is counted.
-// This fires on serve, before the learner answers — a session killed at the
+// This fires on serve, before the user answers — a session killed at the
 // offer is a silent defer with no decline recorded, which is why the defer
 // lives on the daemon side of the offer.
 func (s *Store) DeferBonusOffer(ctx context.Context, slug string) error {
@@ -1303,7 +1304,7 @@ WHERE r.slug = ? AND r.exit_reason IS NULL`, slug).Scan(&prose)
 // LastAnsweredDifficulty reads the resolved difficulty from the most recent
 // answered question's queued-event payload for the working surface — the
 // session's current adaptive level, the same value that shaped the question
-// the learner just answered. ok=false (and intermediate by convention at the
+// the user just answered. ok=false (and intermediate by convention at the
 // caller) when no answered history exists.
 func (s *Store) LastAnsweredDifficulty(ctx context.Context, repo, branch string) (string, bool, error) {
 	if repo == "" || branch == "" {

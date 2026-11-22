@@ -25,7 +25,7 @@ tests and the offer-view golden file in `cmd/torec/ask_test.go` / `golden_test.g
 2. **Correct answer → seeding.** `POST /recall/select` with the correct choice
    (index 2 — the engine shuffles choice order) returned `correct: true`, and
    the answer transaction seeded two scheduler rows (the question's provenance
-   concepts), both at the intermediate ladder:
+   concepts), both at the intermediate Retention Interval:
 
    ```
    slug                    seeded_at            next_eligible        interval declined resurfaced exit
@@ -33,7 +33,7 @@ tests and the offer-view golden file in `cmd/torec/ask_test.go` / `golden_test.g
    version_control_basics  2026-11-19 22:24:13  2026-11-26 22:24:13  7        0        0          NULL
    ```
 
-3. **Probe before decay → no offer.** `GET /recall/bonus` → `204` (nothing due).
+3. **Probe before the Retention Interval elapses → no offer.** `GET /recall/bonus` → `204` (nothing due).
 4. **Clock fast-forward → offer + serve-time defer.** After moving
    `next_eligible_after` two days into the past, `GET /recall/bonus` → `200`
    `{"slug":"code_commenting","prose":"code_commenting"}`; the serve pushed the
@@ -65,5 +65,5 @@ tests and the offer-view golden file in `cmd/torec/ask_test.go` / `golden_test.g
   prose equals the slug (`code_commenting`). TUI framing still labels it as a
   retention bonus, and richer extractor prose flows through unchanged.
 - Cross-repo eligibility is by construction (user-scoped scheduler rows); this
-  walkthrough used one repo, and the integration tests cover the cross-surface
+  walkthrough used one repo, and the integration tests cover the cross-repo case
   selection.

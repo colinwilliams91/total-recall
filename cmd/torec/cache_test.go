@@ -2000,14 +2000,14 @@ func TestResurfacingTableMigratesExistingDB(t *testing.T) {
 	answerClaimed(t, s, ctx, claimed2, true)
 	row := readResurfacingRow(t, db, "legacy_concept")
 	if row.IntervalDays != 14 {
-		t.Fatalf("expected hard ladder interval 14 on migrated db, got %d", row.IntervalDays)
+		t.Fatalf("expected hard interval 14 on migrated db, got %d", row.IntervalDays)
 	}
 }
 
-// TestResurfacingIntervalLadder is the table-driven ladder check: the flat
+// TestResurfacingInterval is the table-driven interval check: the flat
 // intervals keyed by the answered question's resolved difficulty, unknown →
 // intermediate.
-func TestResurfacingIntervalLadder(t *testing.T) {
+func TestResurfacingInterval(t *testing.T) {
 	cases := []struct {
 		level    string
 		interval int
@@ -2022,13 +2022,13 @@ func TestResurfacingIntervalLadder(t *testing.T) {
 		t.Run("level="+tc.level, func(t *testing.T) {
 			s := setupResurfacingStore(t)
 			db := openRawDB(t)
-			seedRegistryConcept(t, db, "ladder_concept", "ladder prose")
+			seedRegistryConcept(t, db, "interval_concept", "interval prose")
 
-			claimed := saveQuestionWithConcepts(t, s, "ladder question "+tc.level,
-				[]string{"ladder_concept"}, cache.ResolutionMeta{Difficulty: tc.level})
+			claimed := saveQuestionWithConcepts(t, s, "interval question "+tc.level,
+				[]string{"interval_concept"}, cache.ResolutionMeta{Difficulty: tc.level})
 			answerClaimed(t, s, context.Background(), claimed, true)
 
-			row := readResurfacingRow(t, db, "ladder_concept")
+			row := readResurfacingRow(t, db, "interval_concept")
 			if row.IntervalDays != tc.interval {
 				t.Fatalf("expected interval %d for level %q, got %d", tc.interval, tc.level, row.IntervalDays)
 			}
@@ -2041,7 +2041,7 @@ func TestResurfacingIntervalLadder(t *testing.T) {
 }
 
 // TestResurfacingSeedOnCorrectAnswer verifies answer-time seeding writes one
-// row per concept of a correctly answered question, in the same write as the
+// row per concept of a question that recorded a Hit, in the same write as the
 // answer.
 func TestResurfacingSeedOnCorrectAnswer(t *testing.T) {
 	s := setupResurfacingStore(t)
@@ -2312,7 +2312,7 @@ func TestDeferBonusOffer(t *testing.T) {
 	}
 }
 
-// TestRecordBonusDeclineCap verifies the decline ladder: count increments
+// TestRecordBonusDeclineCap verifies the decline cap: count increments
 // with the defer restated, the third decline exits declined-out, and an
 // unknown slug is reported as not-found.
 func TestRecordBonusDeclineCap(t *testing.T) {
