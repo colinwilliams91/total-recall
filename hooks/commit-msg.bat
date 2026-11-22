@@ -1,7 +1,7 @@
 @echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'torec init' to update.
+:: Re-run 'torec repo' to update.
 
 :: No-op: pre-commit is the only dispatch point on a git commit. Commit-msg
 :: previously dispatched too, so a single commit with the daemon down printed
