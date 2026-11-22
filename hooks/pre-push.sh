@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # total-recall managed
 # Managed by Total Recall — do not edit this block manually.
-# Re-run 'torec init' to update.
+# Re-run 'torec repo' to update.
 
 DAEMON_URL="http://localhost:7331"
 HOOK_TIMEOUT=2

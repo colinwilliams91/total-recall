@@ -71,4 +71,4 @@ Specs describe how the loader works; they do not enshrine in prose that the capa
 
 ## Existing ADRs
 
-`0001`–`0003` predate this write-up and follow it in form and spirit. One known variance: `0002` predates the "Full design → openspec change" footer convention and hands its context entirely to prose. Treat them as canonical examples; do not retrofit the variance.
+`0001`–`0003` predate this write-up and follow it in form and spirit. One known variance: `0002` predates the "Full design → openspec change" footer convention and hands its context entirely to prose. `0005` records a second deliberate variance: the MCP v1 wire contract spans multiple capabilities (behavior in the `question-delivery` and `mcp-server` specs), so its full design lives in DELIVERY.md rather than one change's `design.md` — recorded in the ADR's own footer. Treat them as canonical examples; do not retrofit the variances.

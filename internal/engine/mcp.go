@@ -154,11 +154,17 @@ func buildMCPServer(store *cache.Store, cfg *config.Config) *mcp.Server {
 			log.Printf("[mcp] recall_select error: %v", err)
 			return nil, nil, err
 		}
+		// feedback rides the response as null for MCP parity with the REST
+		// /recall/select payload (issue #33): MCP clients can parse one
+		// canonical submit-response shape. MCP never generates AI feedback
+		// — the recall_workflow prompt asks the agent to explain itself —
+		// so the field stays null on this path.
 		b, _ := json.Marshal(map[string]any{
 			"ok":             true,
 			"correct":        correct,
 			"correct_index":  correctIndex,
 			"correct_answer": correctText,
+			"feedback":       nil,
 		})
 		return textResult(string(b)), nil, nil
 	})

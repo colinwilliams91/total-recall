@@ -9,11 +9,11 @@ Total Recall is a single Go binary distributed via `go install` (or release arch
 | Layer | Owned by | Lifetime | Reads from | Writes to |
 |---|---|---|---|---|
 | **Binary** (`torec` / `torec.exe`) | One per user; on `$GOBIN`, or `$(go env GOPATH)/bin` when `$GOBIN` is unset | Until re-install | Nothing at runtime (stateless) | Invoked for `init`, `serve`, `ask`, `config` |
-| **User config** (`~/.tr/config.yaml`) | One per user | Until deleted | Runtime config loader | Written by `tr init`; never by hooks |
+| **User config** (`~/.tr/config.yaml`) | One per user | Until deleted | Runtime config loader | Written by `torec init`; never by hooks |
 | **User cache** (`~/.tr/memory.db`) | One per user | Until deleted | Daemon (read concepts); write concepts/answers | Daemon only |
-| **Repo config** (`.tr.yaml`) | One per repo | Until deleted | Runtime config loader | Written by `tr repo` |
+| **Repo config** (`.tr.yaml`) | One per repo | Until deleted | Runtime config loader | Written by `torec repo` |
 | **Git hooks** (`.git/hooks/*`) | One per gitdir | Until overwritten | Fired by Git | Written by `torec repo` |
-| **Daemon** (`total-recall serve` on `:7331`) | One per machine | Process lifetime | User cache + AI provider | User cache |
+| **Daemon** (`torec serve` on `:7331`) | One per machine | Process lifetime | User cache + AI provider | User cache |
 
 The binary is stateless: invoking it from any path executes the same logic against the same user-level state. Its compile-time-baked constants (hook bodies, daemon URL) are emitted into the installable artifacts at `torec repo` time, then the binary is out of the loop until the next `torec repo`.
 

@@ -1,7 +1,7 @@
 @echo off
 :: total-recall managed
 :: Managed by Total Recall — do not edit this block manually.
-:: Re-run 'torec init' to update.
+:: Re-run 'torec repo' to update.
 
 set "DAEMON_URL=http://localhost:7331"
 
