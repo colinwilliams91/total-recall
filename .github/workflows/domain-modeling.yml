@@ -59,7 +59,7 @@ jobs:
               git diff origin/main...HEAD
 
             Audit only for domain-modeling findings; do not review code quality
-            or mechanics. Report as a concise list:
+            or mechanics. Report as an exhaustive list:
 
             1. Vocabulary conflicts: diffs whose language contradicts definitions
                or _Avoid_ words in GLOSSARY.md, or that introduce a second name
@@ -77,7 +77,7 @@ jobs:
 
             For each finding give file:line, the violating text, and the
             one-line fix the developer should make. If there are no findings,
-            say so in one line and report finding category 1-4 as "none".
+            say so in one line and report finding category 1-4 as "NONE".
 
             The developer is responsible for making the changes; you must not
             modify any files or commit anything. Findings only.

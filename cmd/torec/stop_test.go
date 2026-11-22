@@ -36,19 +36,6 @@ func pidFileGone(t *testing.T, path string) bool {
 	return os.IsNotExist(err)
 }
 
-func readPidFile(t *testing.T) (string, string) {
-	t.Helper()
-	path, err := config.DaemonPidPath()
-	if err != nil {
-		t.Fatalf("DaemonPidPath: %v", err)
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read pidfile: %v", err)
-	}
-	return path, strings.TrimSpace(string(b))
-}
-
 // TestStopIdentityProbeTable exercises the identity probe directly: the test
 // process itself (a torec test binary) must identify as this app's daemon.
 func TestStopIdentityProbeTable(t *testing.T) {

@@ -12,12 +12,23 @@
 
 `torec init` uses `huh.NewForm()` which requires a real TTY for its interactive
 mode. The `huh` library has an accessible mode (`TERM=dumb`) that switches to
-plain `bufio.Scanner`-based stdin/stdout I/O, but it has a per-field
-`bufio.Scanner` buffering bug: the first field's scanner buffers all available
-input, and subsequent fields get EOF and silently fall back to defaults.
+plain `bufio.Scanner`-based stdin/stdout I/O. That mode used to have a
+per-field `bufio.Scanner` buffering bug — the first field's scanner buffered
+all available input, and subsequent fields got EOF and silently fell back to
+defaults — which made piped-input automation unreliable.
 
-This makes piped-input automation unreliable. Until `huh` fixes the scanner
-sharing (or we adopt a PTY library), `torec init` remains a manual test.
+**Fixed (2026-11-20):** `cmd/torec/form.go` wraps huh forms with a shared
+`lineReader` that releases exactly one input line per `Read`, so no per-prompt
+scanner can over-read. Piped input now flows through all init fields:
+
+```bash
+printf 'n\n4\nenv:QWEN_API_KEY\nqwen3.7-max\n' | \
+  TERM=dumb TR_HOME=/tmp/scratch-tr ./bin/torec init
+```
+
+The interactive TTY flow itself is still not exercisable from automation
+(huh's non-accessible mode needs a real terminal), so `manual-init.ps1`
+remains for that path.
 
 ## Running the manual test
 

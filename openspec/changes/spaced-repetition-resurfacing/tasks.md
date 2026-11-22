@@ -3,15 +3,15 @@
 ## 1. Store foundation (scheduler state)
 
 - [x] 1.1 Add the `resurfacing` table to `internal/cache/store.go` via `CREATE TABLE IF NOT EXISTS` (additive — no `ALTER`, no `memory.db` reset) with an index on `next_eligible_after` for the due lookup, and verify an existing `memory.db` opens and migrates without deletion by running the cache tests against a pre-seeded temp DB
-- [x] 1.2 Implement answer-time seeding: on a correct answer (same transaction as the answer write), upsert one row per concept slug — `next_eligible_after = now + ladder(level)`, `interval_days` recorded, decline count cleared on renewal, terminal rows never resurrected; verify with `cache_test.go` cases for seed / renew-clears-declines / exited-stays-exited, reading the answered question's difficulty from its queued `question_events` payload
-- [x] 1.3 Implement the ladder and state transitions: easy=3 / intermediate=7 / hard=14 (unknown → intermediate), serve-time defer (+1 day, applied on offer), decline count with cap 3 → `declined-out`, answered-bonus → `answered-out`; verify with table-driven `cache_test.go` cases per the spec's ladder and decline scenarios
+- [x] 1.2 Implement answer-time seeding: on a Hit (same transaction as the answer write), upsert one row per concept slug — `next_eligible_after = now + interval(level)`, `interval_days` recorded, decline count cleared on renewal, terminal rows never resurrected; verify with `cache_test.go` cases for seed / renew-clears-declines / exited-stays-exited, reading the answered question's Difficulty Level from its queued `question_events` payload
+- [x] 1.3 Implement the Retention Interval and state transitions: easy=3 / intermediate=7 / hard=14 (unknown → intermediate), serve-time defer (+1 day, applied on offer), decline count with cap 3 → `declined-out`, answered-bonus → `answered-out`; verify with table-driven `cache_test.go` cases per the spec's Retention Interval and decline scenarios
 
 ## 2. Daemon bonus contract
 
 - [x] 2.1 Implement `GET /recall/bonus`: enabled + due concept → serve the most-overdue (largest overage, oldest-seeded tiebreak), apply the serve-time defer, return offer payload (concept slug + prose); none due or `recall.resurfacing: false` → 204; verify with headless integration tests in `integration_test.go` (startTestDaemon + seed via the store) covering due / none-due / disabled / second-request-already-deferred
-- [x] 2.2 Implement decline recording and the accept flow on the same route family: decline increments the count (third → `declined-out`); accept synthesizes and stores the question (`claimed_by: shell`, queued event payload `origin: resurfaced`) and returns it in the response — no second dequeue; verify with integration tests for decline-1/decline-3 and accept-return
+- [x] 2.2 Implement decline recording and the accept flow on the same route family: decline increments the count (third → `declined-out`); accept synthesizes and stores the question (delivered event actor `shell`, queued event payload `origin: resurfaced`) and returns it in the response — no second dequeue; verify with integration tests for decline-1/decline-3 and accept-return
 - [x] 2.3 Wire the resurfaced-concept synthesis path in `internal/recall`: no diff snippet, no commit context, concept passed the way `FocusConcepts` is, difficulty = the session's current adaptive resolution; synthesis failure returns a no-question outcome (serve-time defer stands, no decline); verify with engine-level tests asserting the composed synthesis request and the failure path
-- [x] 2.4 Confirm the MCP surface is untouched: `recall_next` / `recall_answer` / resources produce identical contracts with resurfacing enabled and a concept due; verify with an integration test asserting unchanged responses
+- [x] 2.4 Confirm the MCP Delivery Surface is untouched: `recall_next` / `recall_select` / resources produce identical contracts with resurfacing enabled and a concept due; verify with an integration test asserting unchanged responses
 
 ## 3. Config and policy
 
@@ -26,7 +26,7 @@
 
 ## 5. End-to-end validation
 
-- [x] 5.1 Headless e2e: seed a concept, answer it correctly, manipulate the store clock to make it due, drive the daemon hook + ask HTTP contract end to end (correct answer → offer served → accept → fresh question → answer → `answered-out`), and separately the decline-to-`declined-out` path; verify with an integration test asserting store state at each step
-- [x] 5.2 Manual e2e: drive the flow against a scratch data dir (`TR_HOME`) with a real provider per `scripts/e2e/README.md` — commit → question → bonus offer → accept → retention question → stats-visible provenance; record the walkthrough output in the change notes
-- [x] 5.3 Update `GLOSSARY.md` if new domain terms entered the ubiquitous language (e.g. "resurfacing", "bonus offer", "decline-out"), per its vocabulary-only style; verify the domain-modeling audit passes locally
+- [x] 5.1 Headless e2e: record a Hit on a concept, manipulate the store clock to make it due, drive the daemon hook + ask HTTP contract end to end (Hit → offer served → accept → fresh question → selection → `answered-out`), and separately the decline-to-`declined-out` path; verify with an integration test asserting store state at each step
+- [x] 5.2 Manual e2e: drive the flow against a scratch data dir (`TR_HOME`) with a real provider per `scripts/e2e/README.md` — commit → question → bonus offer → accept → bonus question → stats-visible provenance; record the walkthrough output in the change notes
+- [x] 5.3 Update `GLOSSARY.md` only for terms the implementation surfaces that are not already pinned (Resurfacing, Retention Interval, Bonus Offer, Bonus Question, Commit Question, Exit are pinned in GLOSSARY.md on main (Wave A vocabulary work #70; Eligible and Due added with the planning branch, #72); the exit state is spelled `declined-out`), per its vocabulary-only style; verify the domain-modeling audit passes locally
 - [x] 5.4 Full gate: `go build ./... && go vet ./... && go test ./...` green; changelog entry drafted under Unreleased

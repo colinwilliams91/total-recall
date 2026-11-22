@@ -53,7 +53,13 @@ const (
 	// documented on ai.DefaultHTTPTimeout.
 	defaultTimeout = 60 * time.Second
 	animTick       = 400 * time.Millisecond
-	caughtUpWindow = 4 * time.Second
+	// caughtUpWindow is how long before the poll timeout the "all caught up"
+	// message replaces the thinking animation. Shorter than the old 4s: the
+	// line carries no new information — it only reassures the user the hook
+	// ran — so lingering four seconds made the post-commit pause feel broken
+	// rather than calm. Three seconds keeps it readable without reading as a
+	// hang (issue #30).
+	caughtUpWindow = 3 * time.Second
 )
 
 var animFrames = []string{"Thinking.", "Thinking..", "Thinking..."}
@@ -131,7 +137,6 @@ type questionMsg struct {
 }
 type noQuestionMsg struct{}
 type daemonUnreachableMsg struct{}
-type answerPostedMsg struct{}
 type feedbackMsg struct {
 	correct     bool
 	correctText string

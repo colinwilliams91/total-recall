@@ -18,14 +18,14 @@ After a choice keypress, `torec ask` SHALL transition to `stateFeedback` and ren
 ## ADDED Requirements
 
 ### Requirement: Bonus offer is presented after the commit question resolves
-When a bonus offer has been served (a due concept returned by the daemon), `torec ask` SHALL present an offer to the learner after the commit question's feedback renders, clearly framed as a knowledge-retention bonus (not a commit question). The offer SHALL accept `y` (accept) and `n` (decline). Pressing `q`/`Esc` at the offer, or session termination of any other kind (Ctrl+C, timeout, closed terminal), SHALL end the session without recording a decline and without posting anything — the daemon's serve-time defer already stands.
+When a bonus offer has been served (a due concept returned by the daemon), `torec ask` SHALL present an offer to the user after the commit question's feedback renders, clearly framed as a knowledge-retention bonus (not a commit question). The offer SHALL accept `y` (accept) and `n` (decline). Pressing `q`/`Esc` at the offer, or session termination of any other kind (Ctrl+C, timeout, closed terminal window), SHALL end the session without recording a decline and without posting anything — the daemon's serve-time defer already stands.
 
-#### Scenario: Learner accepts with y
-- **WHEN** the learner presses `y` at the bonus offer
+#### Scenario: User accepts with y
+- **WHEN** the user presses `y` at the bonus offer
 - **THEN** the session proceeds to fetch and render the bonus question
 
-#### Scenario: Learner declines with n
-- **WHEN** the learner presses `n` at the bonus offer
+#### Scenario: User declines with n
+- **WHEN** the user presses `n` at the bonus offer
 - **THEN** the session posts the decline to the daemon, the concept's decline count increments, and the session ends
 
 #### Scenario: Session killed at the offer
@@ -33,16 +33,16 @@ When a bonus offer has been served (a due concept returned by the daemon), `tore
 - **THEN** nothing is posted, no decline is recorded, and the concept remains eligible after its serve-time defer
 
 ### Requirement: The bonus question renders and resolves like a commit question
-After acceptance, `torec ask` SHALL fetch the freshly synthesized bonus question and render it with the existing question interaction (numbered choices, Enter to skip, q/Esc silent exit), then render the verdict and feedback through the existing feedback flow. The bonus question's answer or skip SHALL be recorded through the same answer endpoint as commit questions.
+After acceptance, `torec ask` SHALL fetch the freshly synthesized bonus question and render it with the existing question interaction (numbered choices, Enter to skip, q/Esc silent exit), then render the verdict and feedback through the existing feedback flow. The bonus question's selection or skip SHALL be recorded through the same endpoint as Commit Questions.
 
 #### Scenario: Bonus question answered
-- **WHEN** the learner selects a choice on the rendered bonus question
-- **THEN** the answer is recorded via the same answer POST as commit questions, the verdict and feedback render, and afterwards the session ends
+- **WHEN** the user selects a choice on the rendered bonus question
+- **THEN** the selection is recorded via the same POST as Commit Questions, the verdict and feedback render, and afterwards the session ends
 
 #### Scenario: Bonus question skipped
-- **WHEN** the learner presses Enter on the bonus question
+- **WHEN** the user presses Enter on the bonus question
 - **THEN** the skip is recorded like any skip, the acknowledgement renders, and afterwards the session ends
 
 #### Scenario: Bonus fetch fails after acceptance
-- **WHEN** the learner accepts but the bonus question cannot be fetched (synthesis or daemon error)
+- **WHEN** the user accepts but the bonus question cannot be fetched (synthesis or daemon error)
 - **THEN** the session ends without rendering a question and without recording a decline — the concept's serve-time defer stands

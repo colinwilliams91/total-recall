@@ -19,6 +19,9 @@ func TestDefaultUserConfigSanity(t *testing.T) {
 	if cfg.AI.Model != "claude-sonnet-4-5" {
 		t.Fatalf("expected model claude-sonnet-4-5, got %q", cfg.AI.Model)
 	}
+	if cfg.AI.APIKey != "env:ANTHROPIC_API_KEY" {
+		t.Fatalf("expected api-key env:ANTHROPIC_API_KEY (issue #34: derived from the default provider), got %q", cfg.AI.APIKey)
+	}
 	if cfg.Privacy.ConversationAnalysis {
 		t.Fatal("expected conversation_analysis to be false by default")
 	}
@@ -27,6 +30,78 @@ func TestDefaultUserConfigSanity(t *testing.T) {
 	}
 	if cfg.Recall.MaxQuestions != 1 {
 		t.Fatalf("expected max_questions 1, got %d", cfg.Recall.MaxQuestions)
+	}
+}
+
+// TestDefaultAPIKeyEnvFollowsProvider pins the issue #34 fix: the zero-config
+// api-key pattern is derived from the provider name rather than hardcoded, so
+// the default config can never point at a stale provider's env var.
+func TestDefaultAPIKeyEnvFollowsProvider(t *testing.T) {
+	cases := map[string]string{
+		"anthropic":  "env:ANTHROPIC_API_KEY",
+		"openai":     "env:OPENAI_API_KEY",
+		"openrouter": "env:OPENROUTER_API_KEY",
+		"opencode":   "env:OPENCODE_API_KEY",
+		"lm-studio":  "env:LM_STUDIO_API_KEY",
+	}
+	for provider, want := range cases {
+		if got := config.DefaultAPIKeyEnv(provider); got != want {
+			t.Errorf("DefaultAPIKeyEnv(%q) = %q, want %q", provider, got, want)
+		}
+	}
+}
+
+// TestIsDefaultAPIKeyEnv pins the placeholder-detection rule used to re-key
+// when the user switches providers in init: only unmodified default
+// placeholders match; custom env vars and raw keys must pass through.
+func TestIsDefaultAPIKeyEnv(t *testing.T) {
+	yes := []string{
+		"env:ANTHROPIC_API_KEY",
+		"env:OPENAI_API_KEY",
+		"env:LM_STUDIO_API_KEY",
+	}
+	for _, s := range yes {
+		if !config.IsDefaultAPIKeyEnv(s) {
+			t.Errorf("IsDefaultAPIKeyEnv(%q) = false, want true", s)
+		}
+	}
+	no := []string{
+		"",
+		"env:",
+		"sk-ant-raw-key-value",
+		"env:MY_CUSTOM_VAR",
+		"env:anthropic_api_key",
+		"env:MY_COMPANY_API_KEY",
+		"env:ANTHROPIC_API_KEY_EXTRA",
+		"ENV:ANTHROPIC_API_KEY",
+	}
+	for _, s := range no {
+		if config.IsDefaultAPIKeyEnv(s) {
+			t.Errorf("IsDefaultAPIKeyEnv(%q) = true, want false", s)
+		}
+	}
+}
+
+// TestPrefillAPIKey covers the init-side re-key behavior for issue #34:
+// switching providers carries a stale default placeholder to the new
+// provider's env var, while user-entered values survive untouched.
+func TestPrefillAPIKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		existing string
+		provider string
+		want     string
+	}{
+		{"empty prefills new provider", "", "openai", "env:OPENAI_API_KEY"},
+		{"stale placeholder re-keys", "env:ANTHROPIC_API_KEY", "openrouter", "env:OPENROUTER_API_KEY"},
+		{"same provider stable", "env:ANTHROPIC_API_KEY", "anthropic", "env:ANTHROPIC_API_KEY"},
+		{"custom env var preserved", "env:MY_CUSTOM_VAR", "openai", "env:MY_CUSTOM_VAR"},
+		{"raw key preserved", "sk-ant-raw-key", "openai", "sk-ant-raw-key"},
+	}
+	for _, tc := range cases {
+		if got := prefillAPIKey(tc.existing, tc.provider); got != tc.want {
+			t.Errorf("%s: prefillAPIKey(%q, %q) = %q, want %q", tc.name, tc.existing, tc.provider, got, tc.want)
+		}
 	}
 }
 
