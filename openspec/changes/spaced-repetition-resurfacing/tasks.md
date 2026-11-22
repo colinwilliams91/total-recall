@@ -27,6 +27,6 @@
 ## 5. End-to-end validation
 
 - [ ] 5.1 Headless e2e: record a Hit on a concept, manipulate the store clock to make it due, drive the daemon hook + ask HTTP contract end to end (Hit → offer served → accept → fresh question → selection → `answered-out`), and separately the decline-to-`declined-out` path; verify with an integration test asserting store state at each step
-- [ ] 5.2 Manual e2e: drive the flow against a scratch data dir (`TR_HOME`) with a real provider per `scripts/e2e/README.md` — commit → question → bonus offer → accept → retention question → stats-visible provenance; record the walkthrough output in the change notes
+- [ ] 5.2 Manual e2e: drive the flow against a scratch data dir (`TR_HOME`) with a real provider per `scripts/e2e/README.md` — commit → question → bonus offer → accept → bonus question → stats-visible provenance; record the walkthrough output in the change notes
 - [ ] 5.3 Update `GLOSSARY.md` only for terms the implementation surfaces that are not already pinned (Resurfacing, Retention Interval, Bonus Offer, Bonus Question, Commit Question, Exit are pinned in GLOSSARY.md on main via the Wave A vocabulary work, #70; this change adds Eligible and Due; the exit state is spelled `declined-out`), per its vocabulary-only style; verify the domain-modeling audit passes locally
 - [ ] 5.4 Full gate: `go build ./... && go vet ./... && go test ./...` green; changelog entry drafted under Unreleased

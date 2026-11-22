@@ -19,7 +19,7 @@ the v1.0.0 launch (GTM.md, Wave B) because it is the feature that turns
   (same transaction as the answer write) for every concept of a question that
   records a Hit. Skipped questions and Misses seed nothing — Misses already
   feed the existing weakness loop.
-- **Bonus offer at ask time** — after the commit-diff question is answered in
+- **Bonus offer at ask time** — after the commit question is answered in
   a `torec ask` session, the shell asks:
   "Would you like a bonus question to boost your knowledge retention? y/n".
   `y` synthesizes a fresh question about the due concept (option A — no
