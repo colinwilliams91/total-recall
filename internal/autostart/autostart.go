@@ -1,6 +1,6 @@
-// Package autostart configures the platform's login hook that starts the
-// daemon without user action: a launchd agent on macOS, a systemd user unit
-// on Linux, and a Startup-folder script on Windows. Autostart only launches
+// Package autostart configures the platform's autostart entry that starts
+// the daemon without user action: a launchd agent on macOS, a systemd user
+// unit on Linux, and a Startup-folder script on Windows. Autostart only launches
 // `torec serve` at login; the daemon's own lifecycle (pidfile, `torec stop`)
 // stays authoritative afterwards, so no restart-on-exit supervision is
 // configured — a stopped daemon stays stopped until the next login.
@@ -61,8 +61,8 @@ const startupCmdTemplate = "@echo off\r\n" +
 	"start \"total-recall daemon\" /min \"%s\" serve\r\n"
 
 // SelfPath resolves the absolute, symlink-followed path of the running
-// binary. Autostart entries bake this path in so the login hook execs the
-// same installed binary the user just configured; the symlink resolution
+// binary. Autostart entries bake this path in so the autostart entry execs
+// the same installed binary the user just configured; the symlink resolution
 // matters because package managers (and go install) commonly expose torec
 // through a symlink.
 func SelfPath() (string, error) {
@@ -169,10 +169,11 @@ func Enable() error {
 
 // ServiceEnvAdvisory returns the platform-specific instruction for exposing
 // an env:<VAR>-pattern API key to the login-started daemon, and whether the
-// given api-key is such a pattern at all. Login hooks (a launchd agent, a
-// systemd user unit) do not inherit shell-rc environment, so an env-pattern
-// key resolves to nothing after a reboot unless the variable is visible to
-// the service environment — the daemon would bind :7331 with no provider.
+// given api-key is such a pattern at all. Autostart entries (a launchd
+// agent, a systemd user unit) do not inherit shell-rc environment, so an
+// env-pattern key resolves to nothing after a reboot unless the variable is
+// visible to the service environment — the daemon would bind :7331 with no
+// provider.
 func ServiceEnvAdvisory(apiKey string) (string, bool) {
 	const prefix = "env:"
 	if len(apiKey) <= len(prefix) || apiKey[:len(prefix)] != prefix {
