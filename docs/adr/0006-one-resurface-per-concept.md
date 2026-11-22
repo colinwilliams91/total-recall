@@ -27,7 +27,7 @@ replies, so a killed session is a silent defer with no decline recorded and
 no client callback needed, keeping the client thin and the nudge
 punishment-free; (2) exits are two distinct states — `answered-out`
 (resolution happened) vs `declined-out` (three declines) — so `torec stats`
-can tell retention questions apart from disinterest; (3) a renewed Hit clears
+can tell resolved bonus questions apart from declines (disinterest); (3) a renewed Hit clears
 prior declines and reschedules only while the concept is still in the loop —
 the decline cap punishes continuous disinterest, not one bad week, and never
 undoes an exit.

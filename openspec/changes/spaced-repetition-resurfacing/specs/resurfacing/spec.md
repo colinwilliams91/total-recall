@@ -35,7 +35,7 @@ When the shell ask session requests a bonus offer after resolving its commit que
 
 #### Scenario: A due concept is offered on a commit in another repository
 - **WHEN** a concept seeded from repository A is due and the user commits in repository B, then answers the commit question in the ask session
-- **THEN** the ask session is offered a bonus about that concept (the deliberate exception to commit-diff relevance, labeled as a retention bonus)
+- **THEN** the ask session is offered a bonus about that concept (the deliberate exception to commit-diff relevance, labeled as a bonus offer)
 
 #### Scenario: No concept is due
 - **WHEN** the ask session requests a bonus offer and no eligible concept is due
@@ -47,7 +47,7 @@ When the shell ask session requests a bonus offer after resolving its commit que
 
 #### Scenario: MCP agent asks for the next question while a concept is due
 - **WHEN** an MCP client calls `recall_next` while a concept is due for resurfacing
-- **THEN** the MCP response is unchanged by this capability — no bonus offer, no resurfaced question, no new fields
+- **THEN** the MCP response is unchanged by this capability — no bonus offer, no question carrying the resurfaced origin, no new fields
 
 ### Requirement: Serving an offer defers the concept by one day
 When the daemon serves a bonus offer for a concept, it SHALL immediately push the concept's next-eligible time to one day later. This defer applies regardless of what the user does with the offer, so a session that terminates at the offer is a silent defer: no decline is recorded and no offer is re-served before the deferred time.
@@ -72,7 +72,7 @@ When the user explicitly declines an offer, the system SHALL record a decline fo
 - **THEN** the concept exits the loop as declined-out and is never offered again, while remaining distinguishable from concepts that exited by answering
 
 ### Requirement: A renewed correct answer clears prior declines
-When a concept that has recorded declines records a Hit again in a normal (commit-diff) question, the system SHALL reset its schedule from the new answer (due after the Retention Interval) and clear its decline count — the decline cap punishes continuous disinterest, not one bad week. Concepts that have already exited (answered-out or declined-out) SHALL NOT be resurrected by later Hits (see docs/adr/0006).
+When a concept that has recorded declines records a Hit again in a normal commit question, the system SHALL reset its schedule from the new answer (due after the Retention Interval) and clear its decline count — the decline cap punishes continuous disinterest, not one bad week. Concepts that have already exited (answered-out or declined-out) SHALL NOT be resurrected by later Hits (see docs/adr/0006).
 
 #### Scenario: Two declines followed by a fresh correct answer
 - **WHEN** a concept has 2 recorded declines and then records a Hit in a Commit Question
