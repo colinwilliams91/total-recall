@@ -44,7 +44,7 @@ fixed.
 |------|--------|
 | Duplicate daemon advisory on commit (#14) | **Likely live** — on a single commit, `pre-commit` and `commit-msg` hooks each print the no-daemon advisory (`hooks/pre-commit.sh:49`, `hooks/commit-msg.sh:31`); confirm and dedupe |
 | Empty-queue message too long (#30) | **Likely stale** — the caught-up message is now one short line (`cmd/torec/ask.go:61`) and the repo-move advisory was removed (`integration_test.go:807`); verify manually, probably close |
-| MCP/TUI schema normalization (#33) | **Valid** — cross-surface payload consistency remains architectural debt |
+| MCP/TUI schema normalization (#33) | **Valid** — payload consistency across Delivery Surfaces remains architectural debt |
 | Default LLM provider value (#34) | **Valid, small** — config defaults to `anthropic` (`internal/config/config.go:156`); decide the zero-friction default (candidate: OpenRouter free tier for a no-BYOK first run) |
 | golangci errcheck config (#67) | **Valid** — no `.golangci.yml` exists in the tree; add the errcheck exclusions |
 | Stale architecture docs/diagrams (#32) | **Partially stale** — `diagramming-conflicts.txt` exists but docs have been refreshed since June; audit and close |
@@ -89,15 +89,16 @@ Design decisions (resolved in the B1 design doc, on `10-opsx`):
   re-offers. Fits the "thin, no over-engineering" posture and roadmap 4.2's
   "recall debt" framing.
 - **Scheduling state** — scheduler state written at answer time and read at
-  ask time; `question_events` already carries the Selection/Hit/Miss
-  history, and the bonus rides the same synthesis, storage, and delivery
-  flow as commit questions.
+  ask time; `question_events` + `selections` already carry the history
+  Hit/Miss are tallied from, and the bonus rides the same synthesis,
+  storage, and delivery flow as commit questions.
 - **Decline semantics** — serving the offer defers one day even if the
   session dies at the prompt; three declines exit the concept as
   declined-out, distinct from answered-out; a renewed Hit clears prior
-  declines and reschedules.
-- **Surface scope** — bonus offers are shell-session only; the MCP tool and
-  resource contracts stay unchanged.
+  declines and reschedules only while the concept is still in the loop —
+  declined-out concepts stay exited.
+- **Delivery Surface** — bonus offers reach the terminal shell only; the
+  MCP tool and resource contracts stay unchanged.
 - **Policy-asset impact** — the question-generation policy must handle
   "ask about a concept the user hasn't touched recently" (different framing
   than commit-derived concepts).
