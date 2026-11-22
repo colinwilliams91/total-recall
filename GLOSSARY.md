@@ -75,9 +75,15 @@ _Avoid_: bare "surface" (ambiguates the two)
 **Resurfacing**:
 The mechanism that brings a concept back once through the normal ask session: a Hit seeds resurfacing eligibility for that concept (skips and Misses never seed), the elapsed Retention Interval makes it due, and the session may then offer a bonus. Not a second event source — it rides normal commit events.
 
+**Eligible**:
+A concept whose resurfacing row exists and has not exited: seeded only by a Hit, user-scoped, so a concept seeded in one repo can come due on a commit in another.
+
 **Retention Interval**:
 The flat schedule that sets when a resurfacing-eligible concept comes due, keyed by the Difficulty Level its question was answered at, with no growth on re-offers. Auxiliary scheduling, not a difficulty system.
 _Avoid_: decay time, SM-2
+
+**Due**:
+An Eligible concept whose Retention Interval has elapsed — the state a Bonus Offer is made from.
 
 **Bonus Offer**:
 The opt-in prompt the ask session makes for one due concept — most-overdue first — after the Commit Question is resolved. Serving it defers the concept one day regardless of the reply; an explicit decline counts toward the three-decline exit.
