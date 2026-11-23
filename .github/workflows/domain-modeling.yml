@@ -21,10 +21,11 @@
 # is actually in place.
 #
 # `github.run_started_at` does not resolve in this context (renders empty), so
-# the audit window is captured with `date -u` into a file that persists across
-# steps; collapse and enforce both compare comment timestamps against it. With
-# no fresh comment, enforce fails as "audit did not run" rather than judging a
-# stale comment from a previous round.
+# the audit window is captured with `date -u` into $RUNNER_TEMP — outside the
+# worktree on purpose: `opencode github run` checks for a dirty worktree and
+# commits-and-pushes anything untracked it finds, which fails on the
+# credential-less checkout. With no fresh comment, enforce fails as "audit did
+# not run" rather than judging a stale comment from a previous round.
 #
 # Requires one secret: OPENCODE_API_KEY (Settings -> Secrets and variables ->
 # Actions). The audit uses the opencode-go subscription provider; change
@@ -56,7 +57,7 @@ jobs:
           fetch-depth: 0
 
       - name: Record audit start
-        run: date -u -d '2 minutes ago' +%Y-%m-%dT%H:%M:%SZ > .audit-start-time
+        run: date -u -d '2 minutes ago' +%Y-%m-%dT%H:%M:%SZ > "$RUNNER_TEMP/audit-start-time"
 
       - name: Resolve opencode version
         id: version
@@ -165,7 +166,7 @@ jobs:
           # this run's audit comment, delete every other bot comment posted
           # before it. If this run posted no audit comment (audit crashed),
           # leave the thread untouched so the last findings survive.
-          RUN_STARTED="$(cat .audit-start-time)"
+          RUN_STARTED="$(cat "$RUNNER_TEMP/audit-start-time")"
           rows="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate \
             --jq '.[]
               | select(.user.login == "github-actions[bot]")
@@ -214,7 +215,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          start="$(cat .audit-start-time)"
+          start="$(cat "$RUNNER_TEMP/audit-start-time")"
           body="$(gh api "repos/${{ github.repository }}/issues/${{ github.event.number }}/comments" \
             --jq "[.[] | select(.user.login == \"github-actions[bot]\" and .created_at > \"$start\")] | sort_by(.created_at) | last | .body" 2>/dev/null || true)"
 
