@@ -80,12 +80,16 @@ torec --version
 
 # 3. User-level init (one-time, user-level)
 torec init
-#   → prompts: conversation analysis opt-in, AI provider, API key, model
+#   → prompts: conversation analysis opt-in, AI provider, API key, model,
+#     daemon autostart offer (opt-in, default No)
 #   → writes ~/.tr/config.yaml
 #   → prints next-step guidance: "Next: cd into your project and run torec repo."
 
 # 4. Start daemon (long-running terminal; keep alive)
 torec serve
+#   → required now only when the autostart offer was declined — an accepted
+#     offer installs the autostart entry, which first fires at the next logon,
+#     so run serve once if you want recall before then
 #   → binds localhost:7331
 #   → reads ~/.tr/config.yaml + ~/.tr/memory.db
 

@@ -89,7 +89,7 @@ func FilePath() (string, error) {
 	}
 }
 
-// Content renders the platform's autostart file with the binary path baked in.
+// Content renders the platform's autostart entry with the binary path baked in.
 func Content(selfPath string) string {
 	switch runtime.GOOS {
 	case "darwin":
@@ -122,7 +122,7 @@ func windowsContent(selfPath string) string {
 	return fmt.Sprintf(startupCmdTemplate, selfPath)
 }
 
-// Install writes the platform autostart file, overwriting in place so
+// Install writes the platform autostart entry, overwriting in place so
 // re-running init refreshes the entry instead of duplicating it. An unchanged
 // file is left untouched (no rewrite) to keep the operation side-effect free.
 // Returns the path written (or already present).
