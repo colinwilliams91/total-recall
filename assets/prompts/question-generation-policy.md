@@ -205,7 +205,7 @@ If AI introduced:
 ## Resurfaced Concepts (retention bonus framing)
 
 Some questions are retention bonuses: the focused lead section names a concept
-the concept has a past Hit and is about to fade. When the
+that has a past Hit and is about to fade. When the
 user turn carries no "Recent commit context" section, you are testing durable
 understanding, not a commit:
 
