@@ -94,6 +94,14 @@ jobs:
       - name: Add opencode to PATH
         run: echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
+      # opencode github run makes local git commits as part of its flow; the
+      # composite action set this identity in its TS entrypoint, replicate it
+      # or the run dies on "Author identity unknown".
+      - name: Configure git identity for opencode
+        run: |
+          git config --global user.name "opencode-agent[bot]"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+
       - name: Run opencode domain-modeling audit
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -152,27 +160,30 @@ jobs:
 
           # The audit posts a fresh comment every run. Each run re-audits the
           # full diff, so the newest comment is the complete current state and
-          # the older ones are pure noise. Keep this run's audit comment
-          # (posted after the recorded start time), delete all other audit
-          # comments and stale APIError notices. If this run posted no audit
-          # comment (audit crashed), leave the thread untouched so the last
-          # findings survive.
+          # the older ones are pure noise — including crashed-run error notices
+          # (identity failures, APIError), which carry no verdict marker. Keep
+          # this run's audit comment, delete every other bot comment posted
+          # before it. If this run posted no audit comment (audit crashed),
+          # leave the thread untouched so the last findings survive.
           RUN_STARTED="$(cat .audit-start-time)"
           rows="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate \
             --jq '.[]
               | select(.user.login == "github-actions[bot]")
-              | select((.body | contains("DOMAIN-MODEL-VERDICT:")) or (.body | startswith("APIError:")))
               | [(.id | tostring), .created_at,
                  (if (.body | contains("DOMAIN-MODEL-VERDICT:")) then "audit" else "error" end)]
               | @tsv')"
 
           new_id=""
+          new_created=""
           ids=()
+          created_at=()
           while IFS=$'\t' read -r id created kind; do
             [ -z "$id" ] && continue
             ids+=("$id")
+            created_at+=("$created")
             if [ "$kind" = audit ] && [[ "$created" > "$RUN_STARTED" ]]; then
               new_id="$id"
+              new_created="$created"
             fi
           done <<<"$rows"
 
@@ -182,8 +193,12 @@ jobs:
           fi
 
           deleted=0
-          for id in "${ids[@]}"; do
+          for i in "${!ids[@]}"; do
+            id="${ids[$i]}"
             [ "$id" = "$new_id" ] && continue
+            # Only comments the fresh audit comment supersedes: anything
+            # posted before it (previous rounds, crashed-run error notices).
+            [[ "${created_at[$i]}" < "$new_created" ]] || continue
             if gh api -X DELETE "repos/$REPO/issues/comments/$id" >/dev/null; then
               deleted=$((deleted + 1))
             else
