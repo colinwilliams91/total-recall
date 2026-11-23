@@ -118,6 +118,13 @@ func TestInstallIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// windowsPath resolves the Startup folder via os.UserConfigDir (%AppData%
+	// on Windows); without isolating it, the install writes into the real
+	// user's Startup folder and the count assertion below races whatever
+	// unrelated entries (e.g. desktop.ini) live there.
+	configRoot := filepath.Join(home, "AppData", "Roaming")
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	t.Setenv("AppData", configRoot)
 
 	selfPath := filepath.Join(home, "bin", "torec")
 
