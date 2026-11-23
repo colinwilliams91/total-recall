@@ -176,6 +176,11 @@ becomes eligible again one day after the offer was served — and no decline is
 recorded. Only a resolved Bonus Question spends the one-resurface budget
 (see docs/adr/0006).
 
+The offer probe follows a *resolved* commit question interaction: a session
+that skips its commit question (Enter) goes straight to done and never probes
+for an offer, so a due concept goes unprobed on skip-only sessions —
+intentional, to preserve the low-friction single-question norm a skip implies.
+
 ## Flows
 
 ### Bonus offer (ask session)
