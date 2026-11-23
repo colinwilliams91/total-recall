@@ -172,7 +172,7 @@ reads the same Selection/Hit/Miss history).
 A session that dies between acceptance and resolution is intentional
 non-exit, not a gap: the retention question never happened, so the concept
 keeps its single future offer. The serve-time defer stands — the concept
-becomes eligible again one day after acceptance — and no decline is
+becomes eligible again one day after the offer was served — and no decline is
 recorded. Only a resolved Bonus Question spends the one-resurface budget
 (see docs/adr/0006).
 

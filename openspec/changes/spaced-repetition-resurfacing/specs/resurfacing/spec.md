@@ -99,4 +99,4 @@ When the user accepts an offer, the system SHALL synthesize a brand-new question
 
 #### Scenario: Session killed after acceptance but before the Bonus Question resolves
 - **WHEN** the user accepts an offer but the session terminates before the Bonus Question resolves (killed, closed terminal, timeout)
-- **THEN** the concept is NOT exited from the loop — the retention question never happened, so the concept keeps its single future offer; no decline is recorded and the concept becomes eligible again one day after acceptance (intentional per docs/adr/0006, not a gap)
+- **THEN** the concept is NOT exited from the loop — the retention question never happened, so the concept keeps its single future offer; no decline is recorded and the concept becomes eligible again one day after the offer was served (the serve-time defer stands; intentional per docs/adr/0006, not a gap)
