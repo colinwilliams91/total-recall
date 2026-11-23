@@ -731,6 +731,53 @@ func TestAskOfferKilledEndsSilently(t *testing.T) {
 	}
 }
 
+// TestAskAwaitingBonusKilledEndsSilently verifies the kill path after the
+// accept, while synthesis is still running: q, Esc and Ctrl+C end the session
+// without posting anything — no decline and no selection, the daemon's
+// serve-time defer already stands.
+func TestAskAwaitingBonusKilledEndsSilently(t *testing.T) {
+	srv, captured := captureRequestServer(t, http.StatusOK, `{"ok":true}`)
+	withDaemonBaseURL(t, srv.URL)
+
+	for _, key := range []struct {
+		name string
+		msg  tea.KeyMsg
+	}{
+		{"q", tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'q'}})},
+		{"esc", tea.KeyMsg(tea.Key{Type: tea.KeyEsc})},
+		{"ctrl+c", tea.KeyMsg(tea.Key{Type: tea.KeyCtrlC})},
+	} {
+		t.Run(key.name, func(t *testing.T) {
+			// Accept to enter the awaitingBonus state; the accept cmd itself
+			// is never run, mirroring a session killed mid-synthesis.
+			m := offerModel()
+			accepted, _ := m.updateOffer(tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{'y'}}))
+			waiting := accepted.(askModel)
+			if !waiting.awaitingBonus {
+				t.Fatal("expected awaitingBonus after the accept key")
+			}
+
+			final, cmd := waiting.updateOffer(key.msg)
+			got := final.(askModel)
+			if got.state != stateDone {
+				t.Fatalf("expected stateDone on %s, got %v", key.name, got.state)
+			}
+			if !isQuitCmd(cmd) {
+				t.Fatal("expected tea.Quit cmd")
+			}
+			// Nothing was posted: no decline, no selection.
+			if strings.Contains(*captured, "/recall/bonus/decline") || strings.Contains(*captured, "/recall/select") {
+				t.Fatalf("expected no POSTs on %s, got %q", key.name, *captured)
+			}
+			// The feedback rendered inline in the offer view, so nothing
+			// repeats post-exit.
+			if out := renderPostAltScreen(got); out != "" {
+				t.Fatalf("expected empty post-exit output on %s, got %q", key.name, out)
+			}
+		})
+	}
+}
+
 // TestAskOfferAcceptFailureEndsWithoutDecline verifies the failed-fetch path:
 // the session ends, nothing is posted, the feedback is not repeated.
 func TestAskOfferAcceptFailureEndsWithoutDecline(t *testing.T) {

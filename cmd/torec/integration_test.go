@@ -2361,6 +2361,102 @@ func TestRecallBonusAcceptSynthesisFailure(t *testing.T) {
 	}
 }
 
+// TestRecallBonusAcceptKilledBeforeResolve pins the kill-after-accept
+// scenario: the accept stores the bonus question delivered but unresolved,
+// then the session dies before it resolves. The retention question never
+// happened, so the concept must stay in the loop — no decline, no exit, the
+// serve-time defer stands, a re-probe finds nothing due, and the orphaned
+// delivered row never leaks into a later session's recall_next.
+func TestRecallBonusAcceptKilledBeforeResolve(t *testing.T) {
+	provider := &scriptedProvider{responses: []string{
+		`{"question":"Why does a circuit breaker trip?","choices":["Because it is right","Because it is wrong"]}`,
+	}}
+	_, store, baseURL := startTestDaemonWithPipeline(t, provider, func(s *cache.Store) *recall.Engine {
+		userCfg := config.DefaultUserConfig()
+		return recall.New(provider, s, &userCfg.Recall)
+	})
+	seedDueConcept(t, store, "bonus_due", "bonus concept prose", 3)
+
+	// An unrelated queued question proves the orphaned bonus row is not
+	// re-served: recall_next serves queued rows only.
+	ctx := context.Background()
+	if err := store.SaveQuestion(ctx, "/repo/test", "main", "unrelated commit question",
+		buildChoices([]string{"a", "b"}, 0), "", nil); err != nil {
+		t.Fatalf("seed unrelated: %v", err)
+	}
+
+	serveStart := time.Now().UTC()
+	serve := mustGET(t, baseURL, "/recall/bonus")
+	defer serve.Body.Close()
+	if serve.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 serve, got %d", serve.StatusCode)
+	}
+
+	accept := mustPOST(t, baseURL, "/recall/bonus/accept",
+		[]byte(`{"slug":"bonus_due","repo":"/repo/test","branch":"main"}`))
+	defer accept.Body.Close()
+	if accept.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 accept, got %d", accept.StatusCode)
+	}
+	var q struct {
+		ID       int64  `json:"id"`
+		Question string `json:"question"`
+	}
+	if err := json.NewDecoder(accept.Body).Decode(&q); err != nil {
+		t.Fatalf("decode accept: %v", err)
+	}
+
+	// The session dies here: no select, no skip, no decline.
+	row := resurfacingRowFromRawDB(t, "bonus_due")
+	if row.ExitReason.Valid {
+		t.Fatalf("expected no exit (the retention question never happened), got %q", row.ExitReason.String)
+	}
+	if row.DeclinedCount != 0 {
+		t.Fatalf("expected no decline recorded, got %d", row.DeclinedCount)
+	}
+	if elapsed := row.NextEligible.Sub(serveStart); elapsed < 23*time.Hour || elapsed > 25*time.Hour {
+		t.Fatalf("expected next_eligible ~serve time + 1 day, got %v after serve", elapsed)
+	}
+	if row.ResurfacedCnt != 1 {
+		t.Fatalf("expected resurfaced_count 1, got %d", row.ResurfacedCnt)
+	}
+	var status string
+	if err := openRawDB(t).QueryRowContext(ctx,
+		`SELECT status FROM questions WHERE id = ?`, q.ID).Scan(&status); err != nil {
+		t.Fatalf("read bonus status: %v", err)
+	}
+	if status != "delivered" {
+		t.Fatalf("expected the orphaned bonus question delivered and unresolved, got %q", status)
+	}
+
+	// Re-probe while deferred: nothing due → 204.
+	reprobe := mustGET(t, baseURL, "/recall/bonus")
+	defer reprobe.Body.Close()
+	if reprobe.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204 re-probe while deferred, got %d", reprobe.StatusCode)
+	}
+
+	// And the orphaned delivered row never leaks into a later session.
+	next := mustGET(t, baseURL, "/recall/next?repo=%2Frepo%2Ftest&branch=main")
+	defer next.Body.Close()
+	if next.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 next with a queued question, got %d", next.StatusCode)
+	}
+	var nq struct {
+		ID       int64  `json:"id"`
+		Question string `json:"question"`
+	}
+	if err := json.NewDecoder(next.Body).Decode(&nq); err != nil {
+		t.Fatalf("decode next: %v", err)
+	}
+	if nq.ID == q.ID {
+		t.Fatalf("the orphaned bonus question leaked into recall_next: %+v", nq)
+	}
+	if nq.Question != "unrelated commit question" {
+		t.Fatalf("expected the unrelated queued question, got %q", nq.Question)
+	}
+}
+
 // TestMCPContractUnchangedWithDueConcept verifies the MCP surface is untouched
 // with resurfacing enabled and a concept due: recall_next / recall_select keep
 // their exact response key sets and resources keep their shapes — no bonus
