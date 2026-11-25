@@ -120,6 +120,9 @@ The user declined to answer, whether or not they ever saw the Question. Event hi
 **Cold Start**:
 The baseline-only regime before enough answered history exists: the commit-shape heuristics resolve alone — no learner tier, no focus concepts. Marked by the `cold-start` signal.
 
+**Autostart**:
+The opt-in arrangement that starts the daemon at login, so recall works across reboots without the user remembering to serve. The installed artifact is the autostart entry — the platform file (a launchd plist, a systemd user unit, or a Windows Startup-folder script) that `torec init` writes and refreshes on re-run. Autostart only launches the daemon; stopping it and restarting it remain the user's lifecycle actions until the next login.
+
 ## Notes
 
 - The word "answer" belongs to the engine only. The user selects; the engine holds the Answer Key.

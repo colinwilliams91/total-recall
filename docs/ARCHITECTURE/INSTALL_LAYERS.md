@@ -1,10 +1,10 @@
 # Install & Layer Architecture
 
-Total Recall is a single Go binary distributed via `go install` (or release archives). Its runtime state is split across five independently-managed layers. Understanding these layers — and where they do and do not couple — is essential for installation, testing, worktree support, and reasoning about hook behavior.
+Total Recall is a single Go binary distributed via `go install` (or release archives). Its runtime state is split across six independently-managed layers. Understanding these layers — and where they do and do not couple — is essential for installation, testing, worktree support, and reasoning about hook behavior.
 
 ---
 
-## The Five Layers
+## The Layers
 
 | Layer | Owned by | Lifetime | Reads from | Writes to |
 |---|---|---|---|---|
@@ -14,6 +14,7 @@ Total Recall is a single Go binary distributed via `go install` (or release arch
 | **Repo config** (`.tr.yaml`) | One per repo | Until deleted | Runtime config loader | Written by `torec repo` |
 | **Git hooks** (`.git/hooks/*`) | One per gitdir | Until overwritten | Fired by Git | Written by `torec repo` |
 | **Daemon** (`torec serve` on `:7331`) | One per machine | Process lifetime | User cache + AI provider | User cache |
+| **Autostart entry** (launchd plist / systemd user unit / Startup-folder `.cmd`) | One per user-machine | Until overwritten | Fired by launchd, systemd, or the Windows logon shell | Written by `torec init` |
 
 The binary is stateless: invoking it from any path executes the same logic against the same user-level state. Its compile-time-baked constants (hook bodies, daemon URL) are emitted into the installable artifacts at `torec repo` time, then the binary is out of the loop until the next `torec repo`.
 
@@ -40,6 +41,7 @@ The cross-layer couplings that exist — each is instructive:
 | Binary → hooks (content) | At `torec repo` time only | Hook script bodies are embedded `const` strings in `internal/hooks/scripts.go`, compiled into the binary, written verbatim to `.git/hooks/` by `torec repo` | Rebuilding the binary does NOT update already-installed hooks. You must re-run `torec repo`. |
 | Binary → post-commit hook (path) | At `torec repo` time only | `postCommitHookScriptTmpl` in `main.go` has two `%s` placeholders filled by `buildPostCommitHookScript(os.Executable())` at `torec repo` time — one for the PowerShell branch (native backslash path), one for the sh fallback (forward-slash path for MSYS sh) | Moving/rebuilding the binary to a new path leaves the installed hook pointing at the old path. Re-run `torec repo` to refresh the baked path. |
 | Hooks → daemon (URL) | At hook-fire time | `curl http://localhost:7331/hooks/...` — URL is a string in the hook script | Daemon must be running for dispatch to succeed. No daemon → advisory printed (the #14 surface). |
+| Binary → autostart entry (path) | At `torec init` time only | `autostart.SelfPath()` bakes the running binary's absolute, symlink-resolved path into the entry (launchd `ProgramArguments`, systemd `ExecStart`, the Startup `.cmd`) | Moving/rebuilding the binary leaves the entry pointing at the old path. Re-run `torec init` to refresh — the install is idempotent and leaves unchanged files untouched. |
 | post-commit hook → binary (ask) | At hook-fire time | `exec "<baked-path>" ask` — runs the absolute path captured at `torec repo` time via `os.Executable()` | The only hook that invokes the binary at fire time. The baked path avoids PATH-collision with the Unix `tr` translate utility (Git for Windows hooks run via MSYS sh with a restricted PATH that includes `/usr/bin/tr` but not the user's Windows PATH additions). A second, differently-worded advisory originates here via `ask.go:daemonUnavailableMessage`. |
 
 ---
@@ -78,12 +80,16 @@ torec --version
 
 # 3. User-level init (one-time, user-level)
 torec init
-#   → prompts: conversation analysis opt-in, AI provider, API key, model
+#   → prompts: conversation analysis opt-in, AI provider, API key, model,
+#     daemon autostart offer (opt-in, default No)
 #   → writes ~/.tr/config.yaml
 #   → prints next-step guidance: "Next: cd into your project and run torec repo."
 
 # 4. Start daemon (long-running terminal; keep alive)
 torec serve
+#   → required now only when the autostart offer was declined — an accepted
+#     offer installs the autostart entry, which first fires at the next logon,
+#     so run serve once if you want recall before then
 #   → binds localhost:7331
 #   → reads ~/.tr/config.yaml + ~/.tr/memory.db
 

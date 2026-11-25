@@ -279,6 +279,68 @@ func TestStopDrainsInFlight(t *testing.T) {
 	}
 }
 
+// TestStatusShowsConfigWhenDaemonDown pins the issue-#56 behavior: with the
+// daemon unreachable, status still renders the resolved config (the same
+// config.Show output as the daemon-up path) after the daemon-down notice,
+// while keeping the exit-1 semantics that flag the daemon as down.
+func TestStatusShowsConfigWhenDaemonDown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("drives the real 7331 endpoint contract")
+	}
+	t.Setenv("TR_HOME", t.TempDir())
+
+	type exitSignal struct{ code int }
+	origOsExit := osExit
+	runStatusCaptured := func() (output string, exit int) {
+		defer func() {
+			if r := recover(); r != nil {
+				if sig, isSig := r.(exitSignal); isSig {
+					exit = sig.code
+				} else {
+					panic(r)
+				}
+			}
+		}()
+		var buf bytes.Buffer
+		origStdout := os.Stdout
+		rPipe, wPipe, _ := os.Pipe()
+		os.Stdout = wPipe
+		defer func() {
+			wPipe.Close()
+			buf.ReadFrom(rPipe)
+			os.Stdout = origStdout
+			output = buf.String()
+		}()
+		osExit = func(code int) { panic(exitSignal{code}) }
+		runStatus()
+		return "", 0
+	}
+	defer func() { osExit = origOsExit }()
+
+	output, exit := runStatusCaptured()
+	if exit != 1 {
+		t.Fatalf("expected exit 1 with daemon down, got %d", exit)
+	}
+	if !strings.Contains(output, "✗ Daemon not running on localhost:7331") {
+		t.Fatalf("expected daemon-down notice, got: %s", output)
+	}
+	// The config render must appear after the notice, covering the same
+	// sections config.Show writes when the daemon is running.
+	noticeAt := strings.Index(output, "Daemon not running")
+	for _, section := range []string{"privacy:", "ai:", "recall:", "hooks:", "prompt assets:"} {
+		at := strings.Index(output, section)
+		if at < 0 {
+			t.Fatalf("expected %q in config render, got: %s", section, output)
+		}
+		if at < noticeAt {
+			t.Fatalf("expected %q after the daemon-down notice, got: %s", section, output)
+		}
+	}
+	if !strings.Contains(output, "provider:") {
+		t.Fatalf("expected ai.provider line in config render, got: %s", output)
+	}
+}
+
 // TestStatusPidfileSurfacing exercises the pidfile-aware status branches
 // (3.1): healthy + pidfile → "(pid N)"; dead + stale pidfile → stale note;
 // dead with no pidfile → unchanged failure with exit-1 semantics preserved.
