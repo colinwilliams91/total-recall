@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Spaced-repetition resurfacing: concepts with a past Hit come back once,
+  as their Retention Interval elapses, as an opt-in bonus question on a later commit. A
+  `resurfacing` scheduler table is seeded at answer time (same transaction as
+  the answer) keyed on the user-scoped concept identity; the Retention Interval
+  is flat: easy 3d / intermediate 7d / hard 14d. After a commit question's
+  feedback, `torec ask` may offer a bonus ("Would you like a bonus question to
+  boost your knowledge retention? y/n") — serving the offer defers the concept
+  by one day, a decline counts only (three declines exit `declined-out`),
+  a resolved bonus question exits `answered-out`, and a renewed Hit
+  resets the schedule and clears declines. Daemon contract: `GET /recall/bonus`
+  (204 when nothing is due or `recall.resurfacing: false` — the new kill-switch,
+  default on), `POST /recall/bonus/decline`, `POST /recall/bonus/accept`
+  (synthesizes fresh at the session's adaptive level; origin `resurfaced` rides
+  the queued event payload so downstream stats can separate bonus-question accuracy
+  from commit-question accuracy). The MCP Delivery Surface is unchanged.
+
 - `torec stop`: first-class daemon lifecycle. `torec serve` records its PID at
   `<data-dir>/daemon.pid` (`$TR_HOME`-aware) and removes it on graceful exit;
   `torec stop` reads it, validates the PID belongs to a `torec` process

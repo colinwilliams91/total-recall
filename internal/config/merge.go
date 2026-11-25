@@ -34,6 +34,7 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 			AIBaseURL:                   sourceUser,
 			RecallDifficulty:            sourceUser,
 			RecallMaxQuestions:          sourceUser,
+			RecallResurfacing:           sourceUser,
 			PromptAssetDriftWarningDays: sourceUser,
 			HooksPreCommit:              sourceDefault,
 			HooksCommitMsg:              sourceDefault,
@@ -84,6 +85,10 @@ func Merge(user *UserConfig, repo *RepoConfig) *Config {
 		if repo.Recall.MaxQuestions != 0 {
 			cfg.Recall.MaxQuestions = repo.Recall.MaxQuestions
 			cfg.Sources.RecallMaxQuestions = sourceRepo
+		}
+		if repo.Recall.Resurfacing != nil {
+			cfg.Recall.Resurfacing = repo.Recall.Resurfacing
+			cfg.Sources.RecallResurfacing = sourceRepo
 		}
 	}
 

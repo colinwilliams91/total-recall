@@ -169,6 +169,18 @@ whether it Hit or Missed — max one resurface; a Miss is handed to the
 weakness loop automatically by the existing Performance resolver, which
 reads the same Selection/Hit/Miss history).
 
+A session that dies between acceptance and resolution is intentional
+non-exit, not a gap: the retention question never happened, so the concept
+keeps its single future offer. The serve-time defer stands — the concept
+becomes eligible again one day after the offer was served — and no decline is
+recorded. Only a resolved Bonus Question spends the one-resurface budget
+(see docs/adr/0006).
+
+The offer probe follows a *resolved* commit question interaction: a session
+that skips its commit question (Enter) goes straight to done and never probes
+for an offer, so a due concept goes unprobed on skip-only sessions —
+intentional, to preserve the low-friction single-question norm a skip implies.
+
 ## Flows
 
 ### Bonus offer (ask session)
@@ -231,9 +243,11 @@ COMMIT
   time (only the ask-session due lookup, indexed on `next_eligible_after`).
 - [Retention Interval feels arbitrary] → three constants, documented, trivially tunable
   later; deliberately not a formula (see D4).
-- [Serve-time defer races a slow accept] → accept overrides the defer and
-  terminates the row; no double-offer window exists because the row is no
-  longer eligible after serve.
+- [Serve-time defer races a slow accept] → acceptance overrides the defer and
+  the row exits when the Bonus Question resolves; a session killed after
+  acceptance falls back to the standing defer (intentional non-exit, see
+  D10); no double-offer window exists because the row is not eligible again
+  until one day after serve.
 
 ## Migration Plan
 

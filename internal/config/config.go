@@ -73,10 +73,20 @@ func (a AIConfig) ResolvedAPIKey() (string, bool) {
 	return a.APIKey, a.APIKey != ""
 }
 
-// RecallConfig holds recall engine defaults.
+// RecallConfig holds recall engine defaults. Resurfacing is a tri-state
+// pointer so the repo tier can express an explicit false against a user-tier
+// true — a plain bool could not distinguish "unset" from "off".
 type RecallConfig struct {
 	Difficulty   string `yaml:"difficulty"`
 	MaxQuestions int    `yaml:"max_questions"`
+	Resurfacing  *bool  `yaml:"resurfacing,omitempty"`
+}
+
+// ResurfacingEnabled reports the resolved resurfacing kill-switch. The nil
+// pointer (the key absent from every config tier, including pre-existing
+// config.yaml files) keeps the feature on — the shipped default.
+func (r RecallConfig) ResurfacingEnabled() bool {
+	return r.Resurfacing == nil || *r.Resurfacing
 }
 
 // PromptAssetConfig controls prompt-asset override observability.
@@ -140,6 +150,7 @@ type ConfigSources struct {
 	AIBaseURL                   string
 	RecallDifficulty            string
 	RecallMaxQuestions          string
+	RecallResurfacing           string
 	PromptAssetDriftWarningDays string
 	HooksPreCommit              string
 	HooksCommitMsg              string
@@ -186,6 +197,7 @@ func IsDefaultAPIKeyEnv(s string) bool {
 
 // DefaultUserConfig returns the safe-default UserConfig written on first init or auto-creation.
 func DefaultUserConfig() UserConfig {
+	resurfacing := true
 	return UserConfig{
 		Privacy: PrivacyConfig{ConversationAnalysis: false},
 		AI: AIConfig{
@@ -197,6 +209,7 @@ func DefaultUserConfig() UserConfig {
 		Recall: RecallConfig{
 			Difficulty:   "adaptive",
 			MaxQuestions: 1,
+			Resurfacing:  &resurfacing,
 		},
 		PromptAsset: PromptAssetConfig{
 			DriftWarningDays: 90,

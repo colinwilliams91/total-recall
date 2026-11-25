@@ -108,6 +108,48 @@ CREATE TABLE IF NOT EXISTS question_events (
     payload     TEXT
 );
 `
+
+	// resurfacingTableSQL is purely additive scheduler state: keyed on the
+	// user-scoped registry slug, so eligibility follows the user across
+	// repos and branches. Rows are written at answer time and read at ask
+	// time; exit_reason is the terminal marker that prunes eligibility
+	// (never resurrected by later answers).
+	resurfacingTableSQL = `
+CREATE TABLE IF NOT EXISTS resurfacing (
+  slug                TEXT PRIMARY KEY REFERENCES concept_registry(slug),
+  seeded_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  next_eligible_after DATETIME NOT NULL,
+  interval_days       INTEGER NOT NULL,
+  declined_count      INTEGER NOT NULL DEFAULT 0,
+  resurfaced_count    INTEGER NOT NULL DEFAULT 0,
+  exit_reason         TEXT
+);
+`
+)
+
+// Resurfacing exit states and scheduling constants. The Retention Interval is a
+// flat table keyed by the answered question's resolved difficulty — a single
+// review per concept gives SM-2's machinery no data, so the values are
+// documented constants, deliberately not a formula.
+const (
+	// ExitAnsweredOut marks a concept that used its one resurface: a bonus
+	// question about it was resolved (answered or skipped).
+	ExitAnsweredOut = "answered-out"
+	// ExitDeclinedOut marks a concept that hit the decline cap and left the
+	// loop permanently.
+	ExitDeclinedOut = "declined-out"
+
+	resurfacingEasyIntervalDays         = 3
+	resurfacingIntermediateIntervalDays = 7
+	resurfacingHardIntervalDays         = 14
+	resurfacingServeDeferDays           = 1
+	resurfacingDeclineCap               = 3
+
+	// ResurfacedOrigin is the queued-event payload origin value that marks a
+	// question as a resurfaced bonus, letting the answer flow distinguish it
+	// from commit-diff questions (provenance for downstream statistics and
+	// the answered-out exit trigger).
+	ResurfacedOrigin = "resurfaced"
 )
 
 // ConceptRow is a persisted concept fingerprint from the cache. Slug is the
@@ -150,21 +192,32 @@ type Selection struct {
 // the IsCorrect boolean on the choice row — it is a presentation aid, not the
 // source of truth.
 type StoredQuestion struct {
-	ID            int64
-	QuestionType  string
-	Status        string
-	Question      string
-	Repo          string
-	Branch        string
-	Choices       []Choice
-	CorrectIndex  int
-	Feedback      *string
-	Selections    []Selection
+	ID           int64
+	QuestionType string
+	Status       string
+	Question     string
+	Repo         string
+	Branch       string
+	Choices      []Choice
+	CorrectIndex int
+	Feedback     *string
+	Selections   []Selection
 }
 
 // Store wraps the SQLite database used as the memory store.
 type Store struct {
 	db *sql.DB
+	// resurfacing gates answer-time scheduler writes (recall.resurfacing).
+	// Reads (the ask-time due lookup) are harmless either way — with the
+	// flag off no rows are ever written, so the pool stays empty.
+	resurfacing bool
+}
+
+// SetResurfacingEnabled toggles answer-time resurfacing seeding. The engine
+// wires this from recall.resurfacing at daemon startup; the default store has
+// it off so direct store users keep today's write behavior.
+func (s *Store) SetResurfacingEnabled(enabled bool) {
+	s.resurfacing = enabled
 }
 
 // memoryDSN appends the per-connection pragmas the schema's declared
@@ -191,6 +244,10 @@ func memoryDSN(path string) string {
 // `concepts.slug`, which cannot exist there, so saves fail loudly. The
 // maintainer must delete the data file before the new build runs. See
 // MIGRATION.md in this package.
+//
+// The `resurfacing` table is the exception: it is a brand-new table with no
+// reshape of any existing one, so its `CREATE TABLE IF NOT EXISTS` migrates
+// cleanly against any prior `memory.db` — no manual reset required.
 func Open() (*Store, error) {
 	dir, err := trDir()
 	if err != nil {
@@ -249,6 +306,10 @@ func Open() (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("initializing question_concepts schema: %w", err)
 	}
+	if _, err := db.ExecContext(bg, resurfacingTableSQL); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("initializing resurfacing schema: %w", err)
+	}
 
 	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_concepts_repo_branch_seen ON concepts(repo, branch, seen_at DESC)`); err != nil {
 		_ = db.Close()
@@ -265,6 +326,10 @@ func Open() (*Store, error) {
 	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_question_concepts_qid ON question_concepts(question_id)`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("creating idx_question_concepts_qid: %w", err)
+	}
+	if _, err := db.ExecContext(bg, `CREATE INDEX IF NOT EXISTS idx_resurfacing_next_eligible ON resurfacing(next_eligible_after)`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("creating idx_resurfacing_next_eligible: %w", err)
 	}
 
 	return &Store{db: db}, nil
@@ -500,12 +565,15 @@ type ConceptRef struct {
 }
 
 // ResolutionMeta is the resolver audit snapshot persisted on the 'queued'
-// question_events row's payload: the resolved difficulty and the fired
-// resolver signals. It is the spine operator debugging and future resolvers
-// correlate level↔outcome through.
+// question_events row's payload: the resolved difficulty, the fired resolver
+// signals, and (for bonus questions) the resurfaced origin marker. It is the
+// spine operator debugging and future resolvers correlate level↔outcome
+// through, and the record the answer-time seeding reads the Difficulty
+// Level from.
 type ResolutionMeta struct {
 	Difficulty string
 	Signals    []string
+	Origin     string
 }
 
 // SaveQuestion persists a synthesized question and its choices in one
@@ -515,41 +583,48 @@ type ResolutionMeta struct {
 // questionType defaults to 'multiple_choice' when empty. An empty concept
 // batch persists the question with zero provenance rows rather than erroring.
 func (s *Store) SaveQuestion(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef) error {
-	return s.SaveQuestionWithResolution(ctx, repo, branch, question, choices, questionType, fed, ResolutionMeta{})
+	_, err := s.SaveQuestionWithResolution(ctx, repo, branch, question, choices, questionType, fed, ResolutionMeta{})
+	return err
 }
 
 // SaveQuestionWithResolution is SaveQuestion with a ResolutionMeta snapshot
 // persisted as the 'queued' event row's payload JSON. An empty meta (zero
 // value) writes a NULL payload — the audit column stays empty for callers
-// that have no resolution to report.
-func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef, meta ResolutionMeta) error {
+// that have no resolution to report. Returns the minted question id so
+// callers that deliver immediately (the accept flow) can address the row
+// without re-deriving it from the queue.
+func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, question string, choices []Choice, questionType string, fed []ConceptRef, meta ResolutionMeta) (int64, error) {
 	if repo == "" || branch == "" {
 		log.Printf("[store] skipping savequestion: empty repo or branch")
-		return nil
+		return 0, nil
 	}
 	if question == "" {
-		return fmt.Errorf("refusing to save empty question text")
+		return 0, fmt.Errorf("refusing to save empty question text")
 	}
 	if questionType == "" {
 		questionType = "multiple_choice"
 	}
 
 	var queuedPayload any
-	if meta.Difficulty != "" || len(meta.Signals) > 0 {
+	if meta.Difficulty != "" || len(meta.Signals) > 0 || meta.Origin != "" {
 		signals := meta.Signals
 		if signals == nil {
 			signals = []string{}
 		}
-		b, err := json.Marshal(map[string]any{"resolved_difficulty": meta.Difficulty, "signals": signals})
+		payload := map[string]any{"resolved_difficulty": meta.Difficulty, "signals": signals}
+		if meta.Origin != "" {
+			payload["origin"] = meta.Origin
+		}
+		b, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("marshaling queued payload: %w", err)
+			return 0, fmt.Errorf("marshaling queued payload: %w", err)
 		}
 		queuedPayload = string(b)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
+		return 0, fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -557,16 +632,16 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 		`INSERT INTO questions (question_type, status, question, repo, branch) VALUES (?, 'queued', ?, ?, ?)`,
 		questionType, question, repo, branch)
 	if err != nil {
-		return fmt.Errorf("inserting question: %w", err)
+		return 0, fmt.Errorf("inserting question: %w", err)
 	}
 	questionID, err := res.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("reading last insert id: %w", err)
+		return 0, fmt.Errorf("reading last insert id: %w", err)
 	}
 
 	choiceStmt, err := tx.PrepareContext(ctx, `INSERT INTO choices (question_id, position, text, is_correct) VALUES (?, ?, ?, ?)`)
 	if err != nil {
-		return fmt.Errorf("preparing choice insert: %w", err)
+		return 0, fmt.Errorf("preparing choice insert: %w", err)
 	}
 	defer choiceStmt.Close()
 	for _, c := range choices {
@@ -575,14 +650,14 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 			isCorrect = 1
 		}
 		if _, err := choiceStmt.ExecContext(ctx, questionID, c.Position, c.Text, isCorrect); err != nil {
-			return fmt.Errorf("inserting choice: %w", err)
+			return 0, fmt.Errorf("inserting choice: %w", err)
 		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO question_events (question_id, event_type, actor, payload) VALUES (?, 'queued', 'system', ?)`,
 		questionID, queuedPayload); err != nil {
-		return fmt.Errorf("inserting queued event: %w", err)
+		return 0, fmt.Errorf("inserting queued event: %w", err)
 	}
 
 	// Provenance: one row per DISTINCT fed concept, same transaction. The
@@ -599,16 +674,16 @@ func (s *Store) SaveQuestionWithResolution(ctx context.Context, repo, branch, qu
 	}
 	fedStmt, err := tx.PrepareContext(ctx, `INSERT INTO question_concepts (question_id, slug, weight) VALUES (?, ?, ?)`)
 	if err != nil {
-		return fmt.Errorf("preparing provenance insert: %w", err)
+		return 0, fmt.Errorf("preparing provenance insert: %w", err)
 	}
 	defer func() { _ = fedStmt.Close() }()
 	for slug, weight := range best {
 		if _, err := fedStmt.ExecContext(ctx, questionID, slug, weight); err != nil {
-			return fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, slug, err)
+			return 0, fmt.Errorf("inserting question_concepts (question %d, slug %q): %w", questionID, slug, err)
 		}
 	}
 
-	return tx.Commit()
+	return questionID, tx.Commit()
 }
 
 // ConceptOutcome is one concept's outcome tallies over the answered window,
@@ -895,6 +970,12 @@ func (s *Store) SubmitSelection(ctx context.Context, questionID int64, selectedC
 		}
 	}
 
+	if s.resurfacing {
+		if _, err := resurfacingAfterAnswer(ctx, tx, questionID); err != nil {
+			return fmt.Errorf("resurfacing scheduler write: %w", err)
+		}
+	}
+
 	return tx.Commit()
 }
 
@@ -947,6 +1028,342 @@ func (s *Store) SkipQuestion(ctx context.Context, id int64) error {
 		`INSERT INTO question_events (question_id, event_type) VALUES (?, 'skipped')`,
 		id); err != nil {
 		return fmt.Errorf("inserting skipped event: %w", err)
+	}
+
+	if s.resurfacing {
+		// A skipped bonus question resolves the resurface: the concept exits
+		// answered-out exactly as if it had been answered (max once).
+		if _, err := resurfacingExitBonusInTx(ctx, tx, id); err != nil {
+			return fmt.Errorf("resurfacing scheduler write: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// ── resurfacing scheduler ─────────────────────────────────────────────────────
+
+// queuedEventPayload is the JSON shape of a 'queued' question_events payload:
+// the resolution audit snapshot plus the optional resurfaced origin marker.
+type queuedEventPayload struct {
+	ResolvedDifficulty string   `json:"resolved_difficulty"`
+	Signals            []string `json:"signals"`
+	Origin             string   `json:"origin"`
+}
+
+// parseQueuedEventPayload decodes a queued payload value. Absent or
+// unparseable payloads decode to the zero value — the Retention Interval treats an empty
+// difficulty as intermediate and a blank origin as a commit-diff question.
+func parseQueuedEventPayload(raw sql.NullString) queuedEventPayload {
+	var p queuedEventPayload
+	if raw.Valid && raw.String != "" {
+		_ = json.Unmarshal([]byte(raw.String), &p)
+	}
+	return p
+}
+
+// resurfacingIntervalDays maps the answered question's resolved difficulty
+// onto the flat Retention Interval. Unknown or missing levels land on
+// intermediate — an unscheduled concept still gets a sane default window,
+// never none.
+func resurfacingIntervalDays(level string) int {
+	switch level {
+	case "easy":
+		return resurfacingEasyIntervalDays
+	case "hard":
+		return resurfacingHardIntervalDays
+	default:
+		return resurfacingIntermediateIntervalDays
+	}
+}
+
+// questionConceptSlugsInTx reads the provenance slugs of a question.
+func questionConceptSlugsInTx(ctx context.Context, tx *sql.Tx, questionID int64) ([]string, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT slug FROM question_concepts WHERE question_id = ?`, questionID)
+	if err != nil {
+		return nil, fmt.Errorf("querying question concepts: %w", err)
+	}
+	defer rows.Close()
+	var slugs []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, fmt.Errorf("scanning question concept: %w", err)
+		}
+		slugs = append(slugs, slug)
+	}
+	return slugs, rows.Err()
+}
+
+// questionCorrectInTx projects the question's correctness from its recorded
+// selections: at least one selection and no incorrect one (the same predicate
+// questionCorrectnessSQL encodes for read paths).
+func questionCorrectInTx(ctx context.Context, tx *sql.Tx, questionID int64) (bool, error) {
+	var correct int
+	err := tx.QueryRowContext(ctx, `
+SELECT `+questionCorrectnessSQL+`
+FROM questions q WHERE q.id = ?`, questionID).Scan(&correct)
+	if err != nil {
+		return false, fmt.Errorf("reading question correctness: %w", err)
+	}
+	return correct != 0, nil
+}
+
+// resurfacingAfterAnswer applies the scheduler side-effects of a resolved
+// (answered) question inside the answer transaction. A resurfaced bonus
+// question exits its concepts answered-out regardless of correctness — max
+// one resurface. A correct commit-diff answer seeds or renews eligibility for
+// every concept of the question; incorrect answers seed nothing (misses feed
+// the weakness loop instead).
+func resurfacingAfterAnswer(ctx context.Context, tx *sql.Tx, questionID int64) (bool, error) {
+	exited, err := resurfacingExitBonusInTx(ctx, tx, questionID)
+	if err != nil || exited {
+		return exited, err
+	}
+
+	var payload sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT payload FROM question_events WHERE question_id = ? AND event_type = 'queued'`,
+		questionID).Scan(&payload); err != nil {
+		return false, fmt.Errorf("reading queued payload: %w", err)
+	}
+	meta := parseQueuedEventPayload(payload)
+
+	correct, err := questionCorrectInTx(ctx, tx, questionID)
+	if err != nil || !correct {
+		return false, err
+	}
+
+	slugs, err := questionConceptSlugsInTx(ctx, tx, questionID)
+	if err != nil || len(slugs) == 0 {
+		return false, err
+	}
+
+	interval := resurfacingIntervalDays(meta.ResolvedDifficulty)
+	now := time.Now().UTC()
+	next := now.AddDate(0, 0, interval)
+	for _, slug := range slugs {
+		// Upsert with a renewal that clears the decline count (the cap counts
+		// continuous disinterest; fresh evidence restarts the lease) but never
+		// resurrects a terminal row — the WHERE clause makes exited rows
+		// no-ops on conflict.
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO resurfacing (slug, seeded_at, next_eligible_after, interval_days, declined_count, resurfaced_count, exit_reason)
+VALUES (?, ?, ?, ?, 0, 0, NULL)
+ON CONFLICT(slug) DO UPDATE SET
+  seeded_at           = excluded.seeded_at,
+  next_eligible_after = excluded.next_eligible_after,
+  interval_days       = excluded.interval_days,
+  declined_count      = 0
+WHERE resurfacing.exit_reason IS NULL`, slug, now, next, interval); err != nil {
+			return false, fmt.Errorf("seeding resurfacing for %q: %w", slug, err)
+		}
+	}
+	return false, nil
+}
+
+// resurfacingExitBonusInTx exits the scheduler rows of a resurfaced bonus
+// question as answered-out and reports whether it did. A blank origin is a
+// commit-diff question — no scheduler action.
+func resurfacingExitBonusInTx(ctx context.Context, tx *sql.Tx, questionID int64) (bool, error) {
+	var payload sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT payload FROM question_events WHERE question_id = ? AND event_type = 'queued'`,
+		questionID).Scan(&payload); err != nil {
+		return false, fmt.Errorf("reading queued payload: %w", err)
+	}
+	if parseQueuedEventPayload(payload).Origin != ResurfacedOrigin {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE resurfacing SET exit_reason = ?
+WHERE exit_reason IS NULL
+  AND slug IN (SELECT slug FROM question_concepts WHERE question_id = ?)`,
+		ExitAnsweredOut, questionID); err != nil {
+		return false, fmt.Errorf("exiting resurfaced concepts: %w", err)
+	}
+	return true, nil
+}
+
+// BonusOffer is the due-concept payload served to the ask session: the
+// canonical slug plus the registry prose the offer is framed with.
+type BonusOffer struct {
+	Slug  string
+	Prose string
+}
+
+// DueBonusOffer selects the most-overdue eligible concept: the largest
+// now − next_eligible_after overage wins (smallest next_eligible_after),
+// ties broken by oldest seeding time. Nil when nothing is due — eligibility
+// requires a live (non-exited) row past its next-eligible time. The lookup is
+// user-scoped on purpose: a concept seeded from one repo may surface during
+// another repo's commit, the deliberate exception to "questions follow the
+// diff".
+func (s *Store) DueBonusOffer(ctx context.Context) (*BonusOffer, error) {
+	row := s.db.QueryRowContext(ctx, `
+SELECT r.slug, cr.prose
+FROM resurfacing r
+JOIN concept_registry cr ON cr.slug = r.slug
+WHERE r.exit_reason IS NULL AND r.next_eligible_after <= ?
+ORDER BY r.next_eligible_after ASC, r.seeded_at ASC
+LIMIT 1`, time.Now().UTC())
+	var offer BonusOffer
+	if err := row.Scan(&offer.Slug, &offer.Prose); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying due bonus offer: %w", err)
+	}
+	return &offer, nil
+}
+
+// DeferBonusOffer applies the serve-time defer: the served concept's
+// next-eligible time moves one day past now and the resurface is counted.
+// This fires on serve, before the user answers — a session killed at the
+// offer is a silent defer with no decline recorded, which is why the defer
+// lives on the daemon side of the offer.
+func (s *Store) DeferBonusOffer(ctx context.Context, slug string) error {
+	next := time.Now().UTC().AddDate(0, 0, resurfacingServeDeferDays)
+	res, err := s.db.ExecContext(ctx, `
+UPDATE resurfacing
+SET next_eligible_after = ?, resurfaced_count = resurfaced_count + 1
+WHERE slug = ? AND exit_reason IS NULL`, next, slug)
+	if err != nil {
+		return fmt.Errorf("deferring resurfacing for %q: %w", slug, err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("deferring resurfacing for %q: no eligible row", slug)
+	}
+	return nil
+}
+
+// RecordBonusDecline records one explicit decline: the count increments, the
+// serve-time defer is restated (a declined concept is not re-offered before
+// one day elapses, even if the caller declines without a serve), and the
+// third decline exits the concept declined-out. Returns whether this decline
+// exited the concept; sql.ErrNoRows when the slug has no scheduler row.
+func (s *Store) RecordBonusDecline(ctx context.Context, slug string) (bool, error) {
+	next := time.Now().UTC().AddDate(0, 0, resurfacingServeDeferDays)
+	res, err := s.db.ExecContext(ctx, `
+UPDATE resurfacing
+SET declined_count = declined_count + 1,
+    next_eligible_after = ?,
+    exit_reason = CASE WHEN declined_count + 1 >= ?
+                       THEN ? ELSE exit_reason END
+WHERE slug = ? AND exit_reason IS NULL`,
+		next, resurfacingDeclineCap, ExitDeclinedOut, slug)
+	if err != nil {
+		return false, fmt.Errorf("recording decline for %q: %w", slug, err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return false, fmt.Errorf("reading decline rows affected for %q: %w", slug, err)
+	} else if n == 0 {
+		// Either no row at all, or the row already exited — distinguish for
+		// the caller by reading what is there.
+		var exitReason sql.NullString
+		err := s.db.QueryRowContext(ctx,
+			`SELECT exit_reason FROM resurfacing WHERE slug = ?`, slug).Scan(&exitReason)
+		if err == sql.ErrNoRows {
+			return false, fmt.Errorf("recording decline for %q: %w", slug, sql.ErrNoRows)
+		}
+		if err != nil {
+			return false, fmt.Errorf("reading resurfacing row for %q: %w", slug, err)
+		}
+		return false, nil
+	}
+	var exitReason sql.NullString
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT exit_reason FROM resurfacing WHERE slug = ?`, slug).Scan(&exitReason); err != nil {
+		return false, fmt.Errorf("reading resurfacing row for %q: %w", slug, err)
+	}
+	return exitReason.String == ExitDeclinedOut, nil
+}
+
+// BonusConcept resolves the registry prose for an offered slug and reports
+// whether the concept is still in the loop (a live, non-exited scheduler
+// row). ok=false for unknown slugs and for exited ones — an accept against a
+// concept that left the loop between serve and accept is a no-op, not a
+// resurrection.
+func (s *Store) BonusConcept(ctx context.Context, slug string) (string, bool, error) {
+	var prose string
+	err := s.db.QueryRowContext(ctx, `
+SELECT cr.prose
+FROM resurfacing r
+JOIN concept_registry cr ON cr.slug = r.slug
+WHERE r.slug = ? AND r.exit_reason IS NULL`, slug).Scan(&prose)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("reading bonus concept %q: %w", slug, err)
+	}
+	return prose, true, nil
+}
+
+// LastAnsweredDifficulty reads the resolved difficulty from the most recent
+// answered question's queued-event payload for the working surface — the
+// session's current adaptive level, the same value that shaped the question
+// the user just answered. ok=false (and intermediate by convention at the
+// caller) when no answered history exists.
+func (s *Store) LastAnsweredDifficulty(ctx context.Context, repo, branch string) (string, bool, error) {
+	if repo == "" || branch == "" {
+		return "", false, nil
+	}
+	var payload sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+SELECT qe.payload
+FROM questions q
+JOIN question_events e  ON e.question_id  = q.id AND e.event_type  = 'answered'
+JOIN question_events qe ON qe.question_id = q.id AND qe.event_type = 'queued'
+WHERE q.status = 'answered' AND q.repo = ? AND q.branch = ?
+ORDER BY e.occurred_at DESC, e.id DESC
+LIMIT 1`, repo, branch).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("reading last answered difficulty: %w", err)
+	}
+	level := parseQueuedEventPayload(payload).ResolvedDifficulty
+	if level == "" {
+		return "", false, nil
+	}
+	return level, true, nil
+}
+
+// DeliverQuestion transitions a queued question straight to delivered with a
+// 'delivered' event attributed to claimedBy, bypassing the queue dequeue.
+// The accept flow uses this so a bonus question is already claimed by the
+// session that accepted it — the response carries the question and no second
+// poll happens. Guarded on the 'queued' status like every delivery.
+func (s *Store) DeliverQuestion(ctx context.Context, id int64, claimedBy string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var status string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT status FROM questions WHERE id = ?`, id).Scan(&status); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("question %d not found", id)
+		}
+		return fmt.Errorf("reading status: %w", err)
+	}
+	if status != "queued" {
+		return fmt.Errorf("question %d is in status %q, expected 'queued'", id, status)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE questions SET status = 'delivered' WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("updating status: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO question_events (question_id, event_type, actor) VALUES (?, 'delivered', ?)`,
+		id, claimedBy); err != nil {
+		return fmt.Errorf("inserting delivered event: %w", err)
 	}
 
 	return tx.Commit()

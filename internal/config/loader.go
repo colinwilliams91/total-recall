@@ -113,6 +113,11 @@ recall:
   # Maximum number of recall questions per commit (default: 1).
   max_questions: {{.Recall.MaxQuestions}}
 
+  # Spaced-repetition resurfacing: concepts with a past Hit come back once,
+  # as their Retention Interval elapses, as an opt-in bonus question on a later commit.
+  # Set false to disable the bonus offer and answer-time seeding entirely.
+  resurfacing: {{.Recall.ResurfacingEnabled}}
+
 prompt-asset:
   # Days after which a stale prompt-asset override triggers an
   # "OVERRIDE WARNING" at daemon startup. 0 disables the warning.

@@ -77,3 +77,19 @@ func TestGoldenAskFeedbackView(t *testing.T) {
 	view := m.View()
 	requireEqualGolden(t, []byte(view))
 }
+
+func TestGoldenAskOfferView(t *testing.T) {
+	m := newAskModel(10*time.Second, "/repo/test", "main")
+	m.state = stateOffer
+	m.offerProbed = true
+	m.offerShown = true
+	m.feedbackResult = feedbackMsg{
+		correct:     true,
+		correctText: "Don't Repeat Yourself",
+		feedback:    "DRY exists to keep one source of truth — duplication is where divergent bugs breed.",
+	}
+	offer := bonusOfferMsg{slug: "dry_principle", prose: "the DRY (Don't Repeat Yourself) principle"}
+	m.offer = &offer
+	view := m.View()
+	requireEqualGolden(t, []byte(view))
+}
